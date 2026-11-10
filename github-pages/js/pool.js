@@ -85,6 +85,10 @@ export function createPoolIsland(scene, island) {
     model.scale.setScalar(SCALE); model.position.y = BASE; root.add(model);
     paintSampleTiles(floor); domeFloor(floor); world.floor = floor;
     world.acrylic = addAcrylicBase(model);
+    // The clear resin's wave surface faces the other way round on the keyring
+    // (turned end for end, like the product viewer); tiles stay as they are.
+    // Rotate before createWaterMotion so its height field follows the turned surface.
+    water.geometry.rotateY(Math.PI); water.geometry.computeBoundingSphere();
     motion = createWaterMotion(water, floor); world.waterMotion = motion; world.water = water; world.product = model;
     clearResin(water); // after createWaterMotion, which sets its own optical defaults
     const rim = surfaceHeight(0, 8.15);
