@@ -1,0 +1,12 @@
+{
+  "asset": "assets/swimming-pool-body.glb",
+  "parts": [
+    "Body_Floor_20pct",
+    "Body_ClearWater_80pct_STL_Waves"
+  ],
+  "metal_parts": 0,
+  "lane_direction": "south (+Z)",
+  "artwork_rotation_degrees": 180,
+  "runtime_water": "product/water-motion.js",
+  "source": "source/swimming-pool-keyring.blend"
+}

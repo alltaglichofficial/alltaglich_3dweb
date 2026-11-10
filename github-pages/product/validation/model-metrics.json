@@ -1,0 +1,304 @@
+{
+  "source": {
+    "file": "LEE_RE_RE.stl",
+    "sha256": "52d343671988de35aefe510fe8bc3566a6604d28b4406dc6617c325d83ec9537",
+    "bounds_min": [
+      -14.890115737915039,
+      -23.405120849609375,
+      -7.329930305480957
+    ],
+    "bounds_max": [
+      15.109272003173828,
+      22.95370101928711,
+      8.172109603881836
+    ],
+    "size": [
+      29.999387741088867,
+      46.358821868896484,
+      15.502039909362793
+    ],
+    "units": "unknown"
+  },
+  "normalization": {
+    "body_width": 1,
+    "physical_unit": "not assigned",
+    "blender_up": "Z",
+    "gltf_up": "Y",
+    "body_pivot": [
+      0,
+      0,
+      0
+    ]
+  },
+  "thickness": {
+    "thickness_ratio": 0.4999999999869388,
+    "floor_fraction": 0.2000000057673147,
+    "water_fraction": 0.7999999942326853,
+    "body_xy_preserved": [
+      1.0,
+      1.545325517654419
+    ],
+    "wave_gain": 0.68,
+    "original_wave_relief": 0.1259749055191467,
+    "new_wave_relief": 0.08566293575301975
+  },
+  "layers": {
+    "floor": {
+      "min": [
+        -0.5,
+        -0.7726627588272095,
+        0.0
+      ],
+      "max": [
+        0.5,
+        0.7726627588272095,
+        0.05167452245950699
+      ],
+      "size": [
+        1.0,
+        1.545325517654419,
+        0.05167452245950699
+      ]
+    },
+    "water": {
+      "min": [
+        -0.5,
+        -0.7726627588272095,
+        0.05167452245950699
+      ],
+      "max": [
+        0.5,
+        0.7726627588272095,
+        0.25837260484695435
+      ],
+      "size": [
+        1.0,
+        1.545325517654419,
+        0.20669808238744736
+      ]
+    }
+  },
+  "tile_pattern": {
+    "columns": 24,
+    "rows": 37,
+    "stem_tiles": 1.95,
+    "bar_tiles": 10.6,
+    "bar_from_top_tiles": 4.7,
+    "assessment": "estimated from the supplied straight-on photograph, not measured CAD"
+  },
+  "materials": {
+    "transmission": 1,
+    "ior": 1.46,
+    "roughness": 0.035,
+    "thickness": 0.20669808388296296
+  },
+  "hardware_clearances": [
+    {
+      "a": "Attachment_Eyelet_Loop",
+      "b": "Chain_01_ResinJumpRing",
+      "wire_surface_clearance": 0.00433342177253665,
+      "centreline_distance": 0.025000510226172414,
+      "aperture_crossings": 1,
+      "interlocked": true
+    },
+    {
+      "a": "Chain_01_ResinJumpRing",
+      "b": "QuickLink_Frame",
+      "wire_surface_clearance": 0.013418735643349083,
+      "centreline_distance": 0.03675254518777656,
+      "aperture_crossings": 1,
+      "interlocked": true
+    },
+    {
+      "a": "QuickLink_Frame",
+      "b": "Chain_02_UpperJumpRing",
+      "wire_surface_clearance": 0.03901559177842717,
+      "centreline_distance": 0.06334942173190154,
+      "aperture_crossings": 1,
+      "interlocked": true
+    },
+    {
+      "a": "Chain_02_UpperJumpRing",
+      "b": "MainRing_TwoTurnSplitHelix",
+      "wire_surface_clearance": 0.00772212744069328,
+      "centreline_distance": 0.04005612066654278,
+      "aperture_crossings": 2,
+      "interlocked": true
+    },
+    {
+      "a": "MainRing_TwoTurnSplitHelix",
+      "b": "Carabiner_SwivelLoop",
+      "wire_surface_clearance": 0.0024429279000715027,
+      "centreline_distance": 0.03977702317115546,
+      "aperture_crossings": 2,
+      "interlocked": true
+    },
+    {
+      "a": "Chain_02_UpperJumpRing",
+      "b": "Tag_ConnectingJumpRing",
+      "wire_surface_clearance": 0.012094087297729286,
+      "centreline_distance": 0.03309451588771401,
+      "aperture_crossings": 1,
+      "interlocked": true
+    }
+  ],
+  "parts": [
+    {
+      "name": "Body_Floor_20pct",
+      "vertices": 1790,
+      "faces": 1946
+    },
+    {
+      "name": "Body_ClearWater_80pct_STL_Waves",
+      "vertices": 59362,
+      "faces": 116707
+    },
+    {
+      "name": "Attachment_Eyelet_Shank",
+      "vertices": 384,
+      "faces": 338
+    },
+    {
+      "name": "Attachment_Eyelet_Loop",
+      "vertices": 1792,
+      "faces": 1792
+    },
+    {
+      "name": "Chain_01_ResinJumpRing",
+      "vertices": 1792,
+      "faces": 1792
+    },
+    {
+      "name": "QuickLink_Frame",
+      "vertices": 1472,
+      "faces": 1472
+    },
+    {
+      "name": "QuickLink_ThreadedBarrel",
+      "vertices": 384,
+      "faces": 338
+    },
+    {
+      "name": "QuickLink_ThreadRidge_1",
+      "vertices": 1792,
+      "faces": 1792
+    },
+    {
+      "name": "QuickLink_ThreadRidge_2",
+      "vertices": 1792,
+      "faces": 1792
+    },
+    {
+      "name": "QuickLink_ThreadRidge_3",
+      "vertices": 1792,
+      "faces": 1792
+    },
+    {
+      "name": "QuickLink_ThreadRidge_4",
+      "vertices": 1792,
+      "faces": 1792
+    },
+    {
+      "name": "QuickLink_ThreadRidge_5",
+      "vertices": 1792,
+      "faces": 1792
+    },
+    {
+      "name": "QuickLink_ThreadRidge_6",
+      "vertices": 1792,
+      "faces": 1792
+    },
+    {
+      "name": "Chain_02_UpperJumpRing",
+      "vertices": 1792,
+      "faces": 1792
+    },
+    {
+      "name": "MainRing_TwoTurnSplitHelix",
+      "vertices": 9620,
+      "faces": 9602
+    },
+    {
+      "name": "Carabiner_SwivelLoop",
+      "vertices": 1792,
+      "faces": 1792
+    },
+    {
+      "name": "Carabiner_SwivelShaft",
+      "vertices": 384,
+      "faces": 338
+    },
+    {
+      "name": "Carabiner_SwivelWasher_57.23",
+      "vertices": 1792,
+      "faces": 1792
+    },
+    {
+      "name": "Carabiner_SwivelWasher_57.83",
+      "vertices": 1792,
+      "faces": 1792
+    },
+    {
+      "name": "Carabiner_BaseHousing",
+      "vertices": 152,
+      "faces": 150
+    },
+    {
+      "name": "Carabiner_MainBody",
+      "vertices": 1902,
+      "faces": 2064
+    },
+    {
+      "name": "Carabiner_MovingGate",
+      "vertices": 384,
+      "faces": 338
+    },
+    {
+      "name": "Carabiner_HingePin",
+      "vertices": 384,
+      "faces": 338
+    },
+    {
+      "name": "Carabiner_HingeScrewSlot",
+      "vertices": 152,
+      "faces": 150
+    },
+    {
+      "name": "Tag_ConnectingJumpRing",
+      "vertices": 1792,
+      "faces": 1792
+    },
+    {
+      "name": "Tag_ThinRoundedMetalPlate",
+      "vertices": 2849,
+      "faces": 2819
+    },
+    {
+      "name": "Tag_Alltaglich_RecessFloor",
+      "vertices": 821,
+      "faces": 799
+    }
+  ],
+  "blender_bounds": {
+    "min": [
+      -0.7973177433013916,
+      -0.7726627588272095,
+      0.0
+    ],
+    "max": [
+      0.5182193517684937,
+      2.403862714767456,
+      0.3291971981525421
+    ],
+    "size": [
+      1.3155370950698853,
+      3.1765254735946655,
+      0.3291971981525421
+    ]
+  },
+  "notes": [
+    "Reference photo proportions are estimated, not real-world measurements.",
+    "50% reduction is measured against the supplied STL, not the unrelated procedural sports-world mesh.",
+    "Bottom 20% and upper 80% are maximum axial thicknesses; the top remains a non-planar STL-derived surface."
+  ]
+}

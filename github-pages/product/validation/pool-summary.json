@@ -1,0 +1,31 @@
+{
+  "asset": "assets/swimming-pool-body.glb",
+  "bytes": 2293032,
+  "sha256": "4d7639a8769f64849320e2efa356cc3c250d93076f0932203393831791d163a4",
+  "meshObjects": 2,
+  "meshPrimitives": 3,
+  "metalObjects": 0,
+  "embeddedTextures": 2,
+  "size": [
+    1,
+    0.25837260484695435,
+    1.545325517654419
+  ],
+  "centre": [
+    0,
+    0.12918630242347717,
+    0
+  ],
+  "bottomPivot": [
+    0,
+    0,
+    0
+  ],
+  "thicknessRatio": 0.4999999999869388,
+  "floorFraction": 0.2000000057673147,
+  "waterFraction": 0.7999999942326853,
+  "lane": "south (+Z), top UV rotated 180 degrees; side UV retained",
+  "errors": 0,
+  "warnings": 0,
+  "runtimeMotion": "product/water-motion.js; GPU wave displacement, normals, animated caustics and puppy ripples"
+}
