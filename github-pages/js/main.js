@@ -85,7 +85,7 @@ async function start() {
     const target = new THREE.Vector3(0, .3, 0);
     const corners = [];
     if (world.island.id === 'pool') {
-      for (const x of [-5.9, 5.9]) for (const y of [-1.2, 2.7]) for (const z of [-8.9, 8.9]) corners.push(new THREE.Vector3(x, y, z));
+      for (const x of [-5.9, 5.9]) for (const y of [-1.65, 3.4]) for (const z of [-8.9, 8.9]) corners.push(new THREE.Vector3(x, y, z));
     } else {
       for (let i = 0; i < 64; i++) for (const y of [-1.55, 2.8]) {
         const angle = i / 64 * Math.PI * 2;

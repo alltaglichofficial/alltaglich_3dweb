@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { sphere, ico, cylinder, mesh } from './geometry.js';
+import { mesh } from './geometry.js';
 import { createDogActivities } from './activities.js';
 import { createDogCare } from './care.js';
 import { createTricks, TRICK_COMMANDS } from './tricks.js';
@@ -8,45 +8,65 @@ export function createDog(world, navigation) {
   const root = new THREE.Group(); root.name = 'AlltaglichSpitz'; root.scale.setScalar(.9);
   const posePivot = new THREE.Group(); posePivot.position.y = .55; root.add(posePivot);
   const body = new THREE.Group(); body.position.y = -.55; posePivot.add(body);
-  const white = 0xfffcf5, cream = 0xf1e9da, nose = 0x333a31;
-  sphere(body, .34, 0, .55, -.12, white, [1, 1, 1.35]);
-  const belly = sphere(body, .27, 0, .225, -.17, 0xe7bfb6, [.95, .16, 1.25]); belly.visible = false;
-  // Full neck ruff, compact body, pointed ears and a curled tail: a small spitz.
-  for (let i = 0; i < 9; i++) {
-    const a = i / 9 * Math.PI * 2;
-    ico(body, .19, Math.cos(a) * .23, .68 + Math.sin(a) * .25, .17, i % 2 ? cream : white, [1, 1.2, 1]);
-  }
-  for (const [x, y, z] of [[-.25, .53, -.35], [.25, .53, -.35], [0, .78, -.25], [-.26, .48, 0], [.26, .48, 0]]) ico(body, .19, x, y, z, white);
+  // Japanese spitz: plush double coat, a lion-like neck ruff and chest bib,
+  // fluffy cheeks around a short fox muzzle, small erect ears set close together,
+  // feathered "pants" and a plume tail curled flat over the back.
+  const fur = new THREE.MeshPhysicalMaterial({ color: 0xfdfbf6, roughness: .9, sheen: 1, sheenRoughness: .42, sheenColor: 0xffffff });
+  const underFur = new THREE.MeshPhysicalMaterial({ color: 0xf2ece1, roughness: .92, sheen: .8, sheenRoughness: .5, sheenColor: 0xfffaf0 });
+  const ink = new THREE.MeshStandardMaterial({ color: 0x1d2024, roughness: .28 });
+  const pink = new THREE.MeshStandardMaterial({ color: 0xeab3ab, roughness: .7 });
+  const part = (geo, mat, parent, [x, y, z], [sx, sy, sz] = [1, 1, 1]) => {
+    const object = new THREE.Mesh(geo, mat); object.position.set(x, y, z); object.scale.set(sx, sy, sz);
+    object.castShadow = true; object.receiveShadow = true; parent.add(object); return object;
+  };
+  const ball = new THREE.SphereGeometry(1, 20, 14);
+  const tuft = (parent, r, at, scale = [1, 1, 1], seed = 1, amp = .12, mat = fur) => part(fluffGeometry(seed, amp), mat, parent, at, scale.map(v => v * r));
+
+  tuft(body, .3, [0, .52, -.12], [1, .98, 1.42], 1, .09);
+  tuft(body, .27, [0, .55, -.43], [1.05, 1, 1], 2, .1);
+  const belly = part(ball, pink, body, [0, .25, -.15], [.26, .045, .33]); belly.visible = false;
+  tuft(body, .36, [0, .72, .14], [1.1, 1.02, .8], 3, .16);
+  tuft(body, .22, [0, .48, .27], [1, 1.25, .8], 4, .18, underFur);
+  for (const side of [-1, 1]) tuft(body, .17, [side * .17, .41, -.43], [1, 1.2, 1.1], 5 + side, .14);
+
   const head = new THREE.Group(); head.position.set(0, .99, .29); body.add(head);
-  sphere(head, .3, 0, 0, 0, white, [1.1, .98, .95]);
-  for (const side of [-1, 1]) ico(head, .17, side * .22, -.08, .06, white, [1.1, 1, .9]);
-  const snout = mesh(new THREE.ConeGeometry(.15, .32, 5), white, [0, -.065, .31], head);
-  snout.rotation.x = Math.PI / 2;
-  sphere(head, .064, 0, -.065, .478, nose, [1.1, .8, .7]);
+  tuft(head, .245, [0, .02, 0], [1.05, .95, .98], 7, .04);
+  for (const side of [-1, 1]) tuft(head, .16, [side * .14, -.1, .0], [1, .95, 1], 8 + side, .1);
+  tuft(head, .1, [0, .17, -.05], [1.2, .7, 1], 11, .1);
+  part(new THREE.ConeGeometry(1, 1, 14), fur, head, [0, -.072, .27], [.098, .2, .078]).rotation.x = Math.PI / 2;
+  part(ball, fur, head, [0, -.06, .19], [.11, .085, .13]);
+  part(ball, ink, head, [0, -.06, .37], [.042, .034, .03]);
+  const smile = part(new THREE.TorusGeometry(.032, .005, 4, 14, Math.PI), ink, head, [0, -.112, .325]);
+  smile.rotation.set(-.3, 0, Math.PI);
   const eyes = [], eyeShines = [];
-  for (const x of [-.142, .142]) {
-    eyes.push(sphere(head, .044, x, .045, .255, nose, [1, 1.12, .75]));
-    eyeShines.push(sphere(head, .013, x - .008, .059, .285, 0xffffff));
+  const shine = new THREE.MeshBasicMaterial({ color: 0xffffff });
+  for (const side of [-1, 1]) {
+    const eye = part(ball, ink, head, [side * .094, .035, .2], [.042, .036, .024]);
+    eye.rotation.z = side * .28; eye.userData.baseY = eye.scale.y; eyes.push(eye);
+    eyeShines.push(part(ball, shine, head, [side * .094 - .012, .049, .222], [.011, .011, .008]));
   }
   const ears = [];
+  const earGeo = new THREE.ConeGeometry(.095, .23, 4), innerEarGeo = new THREE.ConeGeometry(.055, .14, 4);
   for (const side of [-1, 1]) {
-    const ear = new THREE.Group(); ear.position.set(side * .215, .24, -.025); ear.rotation.z = -side * .16;
-    mesh(new THREE.ConeGeometry(.17, .38, 3), white, [0, .02, 0], ear, [1, 1, .65]);
-    mesh(new THREE.ConeGeometry(.105, .245, 3), 0xe8cabe, [0, .015, .075], ear, [.85, 1, .1]);
+    const ear = new THREE.Group(); ear.position.set(side * .12, .2, -.035); ear.rotation.set(-.12, 0, -side * .2);
+    part(earGeo, fur, ear, [0, .08, 0], [1, 1, .55]).rotation.y = Math.PI / 4;
+    part(innerEarGeo, pink, ear, [0, .065, .028], [.95, 1, .18]).rotation.y = Math.PI / 4;
     head.add(ear); ears.push(ear);
   }
   const legs = [];
-  for (const [x, z] of [[-.22, .2], [.22, .2], [-.22, -.36], [.22, -.36]]) {
+  const legGeo = new THREE.CylinderGeometry(.068, .074, .32, 10);
+  for (const [x, z, rear] of [[-.13, .2, 0], [.13, .2, 0], [-.15, -.4, 1], [.15, -.4, 1]]) {
     const leg = new THREE.Group(); leg.position.set(x, .4, z);
-    cylinder(leg, .105, .075, .25, 0, -.105, 0, white, 8);
-    sphere(leg, .115, 0, -.265, .04, white, [1, .7, 1.25]);
+    part(legGeo, fur, leg, [0, -.17, 0]);
+    part(ball, fur, leg, [0, -.355, .03], [.085, .055, .11]);
+    tuft(leg, rear ? .12 : .085, [0, rear ? -.06 : -.08, -.035], [1, 1.3, 1], 12 + x * 10 + z, .16);
     body.add(leg); legs.push(leg);
   }
-  const tail = new THREE.Group(); tail.position.set(0, .75, -.42); tail.rotation.y = .35;
-  mesh(new THREE.TorusGeometry(.22, .105, 8, 18, Math.PI * 1.85), white, [.025, .13, 0], tail);
-  ico(tail, .15, .22, .14, .015, white); body.add(tail);
-  const tongue = sphere(head, .055, 0, -.145, .35, 0xd9928b, [.65, 1, .4]); tongue.visible = false;
-  const hitArea = mesh(new THREE.SphereGeometry(.75, 8, 6), white, [0, .65, 0], root);
+  const tail = new THREE.Group(); tail.position.set(0, .72, -.5);
+  for (const [y, z, r, x] of [[.06, -.03, .1, 0], [.18, -.04, .14, 0], [.29, .05, .17, .02], [.31, .2, .16, .05], [.25, .33, .12, .08]]) tuft(tail, r, [x, y, z], [1.1, .9, 1.15], 20 + y * 10, .13);
+  body.add(tail);
+  const tongue = part(ball, pink, head, [0, -.14, .31], [.036, .05, .028]); tongue.visible = false;
+  const hitArea = mesh(new THREE.SphereGeometry(.75, 8, 6), 0xffffff, [0, .65, 0], root);
   hitArea.material = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false });
   hitArea.castShadow = false; hitArea.receiveShadow = false;
   const care = createDogCare(root);
@@ -233,10 +253,29 @@ export function createDog(world, navigation) {
       head.rotation.y = careFrame.eating ? 0 : looking;
       head.rotation.x = -posePivot.rotation.x * .5 + trickFrame.nod + (careFrame.eating ? .82 + careFrame.chew * .06 : moving ? Math.sin(gait) * .035 : Math.sin(time * 1.3) * .04);
       head.rotation.z = careFrame.petting ? Math.sin(time * 4) * .10 : 0;
-      for (let i = 0; i < eyes.length; i++) { eyes[i].scale.y = .044 * (careFrame.petting ? .28 : 1.12); eyeShines[i].visible = !careFrame.petting; }
+      for (let i = 0; i < eyes.length; i++) { eyes[i].scale.y = eyes[i].userData.baseY * (careFrame.petting ? .25 : 1); eyeShines[i].visible = !careFrame.petting; }
       for (let i = 0; i < ears.length; i++) ears[i].rotation.x = moving ? Math.sin(gait + i * .5) * .075 : 0;
       tail.rotation.z = Math.sin(time * (wag > 0 || playFrame.carrying ? 23 : 5)) * (wag > 0 || playFrame.carrying ? .65 : .1);
       tongue.visible = wag > 0 && !playFrame.swimming && !playFrame.carrying;
     },
   };
+}
+
+// Soft, clumpy fur: a sphere pushed out along its normals by a few layered
+// waves. Same-seed parts share one geometry; smooth normals keep it plush.
+const fluffCache = new Map();
+function fluffGeometry(seed, amp) {
+  const key = `${seed.toFixed(2)}-${amp}`;
+  if (fluffCache.has(key)) return fluffCache.get(key);
+  const geo = new THREE.SphereGeometry(1, 30, 20), p = geo.attributes.position, v = new THREE.Vector3();
+  for (let i = 0; i < p.count; i++) {
+    v.fromBufferAttribute(p, i).normalize();
+    const n = Math.sin(v.x * 7.3 + seed) * Math.sin(v.y * 6.1 + seed * 1.7) * Math.sin(v.z * 5.7 + seed * 2.3) * .6
+      + Math.sin(v.x * 13.1 - seed * .7) * Math.sin(v.z * 11.7 + v.y * 4 + seed) * .4;
+    // Fur falls downward, so the lower half droops slightly.
+    v.multiplyScalar(1 + amp * n).y -= amp * .25 * Math.max(0, -v.y);
+    p.setXYZ(i, v.x, v.y, v.z);
+  }
+  geo.computeVertexNormals();
+  fluffCache.set(key, geo); return geo;
 }

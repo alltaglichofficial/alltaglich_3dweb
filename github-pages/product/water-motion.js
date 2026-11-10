@@ -5,7 +5,7 @@ import * as THREE from 'three';
 export function createWaterMotion(water, floor = null) {
   const uniforms = { time: { value: 0 }, swimmer: { value: new THREE.Vector2(99, 99) }, swimming: { value: 0 } };
   const mat = water.material;
-  mat.ior = 1.333; mat.roughness = .035; mat.transmission = .98; mat.clearcoat = .5; mat.clearcoatRoughness = .045;
+  mat.ior = 1.5; mat.roughness = .02; mat.transmission = 1; mat.clearcoat = 1; mat.clearcoatRoughness = .03;
   mat.onBeforeCompile = shader => {
     shader.uniforms.uFlowTime = uniforms.time; shader.uniforms.uSwimmer = uniforms.swimmer; shader.uniforms.uSwimming = uniforms.swimming;
     shader.vertexShader = `uniform float uFlowTime; uniform vec2 uSwimmer; uniform float uSwimming;\n` + shader.vertexShader;
