@@ -38,3 +38,18 @@
 @media(max-width:650px){.command-buttons{gap:4px}.command-buttons>button{padding:0 9px;font-size:10px}.trick-menu summary{padding:0 9px;min-height:40px;font-size:9px}.trick-buttons{width:min(286px,calc(100vw - 28px))}}
 @media(max-width:360px){.command-buttons>button{padding:0 7px;font-size:9px}.trick-menu summary{padding:0 7px;font-size:9px;gap:4px}}
 @media(max-height:550px){.trick-menu summary{min-height:36px;padding:0 8px;font-size:9px}.trick-buttons{width:275px}}
+
+/* Room mood toggle and the dark-room theme for the overlay. */
+.island-indicator .mood-toggle{display:grid;place-items:center;padding:0}.mood-toggle svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linejoin:round}.mood-toggle[aria-pressed=true]{background:#2c2f35;border-color:#4a4f57;color:#f3e3c4}.mood-toggle[aria-pressed=true] svg{fill:currentColor}
+:root[data-mood=dark]{color:#e9e4d8;background:#0f1013}
+:root[data-mood=dark] .wordmark,:root[data-mood=dark] .intro h1,:root[data-mood=dark] .island-count b{color:#f1ece0}
+:root[data-mood=dark] .brand-note,:root[data-mood=dark] .edition,:root[data-mood=dark] .eyebrow,:root[data-mood=dark] .intro-copy,:root[data-mood=dark] .dog-tip,:root[data-mood=dark] .control-hint,:root[data-mood=dark] .footer-note,:root[data-mood=dark] .scene-caption,:root[data-mood=dark] .island-indicator,:root[data-mood=dark] .dog-controls>p,:root[data-mood=dark] .dog-label,:root[data-mood=dark] .load-state{color:#aeb0a6}
+:root[data-mood=dark] .island-count,:root[data-mood=dark] .edition>span{color:#7f8279}
+:root[data-mood=dark] .island-arrow{background:#1c1e22df;border-color:#33363c;color:#d9d6cb}
+:root[data-mood=dark] .island-indicator button{border-color:#3a3d44;color:#c9c6bb}:root[data-mood=dark] .island-indicator button:hover{background:#262930}
+:root[data-mood=dark] .zone-nav{background:#1a1c20e6;border-color:#30333a}
+:root[data-mood=dark] .zone-nav button{color:#b3b5ab}:root[data-mood=dark] .zone-nav button:hover{background:#262930;color:#f1ece0}
+:root[data-mood=dark] .command-buttons button,:root[data-mood=dark] .care-buttons button,:root[data-mood=dark] .trick-menu summary{background:#1c1e22;border-color:#35383f;color:#d4d1c6}
+:root[data-mood=dark] .command-buttons button[aria-pressed=true]{background:#33402d;border-color:#4c5d43;color:#eef3e4}
+:root[data-mood=dark] .trick-buttons{background:#1a1c20f5;border-color:#33363c}
+:root[data-mood=dark] .bond-caption,:root[data-mood=dark] .bond-panel{color:#cfccc1}

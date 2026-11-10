@@ -6,6 +6,7 @@ import { createWaterMotion } from '../product/water-motion.js';
 import { RoomEnvironment } from '../product/vendor/environments/RoomEnvironment.js';
 import { createDogHouse, createFetchToy } from './house.js';
 import { createSwimBear } from './bear.js';
+import { createKeyringHardware } from './keyring.js';
 
 // Normalised keyring units (body width 1): footprint half-sizes and corner
 // radius of the GLB outline, top of the tile floor, acrylic slab and dome rise.
@@ -13,7 +14,8 @@ const HX = .5, HZ = .7726628, CORNER = .06, FLOOR_TOP = .05167452, ACRYLIC = .04
 // World layout: the block sits on a white poolside deck. The puppy lives on the
 // front deck, climbs the ladder over the front wall into the water and back out.
 const DECK_Y = -1.6, WALL_X = HX * 11.2, WALL_Z = HZ * 11.2;
-const DECK = { minX: -8.6, maxX: 8.6, minZ: -9.8, maxZ: 15.8 };
+// The back deck runs on behind the block to hold the keyring hardware.
+const DECK = { minX: -8.6, maxX: 8.6, minZ: -32.2, maxZ: 15.8 };
 
 export function createPoolIsland(scene, island) {
   const root = new THREE.Group(); root.name = 'island-pool'; scene.add(root);
@@ -22,6 +24,7 @@ export function createPoolIsland(scene, island) {
   const splash = (x, z, strength) => { if (motion && !reduced) motion.addRipple(x / SCALE, z / SCALE, strength); };
   createDeck(root);
   const droplets = createDroplets(root);
+  const hardware = createKeyringHardware(root, { wallZ: WALL_Z, deckY: DECK_Y, eyeY: DECK_Y + .6 });
   // Uniform scale keeps the keyring's real block proportions (thick clear resin
   // over a thin tiled floor). A clear acrylic slab sits under the tiles, so the
   // whole block is lifted by its thickness and still rests on the ground.
@@ -43,7 +46,9 @@ export function createPoolIsland(scene, island) {
     // the rim, down into the water, swims the lane corridor and loops around the
     // playing bear, then climbs back out onto the deck the same way.
     activity: { type: 'swim', entry: { x: 0, z: 10 }, ladderTop: { x: 0, z: WALL_Z - .15, y: 1 }, waterEntry: { x: 0, z: 7 }, corridorStart: { x: 0, z: 2.8 }, route: [{ x: 0, z: 2.8 }, { x: -1.65, z: 2.35 }, { x: -1.65, z: -2.6 }, { x: 1.6, z: -2.6 }, { x: 1.6, z: 2.35 }, { x: 0, z: 2.8 }] },
-    bear, droplets,
+    bear, droplets, hardware,
+    // Default view frames the block, the front deck and the hardware behind it.
+    view: { center: { x: 0, z: -7.6 }, min: [-8.9, -1.75, -32.5], max: [8.9, 3.9, 16.1] },
     getSurfaceHeight: surfaceHeight,
     heightAt(x, z) {
       if (Math.abs(x - house.object.position.x) < 1.4 && Math.abs(z - house.object.position.z) < 1.3) return house.object.position.y + .02;
@@ -67,11 +72,18 @@ export function createPoolIsland(scene, island) {
       if (b.landed) splash(b.x, b.z, .9);
       if (swimmer) { wake.position.set(swimmer.x, surfaceHeight(swimmer.x, swimmer.z) + .025, swimmer.z); wake.children.forEach((ring, i) => { const t = (time * .75 + i / 3) % 1; ring.scale.setScalar(.6 + t * 1.8); ring.material.opacity = (1 - t) * .35; }); }
     },
-    setupEnvironment(renderer) { const environment = new RoomEnvironment(); const pmrem = new THREE.PMREMGenerator(renderer); const texture = pmrem.fromScene(environment, .04).texture; environment.dispose(); pmrem.dispose(); for (const m of [world.water.material, world.acrylic.material, droplets.material]) { m.envMap = texture; m.envMapIntensity = m === world.water.material ? WATER_REFLECTION : 1.15; m.needsUpdate = true; } },
+    // Dark room: studio reflections dim and the tiles glow softly from within,
+    // like a pool with its underwater lights on at night. The tiles always carry
+    // an emissive map (black in the lamp mood), so switching never recompiles.
+    setMood(mood, { reflections }) {
+      for (const m of [world.water?.material, world.acrylic?.material, droplets.material, ...hardware.materials]) if (m?.userData.envBase !== undefined) m.envMapIntensity = m.userData.envBase * reflections;
+      world.floor?.traverse(object => { if (object.isMesh && object.material.emissiveMap) object.material.emissive.setHex(mood === 'dark' ? 0x5a7f99 : 0); });
+    },
+    setupEnvironment(renderer) { const environment = new RoomEnvironment(); const pmrem = new THREE.PMREMGenerator(renderer); const texture = pmrem.fromScene(environment, .04).texture; environment.dispose(); pmrem.dispose(); for (const m of [world.water.material, world.acrylic.material, droplets.material, ...hardware.materials]) { m.envMap = texture; m.userData.envBase = m === world.water.material ? WATER_REFLECTION : hardware.materials.includes(m) ? 1 : 1.15; m.envMapIntensity = m.userData.envBase; m.needsUpdate = true; } },
   };
   world.ready = loadSwimmingPoolKeyring().then(({ model, floor, water }) => {
     model.scale.setScalar(SCALE); model.position.y = BASE; root.add(model);
-    paintSampleTiles(floor); domeFloor(floor);
+    paintSampleTiles(floor); domeFloor(floor); world.floor = floor;
     world.acrylic = addAcrylicBase(model);
     motion = createWaterMotion(water, floor); world.waterMotion = motion; world.water = water; world.product = model;
     clearResin(water); // after createWaterMotion, which sets its own optical defaults
@@ -105,16 +117,20 @@ function paintSampleTiles(floor) {
       ctx.fillStyle = GROUT;
       for (let c = 0; c <= cols; c++) ctx.fillRect(c * tile - grout / 2, 0, grout, height);
       for (let r = 0; r <= rows; r++) ctx.fillRect(0, r * tile - grout / 2, width, grout);
-      // T lane: bar centred 4.6 tiles from the edge, stem runs off the far edge.
+      // Lane mark as on the keyring: a wide T bar at the ring end (back, v = 1),
+      // a stem down the middle and a short "-" crossbar where it ends near the
+      // front wall. Canvas row 0 is the front (+Z) edge.
       ctx.fillStyle = LANE;
-      const stem = tile * 1.7, bar = tile * 10.2, top = tile * 4.6, stroke = tile * 1.45;
-      ctx.fillRect(width / 2 - bar / 2, top, bar, stroke);
-      ctx.fillRect(width / 2 - stem / 2, top, stem, height - top);
+      const stem = tile * 1.7, bar = tile * 10.2, cross = tile * 5.2, stroke = tile * 1.45;
+      const barY = height - tile * 4.6 - stroke, endY = tile * 6.4;
+      ctx.fillRect(width / 2 - bar / 2, barY, bar, stroke);
+      ctx.fillRect(width / 2 - stem / 2, endY, stem, barY - endY);
+      ctx.fillRect(width / 2 - cross / 2, endY, cross, stroke);
     }
     const texture = new THREE.CanvasTexture(canvas);
     texture.flipY = false; texture.colorSpace = THREE.SRGBColorSpace;
     texture.wrapS = texture.wrapT = object.material.map.wrapS; texture.anisotropy = 8;
-    object.material.map.dispose(); object.material.map = texture;
+    object.material.map.dispose(); object.material.map = texture; object.material.emissiveMap = texture; object.material.emissive.setHex(0);
     object.material.roughness = .5; object.material.metalness = 0; object.material.needsUpdate = true;
   });
 }
@@ -238,7 +254,7 @@ function createDroplets(root) {
     [-4.9, 9.85, .26, 'oval'], [-6.6, 11.2, .7, 'splat'], [-5.4, 12.6, .13, 'round'], [-6.9, 13.9, .2, 'round'], [-3.9, 14.3, .42, 'blob'],
     [-2.2, 14.75, .1, 'round'], [-4.6, 15.05, .16, 'round'], [1.8, 14.6, .55, 'blob'], [3.2, 14.9, .12, 'round'], [6.7, 15, .3, 'oval'],
     [7.4, 13.6, .1, 'round'], [7.2, 10.3, .45, 'drip'], [6.9, 6.2, .22, 'round'], [7.3, 3.4, .5, 'blob'], [6.75, .4, .13, 'round'],
-    [7.45, -2.2, .28, 'oval'], [6.9, -5.6, .62, 'splat'], [7.3, -8.4, .12, 'round'], [3.4, -9.25, .3, 'blob'], [.2, -9.3, .1, 'round'],
+    [7.45, -2.2, .28, 'oval'], [6.9, -5.6, .62, 'splat'], [7.3, -8.4, .12, 'round'], [3.4, -9.25, .3, 'blob'], [-1.6, -9.5, .1, 'round'],
     [-2.6, -9.2, .4, 'drip'], [-6.1, -9.15, .16, 'round'], [-7.3, -6.8, .48, 'blob'], [-6.85, -3.1, .1, 'round'], [-7.4, -.6, .3, 'oval'],
     [-6.9, 2.9, .9, 'splat'], [-7.35, 6.4, .14, 'round'], [-6.4, 7.7, .24, 'round'], [5.9, 8.6, .11, 'round'], [-3.1, 9.6, .09, 'round'],
   ];

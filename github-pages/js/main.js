@@ -5,6 +5,7 @@ import { ISLANDS } from './islands.js';
 import { Navigation } from './navigation.js';
 import { createDog } from './dog.js';
 import { createBondInteractions } from './bond.js';
+import { createLighting } from './lighting.js';
 
 const loading = document.querySelector('#load-state');
 const errorPanel = document.querySelector('#error-state');
@@ -26,7 +27,7 @@ async function start() {
   const motionPreference = matchMedia('(prefers-reduced-motion: reduce)');
   let reducedMotion = motionPreference.matches;
   motionPreference.addEventListener('change', event => { reducedMotion = event.matches; });
-  const scene = new THREE.Scene(); scene.background = new THREE.Color(0xf3f0e8);
+  const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(36, innerWidth / innerHeight, .1, 250);
   const renderer = new THREE.WebGLRenderer({ antialias: !coarse, powerPreference: 'low-power' });
   renderer.setPixelRatio(Math.min(devicePixelRatio, coarse ? 1.5 : 1.8));
@@ -39,15 +40,7 @@ async function start() {
   renderer.domElement.setAttribute('aria-label', '회전과 확대가 가능한 3D 스포츠 섬');
   mount.appendChild(renderer.domElement);
 
-  scene.add(new THREE.HemisphereLight(0xfffcf1, 0x9ea68b, 2.5));
-  const sun = new THREE.DirectionalLight(0xfff0d3, 3.1);
-  sun.position.set(-10, 22, 12); sun.castShadow = true;
-  sun.shadow.mapSize.set(coarse ? 1024 : 2048, coarse ? 1024 : 2048);
-  Object.assign(sun.shadow.camera, { left: -18, right: 18, top: 18, bottom: -18, near: .5, far: 65 });
-  sun.shadow.normalBias = .035; sun.shadow.bias = -.00015; sun.shadow.radius = 3;
-  scene.add(sun);
-  const floor = new THREE.Mesh(new THREE.PlaneGeometry(300, 300), new THREE.ShadowMaterial({ color: 0x656b4b, opacity: .13 }));
-  floor.rotation.x = -Math.PI / 2; floor.position.y = -1.64; floor.receiveShadow = true; scene.add(floor);
+  const lighting = createLighting(scene, renderer, { coarse });
 
   const worlds = ISLANDS.map(island => {
     const world = createWorld(scene, island);
@@ -57,6 +50,22 @@ async function start() {
   });
   await Promise.all(worlds.map(world => world.ready));
   worlds.forEach(world => world.setupEnvironment?.(renderer));
+  // Room mood: lamp-lit studio or a dark room. ?mood=dark opens straight in the dark.
+  const moodButton = document.querySelector('#moodToggle');
+  const storedMood = () => { try { return localStorage.getItem('alltaglich-mood'); } catch { return null; } };
+  function setMood(name) {
+    const mood = lighting.setMood(name, worlds);
+    moodButton.setAttribute('aria-pressed', String(mood === 'dark'));
+    moodButton.setAttribute('aria-label', mood === 'dark' ? '밝은 조명으로 바꾸기' : '어두운 방 분위기로 바꾸기');
+    moodButton.title = moodButton.getAttribute('aria-label');
+    return mood;
+  }
+  setMood(new URLSearchParams(location.search).get('mood') || storedMood() || 'lamp');
+  moodButton.addEventListener('click', () => {
+    const mood = setMood(lighting.mood === 'dark' ? 'lamp' : 'dark');
+    try { localStorage.setItem('alltaglich-mood', mood); } catch { /* private mode: mood just isn't remembered */ }
+    document.querySelector('#status').textContent = mood === 'dark' ? '어두운 방에서 조명 하나만 켠 분위기예요.' : '부드러운 실내 조명으로 밝혔어요.';
+  });
   let islandIndex = 0, world = worlds[0], navigation = world.navigation;
   world.root.visible = true;
   const puppy = createDog(world, navigation);
@@ -82,11 +91,12 @@ async function start() {
   }
   function fitDistance() {
     const testCamera = camera.clone(); testCamera.clearViewOffset();
-    const target = new THREE.Vector3(0, .3, 0);
+    const target = viewCenter();
     const corners = [];
-    if (world.island.id === 'pool') {
-      // Pool block on its poolside deck; the dog house stands on the front deck.
-      for (const x of [-8.9, 8.9]) for (const y of [-1.75, 3.9]) for (const z of [-10.1, 16.1]) corners.push(new THREE.Vector3(x, y, z));
+    if (world.view) {
+      // Islands with their own framing box (the pool block with its deck and keyring hardware).
+      const { min, max } = world.view;
+      for (const x of [min[0], max[0]]) for (const y of [min[1], max[1]]) for (const z of [min[2], max[2]]) corners.push(new THREE.Vector3(x, y, z));
     } else {
       for (let i = 0; i < 64; i++) for (const y of [-1.55, 2.8]) {
         const angle = i / 64 * Math.PI * 2;
@@ -109,10 +119,12 @@ async function start() {
     }
     return high;
   }
+  function viewCenter() { const c = world.view?.center; return new THREE.Vector3(c?.x || 0, .3, c?.z || 0); }
   function resetCamera(immediate = false) {
     dogView = false; controls.minDistance = 12;
-    goalTarget.set(0, .3, 0);
+    goalTarget.copy(viewCenter());
     goalCamera.copy(goalTarget).addScaledVector(direction, fitDistance());
+    lighting.aim(goalTarget.x, goalTarget.z);
     if (immediate || motionPreference.matches) {
       camera.position.copy(goalCamera); controls.target.copy(goalTarget); controls.update(); transition = false;
     } else transition = true;
@@ -263,7 +275,7 @@ async function start() {
   // Explicit opt-in diagnostics for local smoke checks; no extra production UI.
   if (new URLSearchParams(location.search).has('debug')) {
     window.__park = {
-      ready: true, scene, camera, renderer, controls, puppy, worlds, affinity: bond.affinity, focusDog,
+      ready: true, scene, camera, renderer, controls, puppy, worlds, lighting, setMood, affinity: bond.affinity, focusDog,
       get navigation() { return navigation; }, get world() { return world; },
       selectIsland, resetCamera, snapshot: () => ({ dog: puppy.snapshot(), island: world.island.id, switching: Boolean(islandTransition), calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, cameraY: camera.position.y }),
       dogScreen: () => {
