@@ -103,8 +103,8 @@ export function createSwimBear(root, home, pool = null) {
       // throw with the pointer's recent velocity (gentle cap so it stays on screen)
       vel.set(0, 0, 0);
       if (track.length > 1) { const a = track[0], b = track[track.length - 1], dt = Math.max(.016, b.t - a.t); vel.subVectors(b.p, a.p).divideScalar(dt).multiplyScalar(.7); }
-      vel.y = 0; if (vel.length() > 18) vel.setLength(18);
-      state = 'falling'; vy = vel.length() > 2 ? 3 : 0;
+      if (vel.length() > 24) vel.setLength(24);
+      state = 'falling'; vy = vel.y + (Math.hypot(vel.x, vel.z) > 2 ? 3 : 0); vel.y = 0;
     },
     update(time, reducedMotion, surfaceHeight) {
       const dt = last === null ? 0 : Math.min(.05, Math.max(0, time - last)); last = time;

@@ -13,7 +13,9 @@ import { createKeyringHardware } from './keyring.js';
 const HX = .5, HZ = .7726628, CORNER = .06, FLOOR_TOP = .05167452, ACRYLIC = .045, DOME = .04;
 // As on the keyring: the tile print is only a thin layer (PRINT of the old floor
 // thickness, the rest is clear resin) and the back carries a clear resin dome.
-const PRINT = .1, BACK_DOME = .03;
+// Clear resin under the print is as thin as on the keyring (0.35 mm of 30 mm).
+const PRINT = .1, BACK_DOME = .03, UNDER = .0117;
+const SLAB_TOP = FLOOR_TOP * (1 - PRINT) - .0008, SLAB_BOTTOM = SLAB_TOP - UNDER;
 // World layout: the block sits on a white poolside deck. The puppy lives on the
 // front deck, climbs the ladder over the front wall into the water and back out.
 const DECK_Y = -1.6, WALL_X = HX * 11.2, WALL_Z = HZ * 11.2;
@@ -30,23 +32,26 @@ export function createPoolIsland(scene, island) {
   // No deck: the pool block and its keyring hardware stand on their own.
   // Water drops would sink straight into the sand, so the deck puddles are hidden.
   const droplets = createDroplets(root); droplets.visible = false;
-  const hardware = createKeyringHardware(root, { wallZ: WALL_Z, deckY: DECK_Y });
-  // Uniform scale keeps the keyring's real block proportions (thick clear resin
-  // over a thin tiled floor). A clear acrylic slab sits under the tiles, so the
-  // whole block is lifted by its thickness and still rests on the ground.
-  const SCALE = 11.2, BASE = -1.6 + (ACRYLIC + BACK_DOME) * SCALE;
+  // Uniform scale keeps the keyring's real block proportions. The block (thin
+  // print, clear resin, back doming) is positioned so the dome rests on the ground.
+  const SCALE = 11.2, BASE = DECK_Y - (SLAB_BOTTOM - BACK_DOME) * SCALE;
+  // Everything that is part of the keyring body moves together (it can be lifted).
+  const poolGroup = new THREE.Group(); poolGroup.name = 'PoolKeyringBody'; root.add(poolGroup);
+  const hardware = createKeyringHardware(root, { wallZ: WALL_Z, deckY: DECK_Y, wallX: WALL_X, blockTop: BASE + .2584 * SCALE, body: poolGroup });
   const surfaceHeight = (x, z) => motion ? motion.heightAt(x / SCALE, z / SCALE) * SCALE + BASE : .08;
   const house = createDogHouse(root, obstacles, { x: 4.6, z: 11.3, y: DECK_Y, color: 0x8cb9bc });
   const toy = createFetchToy(root, { x: -3, y: DECK_Y + .17, z: 12.8 }, island.spawn);
   // No puppy on this island: its house and ball stay in the data (the shared dog
   // code expects them) but are not shown.
   house.object.visible = false; toy.ball.visible = false;
+  const bearPlane = new THREE.Plane(), bearHit = new THREE.Vector3();
   const inPool = (x, z) => Math.abs(x) <= WALL_X && Math.abs(z) <= WALL_Z;
   const ladder = new THREE.Group(); ladder.name = 'PuppyPoolLadder'; root.add(ladder);
-  const bear = createSwimBear(root, { x: 0, z: -.15 }, {
+  const bear = createSwimBear(poolGroup, { x: 0, z: -.15 }, {
     inPool: (x, z) => Math.abs(x) <= WALL_X - .3 && Math.abs(z) <= WALL_Z - .3, groundY: DECK_Y,
     clampIn: (x, z) => [Math.max(-WALL_X + 1.2, Math.min(WALL_X - 1.2, x)), Math.max(-WALL_Z + 1.2, Math.min(WALL_Z - 1.2, z))],
   });
+  bear.object.userData.noGrab = true;
   // Nothing is drawn under the block, but a shadow-only ground keeps things grounded.
   const ground = new THREE.Mesh(new THREE.PlaneGeometry(90, 110), new THREE.ShadowMaterial({ opacity: .18 }));
   ground.rotation.x = -Math.PI / 2; ground.position.set(0, DECK_Y - .005, -8); ground.receiveShadow = true; root.add(ground);
@@ -66,13 +71,16 @@ export function createPoolIsland(scene, island) {
     // island, and the keyring chain (physics, added by keyring.js).
     grabTargets: [{
       object: bear.object,
-      grab() { bear.grab(); },
+      // Carry on a camera-facing plane: anywhere on screen, and up as high as you like.
+      grab(point, camera) {
+        bear.grab();
+        const start = bear.object.getWorldPosition(new THREE.Vector3());
+        bearPlane.setFromNormalAndCoplanarPoint(camera.getWorldDirection(new THREE.Vector3()).negate(), start);
+      },
       drag(ray) {
-        const o = ray.origin.clone().sub(root.position), y = surfaceHeight(0, 0) + 4.5;
-        if (Math.abs(ray.direction.y) < 1e-4) return;
-        const t = (y - o.y) / ray.direction.y; if (t < 0) return;
-        const p = o.addScaledVector(ray.direction, t);
-        p.x = Math.max(-14, Math.min(14, p.x)); p.z = Math.max(-34, Math.min(18, p.z));
+        if (!ray.intersectPlane(bearPlane, bearHit)) return;
+        const p = poolGroup.worldToLocal(bearHit.clone());
+        p.y = Math.max(DECK_Y + .7, Math.min(60, p.y));
         bear.drag(p);
       },
       release() { bear.release(); },
@@ -115,7 +123,7 @@ export function createPoolIsland(scene, island) {
     setupEnvironment(renderer) { const environment = new RoomEnvironment(); const pmrem = new THREE.PMREMGenerator(renderer); const texture = pmrem.fromScene(environment, .04).texture; environment.dispose(); pmrem.dispose(); for (const m of [world.water.material, world.acrylic.material, droplets.material, ...hardware.materials]) { m.envMap = texture; m.userData.envBase = m === world.water.material ? WATER_REFLECTION : hardware.materials.includes(m) ? (m.userData.envDefault ?? 1) : 1.15; m.envMapIntensity = m.userData.envBase; m.needsUpdate = true; } },
   };
   world.ready = loadSwimmingPoolKeyring().then(({ model, floor, water }) => {
-    model.scale.setScalar(SCALE); model.position.y = BASE; root.add(model);
+    model.scale.setScalar(SCALE); model.position.y = BASE; poolGroup.add(model);
     paintSampleTiles(floor); domeFloor(floor); thinPrint(floor); world.floor = floor;
     world.acrylic = addAcrylicBase(model); addBackDome(model, world.acrylic.material);
     // The clear resin's wave surface faces the other way round on the keyring
@@ -224,11 +232,10 @@ function addAcrylicBase(model) {
   shape.lineTo(HX, iz); shape.absarc(ix, iz, CORNER, 0, Math.PI / 2);
   shape.lineTo(-ix, HZ); shape.absarc(-ix, iz, CORNER, Math.PI / 2, Math.PI);
   shape.lineTo(-HX, -iz); shape.absarc(-ix, -iz, CORNER, Math.PI, Math.PI * 1.5);
-  // Clear resin from the back up to just under the thin print layer.
-  const top = FLOOR_TOP * (1 - PRINT) - .0008;
-  const geo = new THREE.ExtrudeGeometry(shape, { depth: ACRYLIC + top, bevelEnabled: false, curveSegments: 10 });
-  geo.rotateX(Math.PI / 2); geo.translate(0, top, 0);
-  const material = new THREE.MeshPhysicalMaterial({ color: 0xd2eafa, transmission: 1, roughness: .06, ior: 1.5, thickness: ACRYLIC, attenuationColor: 0x6fb2e6, attenuationDistance: 6.7, specularIntensity: .85 });
+  // A thin layer of clear resin just under the print (the block below it is the back dome).
+  const geo = new THREE.ExtrudeGeometry(shape, { depth: UNDER, bevelEnabled: false, curveSegments: 10 });
+  geo.rotateX(Math.PI / 2); geo.translate(0, SLAB_TOP, 0);
+  const material = new THREE.MeshPhysicalMaterial({ color: 0xd2eafa, transmission: 1, roughness: .06, ior: 1.5, thickness: UNDER + BACK_DOME, attenuationColor: 0x6fb2e6, attenuationDistance: 6.7, specularIntensity: .85 });
   const slab = new THREE.Mesh(geo, material); slab.name = 'Body_ClearAcrylicBase';
   slab.receiveShadow = true; model.add(slab);
   return slab;
@@ -252,7 +259,7 @@ function addBackDome(model, material) {
   for (let j = 0; j <= nz; j++) for (let i = 0; i <= nx; i++) {
     const [x, z] = clampToFootprint(-HX + 2 * HX * i / nx, -HZ + 2 * HZ * j / nz);
     const e = Math.pow(Math.pow(Math.abs(x) / HX, 10) + Math.pow(Math.abs(z) / HZ, 10), .1);
-    positions.push(x, -ACRYLIC - BACK_DOME * Math.pow(Math.max(0, 1 - Math.pow(Math.min(e, 1), 2.5)), .55), z);
+    positions.push(x, SLAB_BOTTOM - BACK_DOME * Math.pow(Math.max(0, 1 - Math.pow(Math.min(e, 1), 2.5)), .55), z);
   }
   for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) { const a = j * (nx + 1) + i, b = a + 1, c = a + nx + 1, d = c + 1; indices.push(a, b, c, b, d, c); }
   const geo = new THREE.BufferGeometry();

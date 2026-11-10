@@ -177,7 +177,7 @@ function assemble(product, blockTop, FLOOR_Z){
   sh.g.position.set(0, eyeY, zh); product.add(sh.g);
   const V = (x, y, z) => new THREE.Vector3(x, y, z);
   return {
-    tagHoleY: tg.holeY,
+    tagHoleY: tg.holeY, pin: pin.g,
     parts: { r2, f8: f8.g, r4, r6, tag: pivot, hook: sh.g },
     joints: [
       ['block', 'r2', V(0, eyeC + pin.R - pin.t, eyeZ)],
@@ -191,7 +191,9 @@ function assemble(product, blockTop, FLOOR_Z){
 }
 
 
-export function createKeyringHardware(root, { wallZ, deckY, wallX = 5.6, blockTop = 1.8 }) {
+// `body`: the pool block group (resin, print, water). It becomes a physics body too,
+// so the whole keyring can be lifted by its chain or by the block itself.
+export function createKeyringHardware(root, { wallZ, deckY, wallX = 5.6, blockTop = 1.8, body = null }) {
   const group = new THREE.Group(); group.name = 'KeyringHardware'; root.add(group);
   // mm → world: the back wall (23.18 mm from the block centre) lands on wallZ.
   const s = wallZ / BLOCK_HALF_LENGTH;
@@ -206,22 +208,26 @@ export function createKeyringHardware(root, { wallZ, deckY, wallX = 5.6, blockTo
   // ---- physics: the chain hangs from the eye pin in the (fixed) block and can be
   // picked up, lifted and dropped. Loaded lazily; until then the chain just lies still.
   group.updateMatrixWorld(true);
+  // the eye pin is screwed into the block, so it moves with it
+  if (body) body.attach(layout.pin);
   const jointPoints = layout.joints.map(([a, b, p]) => [a, b, group.localToWorld(p.clone())]);
-  let world = null, CANNON = null, grab = null;
+  let world = null, CANNON = null, grab = null, blockLink = null;
   const pairs = [], meshes = [];
   for (const obj of Object.values(layout.parts)) obj.traverse(o => { if (o.isMesh) meshes.push(o); });
   const pickRoot = new THREE.Group(); // grab target object: raycast over all chain meshes
   const ready = import('https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/dist/cannon-es.js').then(mod => {
     CANNON = mod;
     world = new CANNON.World({ gravity: new CANNON.Vec3(0, -90, 0) });
-    world.solver.iterations = 30; world.allowSleep = true;
+    world.solver.iterations = 60; world.solver.tolerance = 1e-5; world.allowSleep = true;
     world.defaultContactMaterial.friction = .5; world.defaultContactMaterial.restitution = .05;
     const GROUND = 1, BLOCK = 2, PART = 4;
-    const ground = new CANNON.Body({ mass: 0, shape: new CANNON.Plane(), collisionFilterGroup: GROUND, collisionFilterMask: PART });
+    const ground = new CANNON.Body({ mass: 0, shape: new CANNON.Plane(), collisionFilterGroup: GROUND, collisionFilterMask: PART | BLOCK });
     ground.quaternion.setFromEuler(-Math.PI / 2, 0, 0); ground.position.set(0, deckY, 0); world.addBody(ground);
     const blockH = (blockTop - deckY) / 2;
-    const block = new CANNON.Body({ mass: 0, shape: new CANNON.Box(new CANNON.Vec3(wallX, blockH, wallZ)), collisionFilterGroup: BLOCK, collisionFilterMask: PART });
+    const block = new CANNON.Body({ mass: body ? 4 : 0, linearDamping: .3, angularDamping: .6, sleepSpeedLimit: .05,
+      shape: new CANNON.Box(new CANNON.Vec3(wallX, blockH, wallZ)), collisionFilterGroup: BLOCK, collisionFilterMask: GROUND | PART });
     block.position.set(0, deckY + blockH, 0); world.addBody(block);
+    if (body) { blockLink = { obj: body, b: block, offset: new THREE.Vector3(0, -(deckY + blockH), 0) }; body.userData.body = block; }
     const bodies = { block };
     const v = (x, y, z) => new CANNON.Vec3(x * s, y * s, z * s);
     const ringShapes = (b, R, t) => { for (let i = 0; i < 10; i++) { const a = i / 10 * Math.PI * 2; b.addShape(new CANNON.Sphere(Math.max(t, .5) * s), v(R * Math.cos(a), R * Math.sin(a), 0)); } };
@@ -234,11 +240,11 @@ export function createKeyringHardware(root, { wallZ, deckY, wallX = 5.6, blockTo
       world.addBody(b); bodies[name] = b; pairs.push({ obj, b }); obj.userData.body = b;
     };
     const P = layout.parts;
-    make('r2', P.r2, .4, b => ringShapes(b, 4.0, .48));
-    make('f8', P.f8, .9, b => b.addShape(new CANNON.Box(v(3.6, 8.1, 2.03)), v(0, 8.1, 0)));
-    make('r4', P.r4, .4, b => ringShapes(b, 4.0, .48));
-    make('r6', P.r6, .3, b => ringShapes(b, 2.75, .55));
-    make('tag', P.tag, 1, b => b.addShape(new CANNON.Box(v(3.6, 9.45, .6)), v(0, -layout.tagHoleY, 0)));
+    make('r2', P.r2, 1, b => ringShapes(b, 4.0, .48));
+    make('f8', P.f8, 1.2, b => b.addShape(new CANNON.Box(v(3.6, 8.1, 2.03)), v(0, 8.1, 0)));
+    make('r4', P.r4, 1, b => ringShapes(b, 4.0, .48));
+    make('r6', P.r6, .8, b => ringShapes(b, 2.75, .55));
+    make('tag', P.tag, 1.2, b => b.addShape(new CANNON.Box(v(3.6, 9.45, .6)), v(0, -layout.tagHoleY, 0)));
     make('hook', P.hook, 2, b => { ringShapes(b, 4.85, .95); b.addShape(new CANNON.Box(v(4.5, 9, 2.2)), v(0, 14, 0)); });
     for (const [a, c, w] of jointPoints) {
       const W = new CANNON.Vec3(w.x, w.y, w.z), A = bodies[a], B = bodies[c];
@@ -248,7 +254,13 @@ export function createKeyringHardware(root, { wallZ, deckY, wallX = 5.6, blockTo
 
   const plane = new THREE.Plane(), hit = new THREE.Vector3();
   const target = {
-    object: pickRoot, meshes,
+    object: pickRoot,
+    // chain parts plus the block (resin, print, water, eye pin) — not the bear
+    get meshes() {
+      if (!blockLink) return meshes;
+      const all = meshes.slice(), walk = o => { if (o.userData.noGrab) return; if (o.isMesh && !o.material.isMeshBasicMaterial) all.push(o); o.children.forEach(walk); };
+      walk(body); return all;
+    },
     grab(point, camera) {
       if (!world) return false;
       const local = point.clone().sub(root.position);
@@ -256,7 +268,7 @@ export function createKeyringHardware(root, { wallZ, deckY, wallX = 5.6, blockTo
       if (!o) return false;
       const b = o.userData.body, W = new CANNON.Vec3(local.x, local.y, local.z);
       const mouse = new CANNON.Body({ mass: 0, type: CANNON.Body.KINEMATIC }); mouse.position.copy(W); world.addBody(mouse);
-      const joint = new CANNON.PointToPointConstraint(b, b.pointToLocalFrame(W), mouse, new CANNON.Vec3(), 400); world.addConstraint(joint);
+      const joint = new CANNON.PointToPointConstraint(b, b.pointToLocalFrame(W), mouse, new CANNON.Vec3(), 2500); world.addConstraint(joint);
       plane.setFromNormalAndCoplanarPoint(camera.getWorldDirection(new THREE.Vector3()).negate(), point);
       world.allowSleep = false; for (const { b: x } of pairs) x.wakeUp();
       grab = { mouse, joint }; return true;
@@ -274,6 +286,11 @@ export function createKeyringHardware(root, { wallZ, deckY, wallX = 5.6, blockTo
       if (!world || dt <= 0) return;
       world.step(1 / 120, dt, 8);
       for (const { obj, b } of pairs) { obj.position.set(b.position.x, b.position.y, b.position.z); obj.quaternion.set(b.quaternion.x, b.quaternion.y, b.quaternion.z, b.quaternion.w); }
+      if (blockLink) {
+        const { obj, b, offset } = blockLink;
+        obj.quaternion.set(b.quaternion.x, b.quaternion.y, b.quaternion.z, b.quaternion.w);
+        obj.position.copy(offset).applyQuaternion(obj.quaternion).add(new THREE.Vector3(b.position.x, b.position.y, b.position.z));
+      }
     },
   };
 }
