@@ -246,6 +246,13 @@ export function createKeyringHardware(root, { wallZ, deckY, wallX = 5.6, blockTo
     make('r6', P.r6, .8, b => ringShapes(b, 2.75, .55));
     make('tag', P.tag, 1.2, b => b.addShape(new CANNON.Box(v(3.6, 9.45, .6)), v(0, -layout.tagHoleY, 0)));
     make('hook', P.hook, 2, b => { ringShapes(b, 4.85, .95); b.addShape(new CANNON.Box(v(4.5, 9, 2.2)), v(0, 14, 0)); });
+    // Once let go, the block rights itself (like a weighted toy), so the pool always
+    // lands face up instead of tipping onto its water side.
+    if (body) world.addEventListener('preStep', () => {
+      if (grab) return;
+      const up = new CANNON.Vec3(0, 1, 0), bodyUp = block.quaternion.vmult(up);
+      block.torque.vadd(bodyUp.cross(up).scale(block.mass * 900), block.torque);
+    });
     for (const [a, c, w] of jointPoints) {
       const W = new CANNON.Vec3(w.x, w.y, w.z), A = bodies[a], B = bodies[c];
       world.addConstraint(new CANNON.PointToPointConstraint(A, A.pointToLocalFrame(W), B, B.pointToLocalFrame(W), 1e6));
