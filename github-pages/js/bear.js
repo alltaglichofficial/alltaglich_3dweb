@@ -5,9 +5,9 @@ import { fluffGeometry } from './geometry.js';
 // forehead, a black swimsuit with white trim and a small sewn-on brand tag.
 // It bobs, paddles and spins slowly in the middle of the pool.
 export function createSwimBear(root, home) {
-  const bear = new THREE.Group(); bear.name = 'AlltaglichSwimBear'; bear.scale.setScalar(.82); root.add(bear);
-  const fur = new THREE.MeshPhysicalMaterial({ color: 0x8ccbea, roughness: .9, sheen: 1, sheenRoughness: .45, sheenColor: 0xe6f8ff });
-  const muzzleFur = new THREE.MeshPhysicalMaterial({ color: 0xaad9ec, roughness: .9, sheen: .8, sheenRoughness: .5, sheenColor: 0xf2fbff });
+  const bear = new THREE.Group(); bear.name = 'AlltaglichSwimBear'; bear.scale.setScalar(1.32); root.add(bear);
+  const fur = plushMaterial(0x8ccbea, 0xe6f8ff, .05);
+  const muzzleFur = plushMaterial(0xa9daee, 0xf2fbff, .03);
   const suit = new THREE.MeshStandardMaterial({ color: 0x14171b, roughness: .42 });
   const trim = new THREE.MeshStandardMaterial({ color: 0xf3f2ec, roughness: .6 });
   const ink = new THREE.MeshStandardMaterial({ color: 0x15181c, roughness: .25 });
@@ -17,22 +17,27 @@ export function createSwimBear(root, home) {
     const object = new THREE.Mesh(geo, mat); object.position.set(x, y, z); object.scale.set(sx, sy, sz);
     object.castShadow = true; object.receiveShadow = true; parent.add(object); return object;
   };
-  const tuft = (parent, r, at, scale, seed, amp = .07, mat = fur) => part(fluffGeometry(seed, amp), mat, parent, at, scale.map(v => v * r));
+  // Plush parts are instanced shells: one draw per part, FUR_SHELLS layers.
+  const plush = (geo, mat, parent, [x, y, z], [sx, sy, sz]) => {
+    const object = new THREE.InstancedMesh(geo, mat, FUR_SHELLS); object.position.set(x, y, z); object.scale.set(sx, sy, sz);
+    object.castShadow = true; object.receiveShadow = true; parent.add(object); return object;
+  };
+  const tuft = (parent, r, at, scale, seed, amp = .07, mat = fur) => plush(fluffGeometry(seed, amp), mat, parent, at, scale.map(v => v * r));
 
   // Chubby body in its swimsuit; fur shows above the neckline.
   tuft(bear, .4, [0, 0, 0], [1.05, 1, .95], 31, .06);
-  part(ball, suit, bear, [0, -.06, 0], [.43, .38, .41]);
-  const neckline = part(new THREE.TorusGeometry(1, .1, 8, 40), trim, bear, [0, .25, 0], [.255, .245, .25]);
+  part(ball, suit, bear, [0, -.06, 0], [.5, .44, .48]);
+  const neckline = part(new THREE.TorusGeometry(1, .1, 8, 40), trim, bear, [0, .25, 0], [.36, .345, .3]);
   neckline.rotation.x = Math.PI / 2;
   for (const side of [-1, 1]) {
-    const armhole = part(new THREE.TorusGeometry(1, .14, 6, 28), trim, bear, [side * .33, .1, .01], [.13, .15, .13]);
+    const armhole = part(new THREE.TorusGeometry(1, .14, 6, 28), trim, bear, [side * .45, .1, .01], [.14, .16, .14]);
     armhole.rotation.y = Math.PI / 2; armhole.rotation.x = side * .3;
   }
   // Big plush head with round ears, a soft muzzle, tiny eyes and nose.
   const head = new THREE.Group(); head.position.set(0, .55, .02); bear.add(head);
   tuft(head, .34, [0, 0, 0], [1.12, .95, 1], 32, .05);
   for (const side of [-1, 1]) tuft(head, .1, [side * .26, .29, -.04], [1, .9, .7], 33 + side, .08);
-  part(ball, muzzleFur, head, [0, -.08, .28], [.13, .09, .07]);
+  plush(ball, muzzleFur, head, [0, -.08, .3], [.13, .09, .07]);
   part(ball, ink, head, [0, -.05, .345], [.035, .025, .02]);
   const smile = part(new THREE.TorusGeometry(.025, .005, 4, 12, Math.PI), ink, head, [0, -.105, .34]);
   smile.rotation.z = Math.PI;
@@ -53,7 +58,7 @@ export function createSwimBear(root, home) {
   ctx.fillStyle = '#f2f2ee'; ctx.font = '600 40px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('Alltäglich', 128, 50);
   const texture = new THREE.CanvasTexture(canvas); texture.colorSpace = THREE.SRGBColorSpace;
   const tag = new THREE.Mesh(new THREE.PlaneGeometry(.17, .065), new THREE.MeshBasicMaterial({ map: texture }));
-  tag.position.set(.27, -.06, .345); tag.rotation.y = .66; bear.add(tag);
+  tag.position.set(.3, -.06, .392); tag.rotation.y = .66; bear.add(tag);
   // Stubby paddling arms and kicking legs.
   const arms = [];
   for (const side of [-1, 1]) {
@@ -96,3 +101,47 @@ export function createSwimBear(root, home) {
     },
   };
 }
+
+// Shell-textured plush: each instance is one layer pushed out along the view-space
+// normal. Fibres are 3D cells that thin out towards the tips and droop a little;
+// roots are shaded darker, which is what makes the pile read as soft toy fur.
+const FUR_SHELLS = 16;
+const FUR_VERTEX = /* glsl */`
+  vec4 mvPosition = vec4(transformed, 1.0);
+  #ifdef USE_INSTANCING
+  mvPosition = instanceMatrix * mvPosition;
+  #endif
+  mvPosition = modelViewMatrix * mvPosition;
+  vFurLayer = float(gl_InstanceID) / ${(FUR_SHELLS - 1).toFixed(1)};
+  vec3 furDir = normalize(transformedNormal) + (viewMatrix * vec4(0.0, -0.3, 0.0, 0.0)).xyz * vFurLayer;
+  mvPosition.xyz += furDir * vFurLayer * uFurLength;
+  gl_Position = projectionMatrix * mvPosition;
+  vFurPos = position * vec3(length(modelMatrix[0].xyz), length(modelMatrix[1].xyz), length(modelMatrix[2].xyz));
+`;
+const FUR_DISCARD = /* glsl */`
+  #include <clipping_planes_fragment>
+  vec3 furP = vFurPos * uFurDensity, furCell = floor(furP);
+  float furH = .6 + .4 * furHash(furCell);
+  vec3 furJitter = vec3(furHash(furCell + 1.7), furHash(furCell + 4.3), furHash(furCell + 8.9)) - .5;
+  float furD = length(fract(furP) - .5 - furJitter * .35), furTaper = 1.0 - vFurLayer / furH;
+  if (vFurLayer > 0.0 && (furTaper <= 0.0 || furD > .78 * sqrt(furTaper))) discard;
+`;
+const FUR_SHADE = /* glsl */`
+  #include <color_fragment>
+  diffuseColor.rgb *= mix(.58, 1.08, vFurLayer) * (.9 + .2 * furHash(furCell + 2.0));
+`;
+function plushMaterial(color, sheenColor, length) {
+  const material = new THREE.MeshPhysicalMaterial({ color, roughness: .95, sheen: 1, sheenRoughness: .55, sheenColor });
+  material.onBeforeCompile = shader => {
+    shader.uniforms.uFurLength = { value: length };
+    shader.uniforms.uFurDensity = { value: 72 };
+    shader.vertexShader = 'uniform float uFurLength;\nvarying float vFurLayer;\nvarying vec3 vFurPos;\n'
+      + shader.vertexShader.replace('#include <project_vertex>', FUR_VERTEX);
+    shader.fragmentShader = 'uniform float uFurDensity;\nvarying float vFurLayer;\nvarying vec3 vFurPos;\n'
+      + 'float furHash(vec3 p) { return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }\n'
+      + shader.fragmentShader.replace('#include <clipping_planes_fragment>', FUR_DISCARD).replace('#include <color_fragment>', FUR_SHADE);
+  };
+  material.customProgramCacheKey = () => 'alltaglich-plush-fur-v1';
+  return material;
+}
+
