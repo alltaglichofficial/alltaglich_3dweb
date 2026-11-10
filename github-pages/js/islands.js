@@ -11,7 +11,7 @@ export const ISLANDS = [
   {
     id: 'pool', label: '수영 섬', english: 'THE SWIMMING ISLAND', number: '02', accent: '#86bdc4',
     title: '푸른 물결 곁에서,<br>잠깐의 여유.',
-    description: '파란 타일과 투명하게 일렁이는 물결.<br>다이빙대에서 풍덩, 레인을 따라 한 바퀴.',
+    description: '파란 타일과 투명하게 일렁이는 물결.<br>수영곰을 잡아 들어 올렸다가 놓으면 풍덩!',
     noDog: true,
     playLabel: '수영해',
     spawn: { x: 0, z: 11.6 },

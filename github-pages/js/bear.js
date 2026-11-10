@@ -77,40 +77,76 @@ export function createSwimBear(root, home) {
     ring.rotation.x = -Math.PI / 2; root.add(ring); rings.push(ring);
   }
 
-  let lastLift = 0;
+  // States: 'swim' (paddling around home), 'held' (picked up by the visitor),
+  // 'falling' (let go above the water) and 'sink' (plunged under, bobbing back up).
+  let lastLift = 0, state = 'swim', last = null, vy = 0, sinkT = 0, heldAt = new THREE.Vector3(), swing = 0;
+  const pose = (t, flail) => {
+    arms.forEach((arm, i) => {
+      const side = i ? 1 : -1, stroke = Math.sin(t * (flail ? 9 : 4.2) + i * Math.PI);
+      arm.rotation.x = flail ? -2.4 + stroke * .5 : -.5 + stroke * .8;
+      arm.rotation.z = side * (flail ? .6 + Math.max(0, stroke) * .3 : .35 + Math.max(0, stroke) * .35);
+    });
+    legs.forEach((leg, i) => { leg.rotation.x = Math.sin(t * (flail ? 11 : 5) + i * Math.PI) * (flail ? .8 : .5); });
+  };
   return {
     object: bear,
-    // Returns where the bear is and whether a hop just splashed back down, so the
-    // pool can push a wake and a splash ring through the water.
+    get state() { return state; },
+    grab() { state = 'held'; heldAt.copy(bear.position); swing = 0; rings.forEach(r => { r.visible = false; }); },
+    drag(point) { heldAt.copy(point); },
+    release() { if (state !== 'held') return; state = 'falling'; vy = 0; home.x = bear.position.x; home.z = bear.position.z; },
     update(time, reducedMotion, surfaceHeight) {
+      const dt = last === null ? 0 : Math.min(.05, Math.max(0, time - last)); last = time;
       const t = reducedMotion ? 0 : time;
+      if (state === 'held') {
+        // follow the pointer with a little lag and a dangling swing
+        const prev = bear.position.clone();
+        bear.position.lerp(heldAt, 1 - Math.exp(-dt * 14));
+        swing += ((bear.position.x - prev.x) * -1.6 - swing) * Math.min(1, dt * 6);
+        bear.rotation.set(Math.sin(time * 3) * .06, .35, swing + Math.sin(time * 2.4) * .08);
+        pose(time, true); head.rotation.z = Math.sin(time * 6) * .12;
+        return { x: bear.position.x, z: bear.position.z, landed: false, splash: 0 };
+      }
+      if (state === 'falling') {
+        vy -= 26 * dt; bear.position.y += vy * dt;
+        bear.rotation.x += dt * 1.2; pose(time, true);
+        const surface = surfaceHeight(bear.position.x, bear.position.z);
+        if (bear.position.y <= surface - .02) {
+          const strength = Math.min(2.4, .8 + Math.abs(vy) * .09);
+          state = 'sink'; sinkT = 0; vy = Math.min(-2, vy * .25);
+          rings.forEach(r => { r.visible = true; });
+          return { x: bear.position.x, z: bear.position.z, landed: false, splash: strength };
+        }
+        return { x: bear.position.x, z: bear.position.z, landed: false, splash: 0 };
+      }
       const x = home.x + Math.sin(t * .32) * .28, z = home.z + Math.cos(t * .32) * .22;
-      // Every few seconds a happy little hop out of the water.
       const lift = Math.sin(t * .9), hop = Math.pow(Math.max(0, lift), 10) * .22;
-      const landed = !reducedMotion && lastLift > .75 && lift <= .75;
+      const landed = state === 'swim' && !reducedMotion && lastLift > .75 && lift <= .75;
       lastLift = lift;
       const surface = surfaceHeight(x, z);
-      bear.position.set(x, surface - .02 + Math.sin(t * 1.7) * .045 + hop, z);
-      bear.rotation.set(Math.sin(t * 1.3) * .05, .35 + Math.sin(t * .4) * 1.1, Math.sin(t * 1.7) * .07);
-      arms.forEach((arm, i) => {
-        const side = i ? 1 : -1, stroke = Math.sin(t * 4.2 + i * Math.PI);
-        arm.rotation.x = -.5 + stroke * .8; arm.rotation.z = side * (.35 + Math.max(0, stroke) * .35);
-      });
-      legs.forEach((leg, i) => { leg.rotation.x = Math.sin(t * 5 + i * Math.PI) * .5; });
+      let y = surface - .02 + Math.sin(t * 1.7) * .045 + hop;
+      if (state === 'sink') {
+        // plunge under, then bob back up to floating over ~1.4 s
+        sinkT += dt; const k = Math.min(1, sinkT / 1.4);
+        y = surface - .02 - Math.sin(k * Math.PI) * 1.1 * (1 - k * .5);
+        bear.position.x += (x - bear.position.x) * Math.min(1, dt * 3); bear.position.z += (z - bear.position.z) * Math.min(1, dt * 3);
+        bear.position.y = y; bear.rotation.x *= Math.max(0, 1 - dt * 4);
+        if (k >= 1) state = 'swim';
+      } else {
+        bear.position.set(x, y, z);
+        bear.rotation.set(Math.sin(t * 1.3) * .05, .35 + Math.sin(t * .4) * 1.1, Math.sin(t * 1.7) * .07);
+      }
+      pose(t, false);
       head.rotation.z = Math.sin(t * 1.1) * .08;
       rings.forEach((ring, i) => {
         const p = (t * .6 + i / 2) % 1;
-        ring.position.set(x, surface + .03, z); ring.scale.setScalar(.8 + p * 1.4);
+        ring.position.set(bear.position.x, surface + .03, bear.position.z); ring.scale.setScalar(.8 + p * 1.4);
         ring.material.opacity = reducedMotion ? .18 : (1 - p) * .35;
       });
-      return { x, z, landed };
+      return { x: bear.position.x, z: bear.position.z, landed, splash: 0 };
     },
   };
 }
 
-// Shell-textured plush: each instance is one layer pushed out along the view-space
-// normal. Fibres are 3D cells that thin out towards the tips and droop a little;
-// roots are shaded darker, which is what makes the pile read as soft toy fur.
 const FUR_SHELLS = 16;
 const FUR_VERTEX = /* glsl */`
   vec4 mvPosition = vec4(transformed, 1.0);

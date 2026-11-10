@@ -200,6 +200,44 @@ async function start() {
   const activePointers = new Set();
   let press = null, gesture = false;
   const canvas = renderer.domElement;
+  // Pick up something on the current island (the pool's bear), carry it above the
+  // water and let go to drop it back in. Runs before the orbit/petting handlers.
+  let carry = null;
+  const carryPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), carryHit = new THREE.Vector3();
+  const carryRay = event => {
+    const r = canvas.getBoundingClientRect();
+    pointer.set((event.clientX - r.left) / r.width * 2 - 1, -(event.clientY - r.top) / r.height * 2 + 1);
+    raycaster.setFromCamera(pointer, camera);
+  };
+  const carryTo = event => {
+    const g = world.grabbable; carryRay(event);
+    carryPlane.constant = -(g.holdHeight() + world.root.position.y);
+    if (!raycaster.ray.intersectPlane(carryPlane, carryHit)) return;
+    const local = world.root.worldToLocal(carryHit.clone()), [x, z] = g.clamp(local.x, local.z);
+    g.drag(new THREE.Vector3(x, g.holdHeight(), z));
+  };
+  canvas.addEventListener('pointerdown', event => {
+    const g = world.grabbable;
+    if (!g || event.button !== 0 || carry) return;
+    carryRay(event);
+    if (!raycaster.intersectObject(g.object, true).length) return;
+    event.stopImmediatePropagation(); event.preventDefault();
+    carry = event.pointerId; controls.enabled = false; transition = false;
+    canvas.setPointerCapture(event.pointerId); canvas.style.cursor = 'grabbing';
+    g.grab(); carryTo(event);
+    document.querySelector('#status').textContent = '곰을 들어 올렸어요. 놓으면 물로 풍덩 떨어져요.';
+  }, { capture: true });
+  canvas.addEventListener('pointermove', event => {
+    if (carry === event.pointerId) { event.stopImmediatePropagation(); carryTo(event); }
+  }, { capture: true });
+  const drop = event => {
+    if (carry !== event.pointerId) return;
+    event.stopImmediatePropagation();
+    carry = null; controls.enabled = true; canvas.style.cursor = '';
+    world.grabbable?.release();
+  };
+  canvas.addEventListener('pointerup', drop, { capture: true });
+  canvas.addEventListener('pointercancel', drop, { capture: true });
   canvas.addEventListener('pointerdown', event => {
     activePointers.add(event.pointerId);
     if (activePointers.size > 1) { gesture = true; press = null; return; }
