@@ -100,3 +100,22 @@ export function batchStatic(group) {
     for (const geo of geos) geo.dispose();
   }
 }
+
+// Soft, clumpy fur: a sphere pushed out along its normals by a few layered
+// waves. Same-seed parts share one geometry; smooth normals keep it plush.
+const fluffCache = new Map();
+export function fluffGeometry(seed, amp) {
+  const key = `${seed.toFixed(2)}-${amp}`;
+  if (fluffCache.has(key)) return fluffCache.get(key);
+  const geo = new THREE.SphereGeometry(1, 30, 20), p = geo.attributes.position, v = new THREE.Vector3();
+  for (let i = 0; i < p.count; i++) {
+    v.fromBufferAttribute(p, i).normalize();
+    const n = Math.sin(v.x * 7.3 + seed) * Math.sin(v.y * 6.1 + seed * 1.7) * Math.sin(v.z * 5.7 + seed * 2.3) * .6
+      + Math.sin(v.x * 13.1 - seed * .7) * Math.sin(v.z * 11.7 + v.y * 4 + seed) * .4;
+    // Fur falls downward, so the lower half droops slightly.
+    v.multiplyScalar(1 + amp * n).y -= amp * .25 * Math.max(0, -v.y);
+    p.setXYZ(i, v.x, v.y, v.z);
+  }
+  geo.computeVertexNormals();
+  fluffCache.set(key, geo); return geo;
+}

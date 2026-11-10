@@ -19,7 +19,8 @@ export function advanceRoute(position, points, budget, allowed = () => true) {
 }
 
 export function isSwimPositionAllowed(x, z) {
-  return Math.abs(x) <= 2.55 && Math.abs(z) <= 3.15 || Math.abs(x) <= .55 && z >= 2.8 && z <= 5.05;
+  // Central pool plus the lane corridor out to the ladder on the front side wall.
+  return Math.abs(x) <= 2.55 && Math.abs(z) <= 3.15 || Math.abs(x) <= .55 && z >= 2.8 && z <= 7.7;
 }
 
 export function createDogActivities(world, navigation, root, mouth) {
@@ -32,6 +33,11 @@ export function createDogActivities(world, navigation, root, mouth) {
   const jump = point => ({ mode: 'jump', point, duration: .85, label: '낮은 발판을 폴짝! 매트에 사뿐 내려와요.' });
   const water = (points, label) => ({ mode: 'water', points: points.map(p => ({ ...p })), label });
   const ladder = up => ({ mode: 'ladder', up, point: up ? config.entry : config.waterEntry, duration: 2, label: up ? '사다리를 짚고 차근차근 올라와요.' : '사다리를 따라 조심조심 물에 들어가요.' });
+  // From the open pool, swim to the corridor mouth first, then along the lane to the ladder.
+  const swimHome = () => {
+    const mouth = config.corridorStart, p = root.position;
+    return mouth && !(Math.abs(p.x - mouth.x) <= .55 && p.z >= mouth.z) ? [{ ...mouth }, config.waterEntry] : [config.waterEntry];
+  };
   const waterHeight = point => world.getSurfaceHeight ? world.getSurfaceHeight(point.x, point.z) - .46 : -.34;
   function resetProps() {
     world.setSwimmer?.(null);
@@ -90,7 +96,7 @@ export function createDogActivities(world, navigation, root, mouth) {
       if (exiting) return true;
       if (config.type === 'swim' && (task?.mode === 'ladder' || !navigation.isWalkable(root.position.x, root.position.z))) {
         exiting = true;
-        queue = task?.mode === 'ladder' && task.up ? [pause(.5, '물 밖에 도착했어요.')] : [water([config.waterEntry], '명령을 듣고 사다리로 헤엄쳐요.'), ladder(true), pause(.5, '물 밖에 도착했어요.')];
+        queue = task?.mode === 'ladder' && task.up ? [pause(.5, '물 밖에 도착했어요.')] : [water(swimHome(), '명령을 듣고 사다리로 헤엄쳐요.'), ladder(true), pause(.5, '물 밖에 도착했어요.')];
         if (task?.mode !== 'ladder') { task = null; startTask(); }
         return true;
       }
