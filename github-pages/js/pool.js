@@ -18,7 +18,8 @@ const DECK = { minX: -8.6, maxX: 8.6, minZ: -9.8, maxZ: 15.8 };
 export function createPoolIsland(scene, island) {
   const root = new THREE.Group(); root.name = 'island-pool'; scene.add(root);
   const obstacles = [{ type: 'rect', x: 0, z: 0, w: WALL_X * 2, d: WALL_Z * 2 }];
-  let motion = null, swimmer = null;
+  let motion = null, swimmer = null, clock = 0, reduced = false, lastPaddle = -99;
+  const splash = (x, z, strength) => { if (motion && !reduced) motion.addRipple(x / SCALE, z / SCALE, strength); };
   createDeck(root);
   const droplets = createDroplets(root);
   // Uniform scale keeps the keyring's real block proportions (thick clear resin
@@ -48,19 +49,32 @@ export function createPoolIsland(scene, island) {
       if (Math.abs(x - house.object.position.x) < 1.4 && Math.abs(z - house.object.position.z) < 1.3) return house.object.position.y + .02;
       return inPool(x, z) ? surfaceHeight(x, z) : DECK_Y;
     },
-    setSwimmer(point) { swimmer = point ? { x: point.x, z: point.z } : null; motion?.setSwimmer(point ? point.x / 11.2 : 99, point ? point.z / 11.2 : 99, !!point); },
+    setSwimmer(point) {
+      // Jumping in throws a big splash ring; climbing out leaves a smaller one.
+      if (!swimmer && point) splash(point.x, point.z, 1.3);
+      if (swimmer && !point) splash(swimmer.x, swimmer.z, .7);
+      swimmer = point ? { x: point.x, z: point.z } : null;
+      motion?.setSwimmer(point ? point.x / SCALE : 99, point ? point.z / SCALE : 99, !!point);
+    },
     update(time, reducedMotion) {
+      clock = time; reduced = reducedMotion;
       motion?.update(time, reducedMotion); wake.visible = !!swimmer;
-      bear.update(time, reducedMotion, surfaceHeight);
+      // Little paddle splashes while the puppy swims.
+      if (swimmer && time - lastPaddle > 1.05) { splash(swimmer.x, swimmer.z, .35); lastPaddle = time; }
+      // The bear leaves a gentle wake as it bobs and paddles; each hop landing rings out.
+      const b = bear.update(time, reducedMotion, surfaceHeight);
+      motion?.setMover(1, b.x / SCALE, b.z / SCALE, reducedMotion ? 0 : .55);
+      if (b.landed) splash(b.x, b.z, .9);
       if (swimmer) { wake.position.set(swimmer.x, surfaceHeight(swimmer.x, swimmer.z) + .025, swimmer.z); wake.children.forEach((ring, i) => { const t = (time * .75 + i / 3) % 1; ring.scale.setScalar(.6 + t * 1.8); ring.material.opacity = (1 - t) * .35; }); }
     },
-    setupEnvironment(renderer) { const environment = new RoomEnvironment(); const pmrem = new THREE.PMREMGenerator(renderer); const texture = pmrem.fromScene(environment, .04).texture; environment.dispose(); pmrem.dispose(); for (const m of [world.water.material, world.acrylic.material, droplets.material]) { m.envMap = texture; m.envMapIntensity = 1.15; m.needsUpdate = true; } },
+    setupEnvironment(renderer) { const environment = new RoomEnvironment(); const pmrem = new THREE.PMREMGenerator(renderer); const texture = pmrem.fromScene(environment, .04).texture; environment.dispose(); pmrem.dispose(); for (const m of [world.water.material, world.acrylic.material, droplets.material]) { m.envMap = texture; m.envMapIntensity = m === world.water.material ? WATER_REFLECTION : 1.15; m.needsUpdate = true; } },
   };
   world.ready = loadSwimmingPoolKeyring().then(({ model, floor, water }) => {
     model.scale.setScalar(SCALE); model.position.y = BASE; root.add(model);
-    paintSampleTiles(floor); domeFloor(floor); clearResin(water);
+    paintSampleTiles(floor); domeFloor(floor);
     world.acrylic = addAcrylicBase(model);
     motion = createWaterMotion(water, floor); world.waterMotion = motion; world.water = water; world.product = model;
+    clearResin(water); // after createWaterMotion, which sets its own optical defaults
     const rim = surfaceHeight(0, 8.15);
     buildSideLadder(ladder, rim, BASE + FLOOR_TOP * SCALE);
     world.activity.ladderTop.y = rim + .32;
@@ -105,12 +119,19 @@ function paintSampleTiles(floor) {
   });
 }
 
-// Cast resin, not milky glass: high clarity, resin IOR for the photo's strong
-// refraction of the grid, and a faint aqua body colour through the thick block.
+// Crystal-clear water. The milky veil came from the bright studio environment
+// reflecting across the whole surface (plus a second clearcoat reflection), so
+// reflections are kept faint: enough for glints on the wave crests, not a haze.
+// A lower IOR also means less reflectance (F0 ≈ 2.8% instead of 4%), near-zero
+// roughness keeps the transmitted image sharp, and the tint is barely there.
+const WATER_REFLECTION = .32;
 function clearResin(water) {
   const m = water.material;
-  m.color.set(0xffffff); m.attenuationColor.set(0xd9f0fb); m.attenuationDistance = 6;
+  m.color.set(0xffffff); m.attenuationColor.set(0xe8f7fd); m.attenuationDistance = 30;
+  m.ior = 1.4; m.roughness = .004; m.transmission = 1;
+  m.clearcoat = .2; m.clearcoatRoughness = .02;
   m.specularIntensity = 1; m.specularColor?.set(0xffffff);
+  m.envMapIntensity = WATER_REFLECTION; m.needsUpdate = true;
 }
 
 // Nearest point inside the rounded-rectangle footprint of the keyring body.

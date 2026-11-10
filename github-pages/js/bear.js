@@ -77,13 +77,18 @@ export function createSwimBear(root, home) {
     ring.rotation.x = -Math.PI / 2; root.add(ring); rings.push(ring);
   }
 
+  let lastLift = 0;
   return {
     object: bear,
+    // Returns where the bear is and whether a hop just splashed back down, so the
+    // pool can push a wake and a splash ring through the water.
     update(time, reducedMotion, surfaceHeight) {
       const t = reducedMotion ? 0 : time;
       const x = home.x + Math.sin(t * .32) * .28, z = home.z + Math.cos(t * .32) * .22;
       // Every few seconds a happy little hop out of the water.
-      const hop = Math.pow(Math.max(0, Math.sin(t * .9)), 10) * .22;
+      const lift = Math.sin(t * .9), hop = Math.pow(Math.max(0, lift), 10) * .22;
+      const landed = !reducedMotion && lastLift > .75 && lift <= .75;
+      lastLift = lift;
       const surface = surfaceHeight(x, z);
       bear.position.set(x, surface - .02 + Math.sin(t * 1.7) * .045 + hop, z);
       bear.rotation.set(Math.sin(t * 1.3) * .05, .35 + Math.sin(t * .4) * 1.1, Math.sin(t * 1.7) * .07);
@@ -98,6 +103,7 @@ export function createSwimBear(root, home) {
         ring.position.set(x, surface + .03, z); ring.scale.setScalar(.8 + p * 1.4);
         ring.material.opacity = reducedMotion ? .18 : (1 - p) * .35;
       });
+      return { x, z, landed };
     },
   };
 }
