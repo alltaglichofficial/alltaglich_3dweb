@@ -1,15 +1,15 @@
 // Pure navigation logic, shared by the browser and the node regression tests.
 // Obstacles are inflated by the puppy's body radius, not just its centre point.
 export class Navigation {
-  constructor(obstacles, { step = .4, clearance = .8, radiusX = 12, radiusZ = 8.9, bounds = null } = {}) {
+  constructor(obstacles, { step = .4, clearance = .8, radiusX = 12, radiusZ = 8.9, bounds = null, min = -12, size = 61 } = {}) {
     this.obstacles = obstacles;
     this.step = step;
     this.clearance = clearance;
     this.radiusX = radiusX;
     this.radiusZ = radiusZ;
     this.bounds = bounds;
-    this.min = -12;
-    this.size = 61;
+    this.min = min; // square search grid: min .. min + (size - 1) * step on both axes
+    this.size = size;
     this.cells = new Uint8Array(this.size ** 2);
     for (let z = 0; z < this.size; z++) for (let x = 0; x < this.size; x++) {
       this.cells[z * this.size + x] = Number(this.isWalkable(this.min + x * step, this.min + z * step));

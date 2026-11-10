@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { box, tube } from './geometry.js';
+import { box, tube, roundedPad } from './geometry.js';
+import { mergeGeometries } from '../product/vendor/utils/BufferGeometryUtils.js';
 import { loadSwimmingPoolKeyring } from '../product/load-keyring.js';
 import { createWaterMotion } from '../product/water-motion.js';
 import { RoomEnvironment } from '../product/vendor/environments/RoomEnvironment.js';
@@ -9,18 +10,25 @@ import { createSwimBear } from './bear.js';
 // Normalised keyring units (body width 1): footprint half-sizes and corner
 // radius of the GLB outline, top of the tile floor, acrylic slab and dome rise.
 const HX = .5, HZ = .7726628, CORNER = .06, FLOOR_TOP = .05167452, ACRYLIC = .045, DOME = .024;
+// World layout: the block sits on a white poolside deck. The puppy lives on the
+// front deck, climbs the ladder over the front wall into the water and back out.
+const DECK_Y = -1.6, WALL_X = HX * 11.2, WALL_Z = HZ * 11.2;
+const DECK = { minX: -8.6, maxX: 8.6, minZ: -9.8, maxZ: 15.8 };
 
 export function createPoolIsland(scene, island) {
   const root = new THREE.Group(); root.name = 'island-pool'; scene.add(root);
-  const obstacles = [{ type: 'rect', x: 0, z: 0, w: 7.2, d: 7.8 }];
+  const obstacles = [{ type: 'rect', x: 0, z: 0, w: WALL_X * 2, d: WALL_Z * 2 }];
   let motion = null, swimmer = null;
+  createDeck(root);
+  const droplets = createDroplets(root);
   // Uniform scale keeps the keyring's real block proportions (thick clear resin
   // over a thin tiled floor). A clear acrylic slab sits under the tiles, so the
   // whole block is lifted by its thickness and still rests on the ground.
   const SCALE = 11.2, BASE = -1.6 + ACRYLIC * SCALE;
   const surfaceHeight = (x, z) => motion ? motion.heightAt(x / SCALE, z / SCALE) * SCALE + BASE : .08;
-  const house = createDogHouse(root, obstacles, { x: -4.4, z: -6.6, color: 0x8cb9bc });
-  const toy = createFetchToy(root, { x: 2, y: .3, z: 5.15 }, island.spawn);
+  const house = createDogHouse(root, obstacles, { x: 4.6, z: 11.3, y: DECK_Y, color: 0x8cb9bc });
+  const toy = createFetchToy(root, { x: -3, y: DECK_Y + .17, z: 12.8 }, island.spawn);
+  const inPool = (x, z) => Math.abs(x) <= WALL_X && Math.abs(z) <= WALL_Z;
   const ladder = new THREE.Group(); ladder.name = 'PuppyPoolLadder'; root.add(ladder);
   const bear = createSwimBear(root, { x: 0, z: -.15 });
   const wake = new THREE.Group(); wake.name = 'PuppyWaterWake'; root.add(wake);
@@ -28,28 +36,34 @@ export function createPoolIsland(scene, island) {
   wake.visible = false;
   const world = {
     root, island, obstacles, house, fetchActivity: toy,
-    navigationOptions: { bounds: { minX: -5.6, maxX: 5.6, minZ: -8.6, maxZ: 8.6 }, clearance: .75 },
-    // The ladder hangs on the front side wall; the puppy climbs down it, swims the
-    // lane corridor to the middle and paddles a loop around the playing bear.
-    activity: { type: 'swim', entry: { x: 0, z: 7.6 }, waterEntry: { x: 0, z: 7 }, corridorStart: { x: 0, z: 2.8 }, route: [{ x: 0, z: 2.8 }, { x: -1.65, z: 2.35 }, { x: -1.65, z: -2.6 }, { x: 1.6, z: -2.6 }, { x: 1.6, z: 2.35 }, { x: 0, z: 2.8 }] },
-    bear,
+    // Only the front deck is walkable; the pool block itself is an obstacle.
+    navigationOptions: { bounds: { minX: -7.9, maxX: 7.9, minZ: 8, maxZ: 15.2 }, clearance: .75, min: -12, size: 71 },
+    // The puppy climbs the A-frame ladder up the outside of the front wall, over
+    // the rim, down into the water, swims the lane corridor and loops around the
+    // playing bear, then climbs back out onto the deck the same way.
+    activity: { type: 'swim', entry: { x: 0, z: 10 }, ladderTop: { x: 0, z: WALL_Z - .15, y: 1 }, waterEntry: { x: 0, z: 7 }, corridorStart: { x: 0, z: 2.8 }, route: [{ x: 0, z: 2.8 }, { x: -1.65, z: 2.35 }, { x: -1.65, z: -2.6 }, { x: 1.6, z: -2.6 }, { x: 1.6, z: 2.35 }, { x: 0, z: 2.8 }] },
+    bear, droplets,
     getSurfaceHeight: surfaceHeight,
-    heightAt(x, z) { return Math.abs(x - house.object.position.x) < 1.4 && Math.abs(z - house.object.position.z) < 1.3 ? house.object.position.y + .02 : surfaceHeight(x, z); },
+    heightAt(x, z) {
+      if (Math.abs(x - house.object.position.x) < 1.4 && Math.abs(z - house.object.position.z) < 1.3) return house.object.position.y + .02;
+      return inPool(x, z) ? surfaceHeight(x, z) : DECK_Y;
+    },
     setSwimmer(point) { swimmer = point ? { x: point.x, z: point.z } : null; motion?.setSwimmer(point ? point.x / 11.2 : 99, point ? point.z / 11.2 : 99, !!point); },
     update(time, reducedMotion) {
       motion?.update(time, reducedMotion); wake.visible = !!swimmer;
       bear.update(time, reducedMotion, surfaceHeight);
       if (swimmer) { wake.position.set(swimmer.x, surfaceHeight(swimmer.x, swimmer.z) + .025, swimmer.z); wake.children.forEach((ring, i) => { const t = (time * .75 + i / 3) % 1; ring.scale.setScalar(.6 + t * 1.8); ring.material.opacity = (1 - t) * .35; }); }
     },
-    setupEnvironment(renderer) { const environment = new RoomEnvironment(); const pmrem = new THREE.PMREMGenerator(renderer); const texture = pmrem.fromScene(environment, .04).texture; environment.dispose(); pmrem.dispose(); for (const m of [world.water.material, world.acrylic.material]) { m.envMap = texture; m.envMapIntensity = 1.15; m.needsUpdate = true; } },
+    setupEnvironment(renderer) { const environment = new RoomEnvironment(); const pmrem = new THREE.PMREMGenerator(renderer); const texture = pmrem.fromScene(environment, .04).texture; environment.dispose(); pmrem.dispose(); for (const m of [world.water.material, world.acrylic.material, droplets.material]) { m.envMap = texture; m.envMapIntensity = 1.15; m.needsUpdate = true; } },
   };
   world.ready = loadSwimmingPoolKeyring().then(({ model, floor, water }) => {
     model.scale.setScalar(SCALE); model.position.y = BASE; root.add(model);
     paintSampleTiles(floor); domeFloor(floor); clearResin(water);
     world.acrylic = addAcrylicBase(model);
     motion = createWaterMotion(water, floor); world.waterMotion = motion; world.water = water; world.product = model;
-    buildSideLadder(ladder, surfaceHeight(0, 8.15), BASE + FLOOR_TOP * SCALE);
-    house.object.position.y = surfaceHeight(-4.4, -6.6); toy.ballHome.y = surfaceHeight(2, 5.15) + .18; toy.ball.position.y = toy.ballHome.y;
+    const rim = surfaceHeight(0, 8.15);
+    buildSideLadder(ladder, rim, BASE + FLOOR_TOP * SCALE);
+    world.activity.ladderTop.y = rim + .32;
     return world;
   });
   return world;
@@ -152,14 +166,16 @@ function addAcrylicBase(model) {
   return slab;
 }
 
-// Classic pool ladder on the front (+Z) side wall: handrails rise from the
-// water, curve over the rim and hook down the outside face; the treads stay
-// underwater against the wall, visible through the clear resin.
+// A-frame pool ladder over the front (+Z) wall. Inside, treads stand underwater
+// against the wall (seen through the clear resin); outside, a slanted flight
+// climbs from the deck to the rim so the puppy can get in and out.
 function buildSideLadder(ladder, rim, floor) {
-  const wall = HZ * 11.2, inner = wall - .62, rail = 0xd9e2e3, tread = 0xe8ece4;
+  const wall = WALL_Z, inner = wall - .62, rail = 0xd9e2e3, tread = 0xe8ece4;
+  const footZ = wall + 1.25, topZ = wall + .12, topY = rim + .55;
+  const outsideZ = y => topZ + (topY - y) / (topY - DECK_Y) * (footZ - topZ);
   for (const x of [-.5, .5]) {
-    tube(ladder, [[x, floor + .12, inner], [x, rim - .2, inner], [x, rim + .6, inner + .06], [x, rim + .86, wall - .28], [x, rim + .72, wall + .14], [x, rim + .18, wall + .22], [x, rim - .45, wall + .22]], .05, rail);
-    tube(ladder, [[x, rim - .45, wall + .22], [x, rim - .5, wall + .02]], .05, rail);
+    tube(ladder, [[x, floor + .12, inner], [x, rim - .2, inner], [x, rim + .6, inner + .06], [x, rim + .86, wall - .28], [x, rim + .78, wall + .1], [x, topY - .1, topZ + .12], [x, (topY + DECK_Y) / 2, outsideZ((topY + DECK_Y) / 2) + .02], [x, DECK_Y + .04, footZ]], .05, rail);
+    box(ladder, .14, .05, .22, x, DECK_Y + .025, footZ, rail);
   }
   const steps = Math.max(2, Math.floor((rim - .3 - (floor + .35)) / .36) + 1);
   for (let i = 0; i < steps; i++) {
@@ -167,4 +183,76 @@ function buildSideLadder(ladder, rim, floor) {
     box(ladder, .96, .055, .26, 0, y, inner + .02, tread);
     for (const x of [-.5, .5]) box(ladder, .07, .07, .1, x, y, inner + .02, rail);
   }
+  // Outside flight: evenly spaced treads following the slanted rails.
+  const flight = Math.max(3, Math.round((topY - .35 - DECK_Y) / .38));
+  for (let i = 1; i <= flight; i++) {
+    const y = DECK_Y + i * (topY - .2 - DECK_Y) / (flight + .3);
+    const step = box(ladder, .96, .055, .3, 0, y, outsideZ(y), tread);
+    step.rotation.x = -.06;
+  }
+  box(ladder, 1.06, .07, .5, 0, rim + .06, wall - .05, tread);
+}
+
+// White poolside deck, like the clean studio surface in the droplet photo.
+function createDeck(root) {
+  const deck = new THREE.Group(); deck.name = 'PoolsideDeck'; root.add(deck);
+  const w = DECK.maxX - DECK.minX, d = DECK.maxZ - DECK.minZ, cx = (DECK.maxX + DECK.minX) / 2, cz = (DECK.maxZ + DECK.minZ) / 2;
+  roundedPad(deck, w + .5, d + .5, .26, cx, DECK_Y - .4, cz, 0xe2e3df, 1.05);
+  roundedPad(deck, w, d, .3, cx, DECK_Y - .3, cz, 0xf6f6f3, .9);
+  deck.traverse(object => { if (object.isMesh) { object.castShadow = false; object.receiveShadow = true; } });
+  return deck;
+}
+
+// Clear water droplets and puddles on the deck, after the reference sheet: round
+// beads, ovals, lobed splats and curving drips. Each is a domed polar mesh (flat
+// top, steep meniscus edge); all are merged into one clear refractive mesh.
+// A wet trail gathers at the foot of the ladder where the puppy climbs out.
+function createDroplets(root) {
+  let seed = 7;
+  const rand = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  const kinds = [
+    // [x, z, size, kind]
+    [.3, 10.35, .42, 'blob'], [-.55, 10.9, .2, 'round'], [.75, 11.2, .14, 'round'], [-.2, 11.65, .55, 'splat'], [.95, 10.05, .1, 'round'],
+    [-1.1, 10.25, .12, 'round'], [1.35, 11.8, .3, 'oval'], [-1.35, 12.3, .18, 'round'], [.45, 12.45, .09, 'round'], [-.8, 13.1, .34, 'drip'],
+    [-4.9, 9.85, .26, 'oval'], [-6.6, 11.2, .7, 'splat'], [-5.4, 12.6, .13, 'round'], [-6.9, 13.9, .2, 'round'], [-3.9, 14.3, .42, 'blob'],
+    [-2.2, 14.75, .1, 'round'], [-4.6, 15.05, .16, 'round'], [1.8, 14.6, .55, 'blob'], [3.2, 14.9, .12, 'round'], [6.7, 15, .3, 'oval'],
+    [7.4, 13.6, .1, 'round'], [7.2, 10.3, .45, 'drip'], [6.9, 6.2, .22, 'round'], [7.3, 3.4, .5, 'blob'], [6.75, .4, .13, 'round'],
+    [7.45, -2.2, .28, 'oval'], [6.9, -5.6, .62, 'splat'], [7.3, -8.4, .12, 'round'], [3.4, -9.25, .3, 'blob'], [.2, -9.3, .1, 'round'],
+    [-2.6, -9.2, .4, 'drip'], [-6.1, -9.15, .16, 'round'], [-7.3, -6.8, .48, 'blob'], [-6.85, -3.1, .1, 'round'], [-7.4, -.6, .3, 'oval'],
+    [-6.9, 2.9, .9, 'splat'], [-7.35, 6.4, .14, 'round'], [-6.4, 7.7, .24, 'round'], [5.9, 8.6, .11, 'round'], [-3.1, 9.6, .09, 'round'],
+  ];
+  const geos = kinds.map(([x, z, size, kind]) => {
+    const geo = dropletGeometry(rand, size, kind);
+    geo.rotateY(rand() * Math.PI * 2); geo.translate(x, DECK_Y + .004, z);
+    return geo;
+  });
+  const merged = mergeGeometries(geos); geos.forEach(geo => geo.dispose());
+  const material = new THREE.MeshPhysicalMaterial({ color: 0xffffff, transmission: 1, roughness: .02, ior: 1.33, thickness: .14, attenuationColor: 0xc4e2e8, attenuationDistance: .4, clearcoat: 1, clearcoatRoughness: .02, specularIntensity: 1 });
+  const droplets = new THREE.Mesh(merged, material); droplets.name = 'PoolsideDroplets';
+  droplets.receiveShadow = true; root.add(droplets);
+  return droplets;
+}
+function dropletGeometry(rand, size, kind) {
+  const rings = 9, segments = 44;
+  const lobes = kind === 'splat' ? [[3 + Math.floor(rand() * 3), .3], [7, .08]] : kind === 'blob' ? [[2, .16], [3, .1], [5, .04]] : kind === 'oval' ? [[2, .08]] : [[3, .03]];
+  const phases = lobes.map(() => rand() * Math.PI * 2);
+  const stretch = kind === 'oval' ? 1.45 : kind === 'drip' ? 2.6 : 1, bend = kind === 'drip' ? (rand() - .5) * .5 : 0;
+  const height = Math.min(.11, size * (kind === 'splat' ? .14 : kind === 'round' ? .55 : .3));
+  const radius = a => size * Math.max(.35, 1 + lobes.reduce((sum, [k, amp], i) => sum + amp * Math.cos(k * a + phases[i]), 0));
+  const positions = [0, height, 0], indices = [];
+  for (let r = 1; r <= rings; r++) for (let s = 0; s < segments; s++) {
+    const a = s / segments * Math.PI * 2, t = r / rings, rad = radius(a) * t;
+    let x = Math.cos(a) * rad, z = Math.sin(a) * rad * stretch;
+    if (kind === 'drip') { x *= .7 + .3 * (z / (size * stretch) + 1); x += bend * z * z / size; }
+    positions.push(x, height * Math.sqrt(Math.max(0, 1 - t ** 6)), z);
+  }
+  for (let s = 0; s < segments; s++) indices.push(0, 1 + (s + 1) % segments, 1 + s);
+  for (let r = 1; r < rings; r++) for (let s = 0; s < segments; s++) {
+    const a = 1 + (r - 1) * segments + s, b = 1 + (r - 1) * segments + (s + 1) % segments;
+    indices.push(a, b, a + segments, b, b + segments, a + segments);
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geo.setIndex(indices); geo.computeVertexNormals();
+  return geo.toNonIndexed();
 }

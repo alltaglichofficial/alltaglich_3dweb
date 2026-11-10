@@ -13,8 +13,8 @@ export const ISLANDS = [
     title: '푸른 물결 곁에서,<br>잠깐의 여유.',
     description: '파란 타일과 투명하게 일렁이는 물결.<br>작은 스피츠가 레인을 따라 헤엄쳐요.',
     playLabel: '수영해',
-    spawn: { x: 0, z: 4.95 },
-    stops: [{ x: 0, z: 4.95 }, { x: 4.7, z: 2 }, { x: 4.7, z: -3.8 }, { x: 0, z: -5.1 }, { x: -4.7, z: -3.8 }, { x: -4.7, z: 2 }],
+    spawn: { x: 0, z: 11.6 },
+    stops: [{ x: 0, z: 11.6 }, { x: -6.2, z: 10.2 }, { x: -6.2, z: 13.8 }, { x: -2.2, z: 13.9 }, { x: 2.2, z: 10.3 }, { x: 6.8, z: 13.9 }],
   },
   {
     id: 'climb', label: '클라이밍 섬', english: 'THE CLIMBING ISLAND', number: '03', accent: '#d7aa87',

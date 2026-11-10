@@ -20,7 +20,7 @@ export function advanceRoute(position, points, budget, allowed = () => true) {
 
 export function isSwimPositionAllowed(x, z) {
   // Central pool plus the lane corridor out to the ladder on the front side wall.
-  return Math.abs(x) <= 2.55 && Math.abs(z) <= 3.15 || Math.abs(x) <= .55 && z >= 2.8 && z <= 7.7;
+  return Math.abs(x) <= 2.55 && Math.abs(z) <= 3.15 || Math.abs(x) <= .55 && z >= 2.8 && z <= 10.1;
 }
 
 export function createDogActivities(world, navigation, root, mouth) {
@@ -32,7 +32,7 @@ export function createDogActivities(world, navigation, root, mouth) {
   const pause = (duration, label, onStart) => ({ mode: 'pause', duration, label, onStart });
   const jump = point => ({ mode: 'jump', point, duration: .85, label: '낮은 발판을 폴짝! 매트에 사뿐 내려와요.' });
   const water = (points, label) => ({ mode: 'water', points: points.map(p => ({ ...p })), label });
-  const ladder = up => ({ mode: 'ladder', up, point: up ? config.entry : config.waterEntry, duration: 2, label: up ? '사다리를 짚고 차근차근 올라와요.' : '사다리를 따라 조심조심 물에 들어가요.' });
+  const ladder = up => ({ mode: 'ladder', up, point: up ? config.entry : config.waterEntry, duration: config.ladderTop ? 3.2 : 2, label: up ? '사다리를 짚고 차근차근 올라와요.' : '사다리를 따라 조심조심 물에 들어가요.' });
   // From the open pool, swim to the corridor mouth first, then along the lane to the ladder.
   const swimHome = () => {
     const mouth = config.corridorStart, p = root.position;
@@ -124,10 +124,14 @@ export function createDogActivities(world, navigation, root, mouth) {
             world.setSwimmer?.(swimming ? root.position : null);
           } else root.position.y = ground(root.position);
         } else if (task.mode === 'ladder') {
-          const t = Math.min(1, task.time / task.duration), s = smooth(t);
+          const t = Math.min(1, task.time / task.duration);
           const targetY = task.up ? ground(task.point) : waterHeight(task.point);
-          root.position.set(mix(task.from.x, task.point.x, s), mix(task.from.y, targetY, s) + (reducedMotion ? 0 : Math.sin(t * Math.PI * 12) * .018 * Math.sin(t * Math.PI)), mix(task.from.z, task.point.z, s));
-          heading = Math.atan2(task.point.x - task.from.x, task.point.z - task.from.z);
+          // With a ladder over a wall, climb to the rim first, then down the other side.
+          const top = config.ladderTop, first = top && t < .5;
+          const a = top && !first ? top : task.from, b = first ? top : { x: task.point.x, y: targetY, z: task.point.z };
+          const s = smooth(top ? (first ? t * 2 : t * 2 - 1) : t);
+          root.position.set(mix(a.x, b.x, s), mix(a.y, b.y, s) + (reducedMotion ? 0 : Math.sin(t * Math.PI * 12) * .018 * Math.sin(t * Math.PI)), mix(a.z, b.z, s));
+          heading = top ? (task.up ? 0 : Math.PI) : Math.atan2(task.point.x - task.from.x, task.point.z - task.from.z);
           climbingLadder = true; travelled = dt * .6; done = t === 1; world.setSwimmer?.(null);
         } else if (task.mode === 'jump') {
           const t = Math.min(1, task.time / task.duration), s = smooth(t);
