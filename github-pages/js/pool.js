@@ -16,6 +16,8 @@ const HX = .5, HZ = .7726628, CORNER = .06, FLOOR_TOP = .05167452, ACRYLIC = .04
 const DECK_Y = -1.6, WALL_X = HX * 11.2, WALL_Z = HZ * 11.2;
 // The back deck runs on behind the block to hold the keyring hardware.
 const DECK = { minX: -8.6, maxX: 8.6, minZ: -32.2, maxZ: 15.8 };
+// The pool island has no puppy (see main.js); the bear swims alone.
+const NO_DOG = true;
 
 export function createPoolIsland(scene, island) {
   const root = new THREE.Group(); root.name = 'island-pool'; scene.add(root);
@@ -23,7 +25,6 @@ export function createPoolIsland(scene, island) {
   let motion = null, swimmer = null, clock = 0, reduced = false, lastPaddle = -99;
   const splash = (x, z, strength) => { if (motion && !reduced) motion.addRipple(x / SCALE, z / SCALE, strength); };
   createDeck(root);
-  const fence = createGlassFence(root, obstacles);
   // Water drops would sink straight into the sand, so the deck puddles are hidden.
   const droplets = createDroplets(root); droplets.visible = false;
   const hardware = createKeyringHardware(root, { wallZ: WALL_Z, deckY: DECK_Y });
@@ -34,6 +35,9 @@ export function createPoolIsland(scene, island) {
   const surfaceHeight = (x, z) => motion ? motion.heightAt(x / SCALE, z / SCALE) * SCALE + BASE : .08;
   const house = createDogHouse(root, obstacles, { x: 4.6, z: 11.3, y: DECK_Y, color: 0x8cb9bc });
   const toy = createFetchToy(root, { x: -3, y: DECK_Y + .17, z: 12.8 }, island.spawn);
+  // No puppy on this island: its house and ball stay in the data (the shared dog
+  // code expects them) but are not shown.
+  house.object.visible = false; toy.ball.visible = false;
   const inPool = (x, z) => Math.abs(x) <= WALL_X && Math.abs(z) <= WALL_Z;
   const ladder = new THREE.Group(); ladder.name = 'PuppyPoolLadder'; root.add(ladder);
   const bear = createSwimBear(root, { x: 0, z: -.15 });
@@ -57,6 +61,7 @@ export function createPoolIsland(scene, island) {
       return inPool(x, z) ? surfaceHeight(x, z) : DECK_Y;
     },
     setSwimmer(point) {
+      if (NO_DOG) point = null;
       // Jumping in throws a big splash ring; climbing out leaves a smaller one.
       if (!swimmer && point) splash(point.x, point.z, 1.3);
       if (swimmer && !point) splash(swimmer.x, swimmer.z, .7);
@@ -78,10 +83,10 @@ export function createPoolIsland(scene, island) {
     // like a pool with its underwater lights on at night. The tiles always carry
     // an emissive map (black in the lamp mood), so switching never recompiles.
     setMood(mood, { reflections }) {
-      for (const m of [world.water?.material, world.acrylic?.material, droplets.material, ...hardware.materials, ...fence.materials]) if (m?.userData.envBase !== undefined) m.envMapIntensity = m.userData.envBase * reflections;
+      for (const m of [world.water?.material, world.acrylic?.material, droplets.material, ...hardware.materials]) if (m?.userData.envBase !== undefined) m.envMapIntensity = m.userData.envBase * reflections;
       world.floor?.traverse(object => { if (object.isMesh && object.material.emissiveMap) object.material.emissive.setHex(mood === 'dark' ? 0x5a7f99 : 0); });
     },
-    setupEnvironment(renderer) { const environment = new RoomEnvironment(); const pmrem = new THREE.PMREMGenerator(renderer); const texture = pmrem.fromScene(environment, .04).texture; environment.dispose(); pmrem.dispose(); for (const m of [world.water.material, world.acrylic.material, droplets.material, ...hardware.materials, ...fence.materials]) { m.envMap = texture; m.userData.envBase = m === world.water.material ? WATER_REFLECTION : hardware.materials.includes(m) ? (m.userData.envDefault ?? 1) : 1.15; m.envMapIntensity = m.userData.envBase; m.needsUpdate = true; } },
+    setupEnvironment(renderer) { const environment = new RoomEnvironment(); const pmrem = new THREE.PMREMGenerator(renderer); const texture = pmrem.fromScene(environment, .04).texture; environment.dispose(); pmrem.dispose(); for (const m of [world.water.material, world.acrylic.material, droplets.material, ...hardware.materials]) { m.envMap = texture; m.userData.envBase = m === world.water.material ? WATER_REFLECTION : hardware.materials.includes(m) ? (m.userData.envDefault ?? 1) : 1.15; m.envMapIntensity = m.userData.envBase; m.needsUpdate = true; } },
   };
   world.ready = loadSwimmingPoolKeyring().then(({ model, floor, water }) => {
     model.scale.setScalar(SCALE); model.position.y = BASE; root.add(model);
@@ -96,6 +101,7 @@ export function createPoolIsland(scene, island) {
     const rim = surfaceHeight(0, 8.15);
     buildSideLadder(ladder, rim, BASE + FLOOR_TOP * SCALE);
     world.activity.ladderTop.y = rim + .32;
+    buildDivingBoard(root, rim);
     return world;
   });
   return world;
@@ -229,60 +235,72 @@ function buildSideLadder(ladder, rim, floor) {
   box(ladder, 1.06, .07, .5, 0, rim + .06, wall - .05, tread);
 }
 
-// Sandy ground around the pool (fine pale soil with scattered grains), in place
-// of the white deck. Top stays at DECK_Y so the puppy walks on it as before.
+// Pale grey square paving around the pool, like a tiled pool deck, with a
+// slightly darker kerb. Top stays at DECK_Y.
 function createDeck(root) {
-  const deck = new THREE.Group(); deck.name = 'PoolsideSand'; root.add(deck);
+  const deck = new THREE.Group(); deck.name = 'PoolsideTiles'; root.add(deck);
   const w = DECK.maxX - DECK.minX, d = DECK.maxZ - DECK.minZ, cx = (DECK.maxX + DECK.minX) / 2, cz = (DECK.maxZ + DECK.minZ) / 2;
-  const edge = roundedPad(deck, w + .5, d + .5, .26, cx, DECK_Y - .4, cz, 0xd3c1a4, 1.05);
-  const top = roundedPad(deck, w, d, .3, cx, DECK_Y - .3, cz, 0xe4d4bb, .9);
-  const grain = sandTexture();
-  deck.traverse(object => {
+  roundedPad(deck, w + .5, d + .5, .26, cx, DECK_Y - .4, cz, 0x9fa5aa, .35);
+  roundedPad(deck, w, d, .3, cx, DECK_Y - .3, cz, 0xffffff, .3);
+  const tiles = paverTexture();
+  deck.children.forEach((object, i) => {
     if (!object.isMesh) return;
     object.castShadow = false; object.receiveShadow = true;
     const m = object.material = object.material.clone();
-    m.map = grain; m.bumpMap = grain; m.bumpScale = 1.2; m.roughness = 1; m.metalness = 0; m.needsUpdate = true;
+    if (i === 1) { m.map = tiles; m.bumpMap = tiles; m.bumpScale = .8; }
+    m.roughness = .82; m.metalness = 0; m.needsUpdate = true;
   });
   return deck;
 }
-function sandTexture() {
+// One texture repeat = 2 × 2 tiles of 1.1 world units, light grey with darker grout.
+function paverTexture() {
   const size = 512, canvas = document.createElement('canvas'); canvas.width = canvas.height = size;
-  const ctx = canvas.getContext('2d'), img = ctx.createImageData(size, size), px = img.data;
-  let seed = 11; const rand = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
-  for (let i = 0; i < size * size; i++) { const v = 222 + (rand() - .5) * 34; px[i * 4] = v; px[i * 4 + 1] = v; px[i * 4 + 2] = v; px[i * 4 + 3] = 255; }
-  ctx.putImageData(img, 0, 0);
-  // coarser grains and a few tiny pebbles
-  for (let i = 0; i < 2600; i++) { const g = 150 + rand() * 105; ctx.fillStyle = `rgb(${g},${g},${g})`; const r = .6 + rand() * 1.6; ctx.beginPath(); ctx.arc(rand() * size, rand() * size, r, 0, Math.PI * 2); ctx.fill(); }
-  for (let i = 0; i < 90; i++) { const g = 235 + rand() * 20; ctx.fillStyle = `rgb(${g},${g},${g})`; const r = 2 + rand() * 3; ctx.beginPath(); ctx.ellipse(rand() * size, rand() * size, r, r * (.6 + rand() * .4), rand() * 3, 0, Math.PI * 2); ctx.fill(); }
-  const t = new THREE.CanvasTexture(canvas); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(1 / 5, 1 / 5); t.anisotropy = 8; t.colorSpace = THREE.SRGBColorSpace;
-  return t;
+  const ctx = canvas.getContext('2d'), n = 2, t = size / n, grout = 10;
+  let seed = 5; const rand = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  ctx.fillStyle = '#9ea4a9'; ctx.fillRect(0, 0, size, size);
+  for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) {
+    const g = 206 + Math.round((rand() - .5) * 10);
+    ctx.fillStyle = `rgb(${g},${g + 2},${g + 4})`; ctx.fillRect(c * t + grout / 2, r * t + grout / 2, t - grout, t - grout);
+    for (let k = 0; k < 260; k++) { const v = g + (rand() - .5) * 22; ctx.fillStyle = `rgba(${v},${v + 2},${v + 4},.5)`; ctx.fillRect(c * t + grout / 2 + rand() * (t - grout), r * t + grout / 2 + rand() * (t - grout), 2, 2); }
+  }
+  const tex = new THREE.CanvasTexture(canvas); tex.wrapS = tex.wrapT = THREE.RepeatWrapping; tex.repeat.set(1 / 2.2, 1 / 2.2);
+  tex.anisotropy = 8; tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
 }
 
-// Tall clear glass panels standing along both long sides of the pool on a
-// brushed steel base channel, like a glass pool fence.
-const GLASS_H = 5.2, GLASS_T = .1, GLASS_GAP = .08;
-function createGlassFence(root, obstacles) {
-  const group = new THREE.Group(); group.name = 'PoolGlassFence'; root.add(group);
-  const glass = new THREE.MeshPhysicalMaterial({ color: 0xf2fbfa, transmission: 1, roughness: .02, ior: 1.5, thickness: GLASS_T, attenuationColor: 0xcfe9e2, attenuationDistance: 1.6, specularIntensity: 1 });
-  const steel = new THREE.MeshPhysicalMaterial({ color: 0xc9ccd0, metalness: 1, roughness: .3 });
-  const length = WALL_Z * 2 + .5, panels = 2, panelLen = (length - GLASS_GAP * (panels - 1)) / panels;
+// Springboard on the front deck beside the ladder: concrete plinth, steel
+// handrails, a fulcrum stand and a white non-slip board reaching over the water.
+function buildDivingBoard(root, rim) {
+  const g = new THREE.Group(); g.name = 'DivingBoard'; root.add(g);
+  const X = -3.1, wall = WALL_Z, steel = 0xd3d8db, concrete = 0xc3c8cb;
+  const boardY = rim + .8, back = wall + 4.2, tip = wall - 2.6;
+  const add = (geo, color, x, y, z, opts = {}) => {
+    const m = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color, roughness: opts.rough ?? .5, metalness: opts.metal ?? 0 }));
+    m.position.set(x, y, z); m.castShadow = true; m.receiveShadow = true; g.add(m); return m;
+  };
+  // plinth the board is bolted to
+  add(new THREE.BoxGeometry(1.5, boardY - DECK_Y - .08, 1.5), concrete, X, (boardY + DECK_Y) / 2 - .04, back - .6, { rough: .9 });
+  // fulcrum stand
+  add(new THREE.BoxGeometry(1.1, boardY - DECK_Y - .2, .45), concrete, X, (boardY + DECK_Y) / 2 - .1, wall + 1.4, { rough: .9 });
+  add(new THREE.CylinderGeometry(.14, .14, 1.2, 20), 0x5c646b, X, boardY - .16, wall + 1.4, { metal: .7, rough: .4 }).rotation.z = Math.PI / 2;
+  // board: rounded tip, slightly tapered
+  const s = new THREE.Shape(), hw = .52, len = back - tip;
+  s.moveTo(-hw, 0); s.lineTo(hw, 0); s.lineTo(hw * .92, len - .5); s.quadraticCurveTo(hw * .92, len, 0, len); s.quadraticCurveTo(-hw * .92, len, -hw * .92, len - .5); s.lineTo(-hw, 0);
+  const boardGeo = new THREE.ExtrudeGeometry(s, { depth: .1, bevelEnabled: true, bevelThickness: .03, bevelSize: .03, bevelSegments: 3, curveSegments: 16 });
+  boardGeo.rotateX(-Math.PI / 2); // shape y → -z (towards the water), thickness → +y
+  const board = add(boardGeo, 0xf4f5f2, X, boardY - .13, back, { rough: .55 });
+  // non-slip mat on top
+  const matGeo = new THREE.PlaneGeometry(hw * 1.6, len - 1.4); matGeo.rotateX(-Math.PI / 2);
+  add(matGeo, 0x8fb6c9, X, boardY + .006, back - (len - 1.4) / 2 - .3, { rough: 1 });
+  // handrails on both sides of the plinth end
   for (const side of [-1, 1]) {
-    const x = side * (WALL_X + .5);
-    const channel = new THREE.Mesh(new THREE.BoxGeometry(.32, .24, length + .1), steel);
-    channel.position.set(x, DECK_Y + .12, 0); channel.castShadow = true; channel.receiveShadow = true; group.add(channel);
-    for (let i = 0; i < panels; i++) {
-      const z = -length / 2 + panelLen / 2 + i * (panelLen + GLASS_GAP);
-      const pane = new THREE.Mesh(new THREE.BoxGeometry(GLASS_T, GLASS_H, panelLen), glass);
-      pane.position.set(x, DECK_Y + .2 + GLASS_H / 2, z); pane.receiveShadow = true; group.add(pane);
-      // a small steel clamp at the top of each panel end
-      for (const e of [-1, 1]) {
-        const clamp = new THREE.Mesh(new THREE.BoxGeometry(.24, .28, .22), steel);
-        clamp.position.set(x, DECK_Y + .2 + GLASS_H - .45, z + e * (panelLen / 2 - .35)); clamp.castShadow = true; group.add(clamp);
-      }
-    }
-    obstacles.push({ type: 'rect', x, z: 0, w: .5, d: length + .2 });
+    const x = X + side * .8;
+    const pts = [[x, DECK_Y, back + .1], [x, boardY + .9, back + .1], [x, boardY + 1.0, back - .5], [x, boardY + .55, back - 1.5], [x, boardY + .12, back - 1.9]]
+      .map(p => new THREE.Vector3(...p));
+    const rail = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 40, .06, 10), new THREE.MeshStandardMaterial({ color: steel, metalness: .35, roughness: .3 }));
+    rail.castShadow = true; g.add(rail);
   }
-  return { object: group, materials: [glass, steel] };
+  return board;
 }
 
 // Clear water droplets and puddles on the deck, after the reference sheet: round

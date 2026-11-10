@@ -149,7 +149,11 @@ async function start() {
     document.querySelector('#prevIsland').setAttribute('aria-label', `${ISLANDS[(islandIndex + 2) % 3].label}으로 이동`);
     document.querySelector('#nextIsland').setAttribute('aria-label', `${ISLANDS[(islandIndex + 1) % 3].label}으로 이동`);
     document.documentElement.style.setProperty('--island-accent', island.accent);
-    document.querySelector('#status').textContent = `${island.label}에 도착했어요. 스피츠에게 명령해 보세요.`;
+    // Islands without the puppy (the pool): hide the dog and its care/command UI.
+    const noDog = !!island.noDog;
+    document.documentElement.classList.toggle('no-dog', noDog);
+    puppy.root.traverse(o => { if (noDog) o.layers.disableAll(); else o.layers.set(0); });
+    document.querySelector('#status').textContent = noDog ? `${island.label}에 도착했어요.` : `${island.label}에 도착했어요. 스피츠에게 명령해 보세요.`;
     bond?.onIslandChange();
   }
   function selectIsland(id, immediate = false, step = 1) {

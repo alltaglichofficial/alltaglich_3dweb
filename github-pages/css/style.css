@@ -53,3 +53,6 @@
 :root[data-mood=dark] .command-buttons button[aria-pressed=true]{background:#33402d;border-color:#4c5d43;color:#eef3e4}
 :root[data-mood=dark] .trick-buttons{background:#1a1c20f5;border-color:#33363c}
 :root[data-mood=dark] .bond-caption,:root[data-mood=dark] .bond-panel{color:#cfccc1}
+
+/* Islands without the puppy (the pool island) */
+.no-dog .bond-panel, .no-dog .dog-controls, .no-dog .dog-tip { display: none !important; }
