@@ -10,7 +10,7 @@ import { createKeyringHardware } from './keyring.js';
 
 // Normalised keyring units (body width 1): footprint half-sizes and corner
 // radius of the GLB outline, top of the tile floor, acrylic slab and dome rise.
-const HX = .5, HZ = .7726628, CORNER = .06, FLOOR_TOP = .05167452, ACRYLIC = .045, DOME = .024;
+const HX = .5, HZ = .7726628, CORNER = .06, FLOOR_TOP = .05167452, ACRYLIC = .045, DOME = .04;
 // World layout: the block sits on a white poolside deck. The puppy lives on the
 // front deck, climbs the ladder over the front wall into the water and back out.
 const DECK_Y = -1.6, WALL_X = HX * 11.2, WALL_Z = HZ * 11.2;
@@ -24,7 +24,7 @@ export function createPoolIsland(scene, island) {
   const splash = (x, z, strength) => { if (motion && !reduced) motion.addRipple(x / SCALE, z / SCALE, strength); };
   createDeck(root);
   const droplets = createDroplets(root);
-  const hardware = createKeyringHardware(root, { wallZ: WALL_Z, deckY: DECK_Y, eyeY: DECK_Y + .6 });
+  const hardware = createKeyringHardware(root, { wallZ: WALL_Z, deckY: DECK_Y });
   // Uniform scale keeps the keyring's real block proportions (thick clear resin
   // over a thin tiled floor). A clear acrylic slab sits under the tiles, so the
   // whole block is lifted by its thickness and still rests on the ground.
@@ -79,7 +79,7 @@ export function createPoolIsland(scene, island) {
       for (const m of [world.water?.material, world.acrylic?.material, droplets.material, ...hardware.materials]) if (m?.userData.envBase !== undefined) m.envMapIntensity = m.userData.envBase * reflections;
       world.floor?.traverse(object => { if (object.isMesh && object.material.emissiveMap) object.material.emissive.setHex(mood === 'dark' ? 0x5a7f99 : 0); });
     },
-    setupEnvironment(renderer) { const environment = new RoomEnvironment(); const pmrem = new THREE.PMREMGenerator(renderer); const texture = pmrem.fromScene(environment, .04).texture; environment.dispose(); pmrem.dispose(); for (const m of [world.water.material, world.acrylic.material, droplets.material, ...hardware.materials]) { m.envMap = texture; m.userData.envBase = m === world.water.material ? WATER_REFLECTION : hardware.materials.includes(m) ? 1 : 1.15; m.envMapIntensity = m.userData.envBase; m.needsUpdate = true; } },
+    setupEnvironment(renderer) { const environment = new RoomEnvironment(); const pmrem = new THREE.PMREMGenerator(renderer); const texture = pmrem.fromScene(environment, .04).texture; environment.dispose(); pmrem.dispose(); for (const m of [world.water.material, world.acrylic.material, droplets.material, ...hardware.materials]) { m.envMap = texture; m.userData.envBase = m === world.water.material ? WATER_REFLECTION : hardware.materials.includes(m) ? (m.userData.envDefault ?? 1) : 1.15; m.envMapIntensity = m.userData.envBase; m.needsUpdate = true; } },
   };
   world.ready = loadSwimmingPoolKeyring().then(({ model, floor, water }) => {
     model.scale.setScalar(SCALE); model.position.y = BASE; root.add(model);
@@ -95,9 +95,12 @@ export function createPoolIsland(scene, island) {
   return world;
 }
 
-// Colours sampled from the product photos: powder-blue ceramic tiles, thin
-// near-black grout and an ink-navy T lane. Same layout and UVs as the baked PNG.
-const TILE = '#6c9cc2', TILE_SHADES = ['#6898bf', '#72a2c7', '#6a9ac0', '#76a5c9'], GROUT = '#16212b', LANE = '#0a1017';
+// Print under the resin, as on the keyring: powder-blue tiles in a 13 × 22 grid,
+// dark grout, and the lane mark — a wide bar 4 rows from the ring end (back,
+// v = 1), a stem down the middle to the front edge and a short cross line near
+// the front. Canvas row 0 is the front (+Z) edge.
+const TILE = [136, 176, 208], GROUT = '#222e3c', LANE = [30, 44, 64], COLS = 13, ROWS = 22;
+const isLane = (c, r) => (c === 6 && r >= 3) || (r === 3 && c >= 4 && c <= 8) || (r === 17 && c >= 5 && c <= 7);
 function paintSampleTiles(floor) {
   floor.traverse(object => {
     if (!object.isMesh || !object.material.map) return;
@@ -106,47 +109,37 @@ function paintSampleTiles(floor) {
     const ctx = canvas.getContext('2d');
     if (width === 256) {
       // Repeating side tile.
-      ctx.fillStyle = TILE; ctx.fillRect(0, 0, 256, 256);
-      ctx.fillStyle = GROUT; ctx.fillRect(0, 0, 256, 14); ctx.fillRect(0, 0, 14, 256);
+      ctx.fillStyle = `rgb(${TILE})`; ctx.fillRect(0, 0, 256, 256);
+      ctx.fillStyle = GROUT; ctx.fillRect(0, 0, 256, 11); ctx.fillRect(0, 0, 11, 256);
     } else {
-      const cols = 24, tile = width / cols, rows = Math.round(height / tile), grout = Math.max(4, tile * .085);
-      for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
-        ctx.fillStyle = TILE_SHADES[(r * 7 + c * 3 + ((r * c) % 5)) % TILE_SHADES.length];
-        ctx.fillRect(c * tile, r * tile, tile, tile);
+      const tw = width / COLS, th = height / ROWS, grout = Math.max(3, Math.min(tw, th) * .084);
+      for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
+        // r counts from the ring end (canvas bottom).
+        const j = (Math.sin(c * 127.1 + r * 311.7) * 43758.5453 % 1) * 10, base = isLane(c, r) ? LANE : TILE;
+        ctx.fillStyle = `rgb(${base.map(v => Math.round(v + j * (isLane(c, r) ? .4 : 1)))})`;
+        ctx.fillRect(c * tw, height - (r + 1) * th, tw + 1, th + 1);
       }
       ctx.fillStyle = GROUT;
-      for (let c = 0; c <= cols; c++) ctx.fillRect(c * tile - grout / 2, 0, grout, height);
-      for (let r = 0; r <= rows; r++) ctx.fillRect(0, r * tile - grout / 2, width, grout);
-      // Lane mark as on the keyring: a wide T bar at the ring end (back, v = 1),
-      // a stem down the middle and a short "-" crossbar where it ends near the
-      // front wall. Canvas row 0 is the front (+Z) edge.
-      ctx.fillStyle = LANE;
-      const stem = tile * 1.7, bar = tile * 10.2, cross = tile * 5.2, stroke = tile * 1.45;
-      const barY = height - tile * 4.6 - stroke, endY = tile * 6.4;
-      ctx.fillRect(width / 2 - bar / 2, barY, bar, stroke);
-      ctx.fillRect(width / 2 - stem / 2, endY, stem, barY - endY);
-      ctx.fillRect(width / 2 - cross / 2, endY, cross, stroke);
+      for (let c = 0; c <= COLS; c++) ctx.fillRect(c * tw - grout / 2, 0, grout, height);
+      for (let r = 0; r <= ROWS; r++) ctx.fillRect(0, r * th - grout / 2, width, grout);
     }
     const texture = new THREE.CanvasTexture(canvas);
     texture.flipY = false; texture.colorSpace = THREE.SRGBColorSpace;
     texture.wrapS = texture.wrapT = object.material.map.wrapS; texture.anisotropy = 8;
     object.material.map.dispose(); object.material.map = texture; object.material.emissiveMap = texture; object.material.emissive.setHex(0);
-    object.material.roughness = .5; object.material.metalness = 0; object.material.needsUpdate = true;
+    object.material.roughness = .55; object.material.metalness = 0; object.material.needsUpdate = true;
   });
 }
 
-// Crystal-clear water. The milky veil came from the bright studio environment
-// reflecting across the whole surface (plus a second clearcoat reflection), so
-// reflections are kept faint: enough for glints on the wave crests, not a haze.
-// A lower IOR also means less reflectance (F0 ≈ 2.8% instead of 4%), near-zero
-// roughness keeps the transmitted image sharp, and the tint is barely there.
-const WATER_REFLECTION = .32;
+// Clear resin with a light blue cast, as on the keyring: barely-there micro
+// roughness and modest reflections so it reads as cured resin, not acrylic.
+const WATER_REFLECTION = .35;
 function clearResin(water) {
   const m = water.material;
-  m.color.set(0xffffff); m.attenuationColor.set(0xe8f7fd); m.attenuationDistance = 30;
-  m.ior = 1.4; m.roughness = .004; m.transmission = 1;
-  m.clearcoat = .2; m.clearcoatRoughness = .02;
-  m.specularIntensity = 1; m.specularColor?.set(0xffffff);
+  m.color.set(0xd2eafa); m.attenuationColor.set(0x6fb2e6); m.attenuationDistance = 6.7;
+  m.ior = 1.5; m.roughness = .06; m.transmission = 1;
+  m.clearcoat = 0;
+  m.specularIntensity = .85; m.specularColor?.set(0xffffff);
   m.envMapIntensity = WATER_REFLECTION; m.needsUpdate = true;
 }
 
@@ -188,7 +181,7 @@ function domeFloor(floor) {
   });
 }
 
-// Clear cast-acrylic slab under the tile layer, same rounded footprint.
+// Clear resin doming on the back, under the tile layer, same rounded footprint.
 function addAcrylicBase(model) {
   const shape = new THREE.Shape(), ix = HX - CORNER, iz = HZ - CORNER;
   shape.moveTo(-ix, -HZ); shape.lineTo(ix, -HZ); shape.absarc(ix, -iz, CORNER, -Math.PI / 2, 0);
@@ -197,7 +190,7 @@ function addAcrylicBase(model) {
   shape.lineTo(-HX, -iz); shape.absarc(-ix, -iz, CORNER, Math.PI, Math.PI * 1.5);
   const geo = new THREE.ExtrudeGeometry(shape, { depth: ACRYLIC - .0008, bevelEnabled: false, curveSegments: 10 });
   geo.rotateX(Math.PI / 2); geo.translate(0, -.0008, 0);
-  const material = new THREE.MeshPhysicalMaterial({ color: 0xffffff, transmission: 1, roughness: .015, ior: 1.49, thickness: ACRYLIC, attenuationColor: 0xeaf7fc, attenuationDistance: 4, clearcoat: 1, clearcoatRoughness: .02, specularIntensity: 1 });
+  const material = new THREE.MeshPhysicalMaterial({ color: 0xd2eafa, transmission: 1, roughness: .06, ior: 1.5, thickness: ACRYLIC, attenuationColor: 0x6fb2e6, attenuationDistance: 6.7, specularIntensity: .85 });
   const slab = new THREE.Mesh(geo, material); slab.name = 'Body_ClearAcrylicBase';
   slab.receiveShadow = true; model.add(slab);
   return slab;

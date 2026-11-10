@@ -1,115 +1,193 @@
 import * as THREE from 'three';
 
-// The keyring hardware from the product photo, laid flat on the deck behind the
-// pool block as if the keychain had been put down on a table. From the block
-// outwards: a screw eye in the back wall, a small jump ring, a ring, a swivel
-// clasp, two linked rings (the Alltäglich tag hangs off the first one on its own
-// little ring), then the swivel snap hook with its screw housing.
-// `d` is the distance behind the back wall, `x` the sideways offset.
-export function createKeyringHardware(root, { wallZ, deckY, eyeY }) {
-  const group = new THREE.Group(); group.name = 'KeyringHardware'; root.add(group);
-  const chrome = new THREE.MeshPhysicalMaterial({ color: 0xdfe2e5, metalness: 1, roughness: .14, clearcoat: .35, clearcoatRoughness: .08 });
-  const satin = new THREE.MeshPhysicalMaterial({ color: 0xcfd2d6, metalness: 1, roughness: .3 });
-  const dark = new THREE.MeshStandardMaterial({ color: 0x3d4146, metalness: .8, roughness: .45 });
-  const Z = d => -wallZ - d;
-  const add = (geo, mat, x, y, d, rx = 0, ry = 0, rz = 0) => {
-    const object = new THREE.Mesh(geo, mat); object.position.set(x, y, Z(d));
-    object.rotation.set(rx, ry, rz, 'YXZ'); object.castShadow = true; object.receiveShadow = true;
-    group.add(object); return object;
+// Keyring hardware for the pool island, modelled in millimetres from the ruler
+// photos of the real parts (all stainless), then scaled into the world.
+// From the block outwards: eye pin (9핀) → large jump ring Ø9 → figure-8 swivel
+// → large jump ring Ø9 (carrying the small Ø6.6 ring with the engraved tag)
+// → swivel snap hook. The chain lies on the deck behind the back (-Z) wall:
+// flat parts and rings standing on edge alternate, each wire passing through
+// the next part's opening, as a keychain does when it is put down on a table.
+
+// Block size in mm (from the STL): 30 wide, 46.36 long; world scale matches the pool body.
+const BLOCK_HALF_LENGTH = 23.18, BLOCK_HALF_HEIGHT = 4.775;
+
+const steel = new THREE.MeshPhysicalMaterial({ color: 0xbec1c5, metalness: 1, roughness: 0.24, envMapIntensity: 0.25 });   // little room reflection; highlights come from the sun
+const steelDark = new THREE.MeshPhysicalMaterial({ color: 0x7c8086, metalness: 1, roughness: 0.4 });
+function mesh(g, m = steel){ const o = new THREE.Mesh(g, m); o.castShadow = true; return o; }
+function ring(R, t, seg = 120){ return mesh(new THREE.TorusGeometry(R, t, 24, seg)); }
+// centre of the upper link, given the lower link (wires resting on each other)
+const link = (yL, RL, tL, RU, tU) => yL + RL + RU - tL - tU;
+
+// 1. eye pin: Ø4.6 eye (1.0 wire), Ø1.5 screw shank 5.3 long
+function eyePin(){
+  const g = new THREE.Group();
+  const R = 1.8, t = 0.5;
+  const eye = mesh(new THREE.TorusGeometry(R, t, 20, 80, Math.PI * 1.86)); eye.rotation.z = -Math.PI / 2 + Math.PI * 0.07; eye.position.y = 2.3; g.add(eye);
+  const neck = mesh(new THREE.CylinderGeometry(0.5, 0.55, 0.9, 16)); neck.position.y = 0.15; g.add(neck);
+  const core = mesh(new THREE.CylinderGeometry(0.5, 0.25, 5.3, 16)); core.position.y = -2.65; g.add(core);
+  class Thread extends THREE.Curve { getPoint(u, o = new THREE.Vector3()){ const a = u * Math.PI * 2 * 7.5, r = 0.55 - u * 0.25; return o.set(r * Math.cos(a), -0.3 - u * 4.7, r * Math.sin(a)); } }
+  g.add(mesh(new THREE.TubeGeometry(new Thread(), 300, 0.17, 8, false)));
+  return { g, eyeY: 2.3, R, t };
+}
+
+// 3. figure-8 swivel: 20 long, 8 wide, two D-loops with Ø5 barrels
+function dLoop(w, yRound, yFlat, t){
+  // closed loop: semicircle around yRound, straight sides, flat bar at yFlat
+  const r = w / 2, pts = [], dir = Math.sign(yRound - yFlat);
+  for (let i = 0; i <= 24; i++) { const a = Math.PI * i / 24; pts.push(new THREE.Vector3(r * Math.cos(a), yRound + dir * r * Math.sin(a), 0)); }
+  pts.push(new THREE.Vector3(-r, yFlat + dir * 0.6, 0), new THREE.Vector3(-r + 0.6, yFlat, 0), new THREE.Vector3(r - 0.6, yFlat, 0), new THREE.Vector3(r, yFlat + dir * 0.6, 0));
+  const m = mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts, true, 'centripetal'), 160, t, 14, true));
+  m.scale.z = 0.85; return m;
+}
+function figure8(){
+  const g = new THREE.Group(), t = 0.75, w = 8.0 - 2 * t;
+  g.add(dLoop(w, t + w / 2, 8.6, t));                 // lower loop, round end down
+  g.add(dLoop(w, 20 - t - w / 2, 10.9, t));           // upper loop, round end up
+  const b1 = mesh(new THREE.CylinderGeometry(2.25, 2.25, 2.43, 32)); b1.position.y = 8.15; g.add(b1);
+  const b2 = mesh(new THREE.CylinderGeometry(2.25, 2.25, 2.34, 32)); b2.position.y = 11.3; g.add(b2);
+  const pin = mesh(new THREE.CylinderGeometry(1.25, 1.25, 1.2, 20)); pin.position.y = 9.7; g.add(pin);
+  const head = mesh(new THREE.CylinderGeometry(1.55, 1.55, 1.3, 24)); head.position.y = 6.0; g.add(head);
+  const headStem = mesh(new THREE.CylinderGeometry(0.8, 0.8, 1.4, 16)); headStem.position.y = 6.9; g.add(headStem);
+  const k = 0.9, ky = k * 0.9; g.scale.set(k, ky, k);   // 10% smaller overall, plus 10% shorter
+  return { g, t: t * ky, len: 20 * ky };
+}
+
+// 7. swivel snap hook (31.8 overall): eye Ø11.5 → swivel pin + bell collar → plate 7.1 × 8.5 with rivet
+// → flat stamped hook (J-profile, wider at the round end) closed by a straight spring gate on top
+function snapHook(){
+  const g = new THREE.Group();
+  const eR = 4.85, eT = 0.95;
+  const eye = ring(eR, eT); eye.scale.z = 0.7; g.add(eye);   // flat band, Ø11.5 outside
+  const pinHead = mesh(new THREE.CylinderGeometry(1.9, 1.9, 1.5, 28)); pinHead.position.y = 1.35; pinHead.scale.z = 0.6; g.add(pinHead);
+  const pinStem = mesh(new THREE.CylinderGeometry(1.1, 1.1, 2.0, 20)); pinStem.position.y = 2.6; g.add(pinStem);
+  // swivel collar: trapezoid in front view (narrow at the eye, wider at the plate), flatter than the plate
+  const bell = mesh(new THREE.LatheGeometry([
+    new THREE.Vector2(0, 2.4), new THREE.Vector2(1.8, 2.4), new THREE.Vector2(2.1, 2.6), new THREE.Vector2(2.4, 3.4),
+    new THREE.Vector2(2.7, 4.3), new THREE.Vector2(2.9, 4.9), new THREE.Vector2(2.8, 5.15), new THREE.Vector2(0, 5.15)
+  ], 48)); bell.scale.z = 0.45; g.add(bell);
+  // plate: trapezoid, 7.9 wide at the hook narrowing in a straight, even diagonal to 5.8 at the collar; corners softened
+  const ps = new THREE.Shape();
+  ps.moveTo(-2.4, 5.0); ps.lineTo(2.4, 5.0); ps.quadraticCurveTo(2.9, 5.0, 2.97, 5.45);
+  ps.lineTo(3.9, 10.4); ps.quadraticCurveTo(3.97, 11.2, 3.15, 11.2); ps.lineTo(-3.15, 11.2);
+  ps.quadraticCurveTo(-3.97, 11.2, -3.9, 10.4); ps.lineTo(-2.97, 5.45); ps.quadraticCurveTo(-2.9, 5.0, -2.4, 5.0);
+  const plateG = new THREE.ExtrudeGeometry(ps, { depth: 2.8, bevelEnabled: true, bevelThickness: 0.2, bevelSize: 0.2, bevelSegments: 4, curveSegments: 32 });
+  plateG.translate(0, 0, -1.4);
+  g.add(mesh(plateG));
+  for (const z of [1.6, -1.6]) {
+    const r = mesh(new THREE.SphereGeometry(1.25, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2));
+    r.scale.y = 0.5; r.rotation.x = z > 0 ? Math.PI / 2 : -Math.PI / 2; r.position.set(-1.6, 8.3, z); g.add(r);   // rivet sits left of centre
+  }
+  // hook body: mirror-symmetric about the axis, sides flaring slightly to a round top (bar 1.5 wide);
+  // the right-hand side is left open for the gate
+  const hs = new THREE.Shape();
+  hs.moveTo(-3.85, 10.6); hs.lineTo(-4.5, 18.6);
+  hs.absarc(0, 18.6, 4.5, Math.PI, 0, true);
+  hs.lineTo(4.48, 17.2); hs.lineTo(2.98, 18.0); hs.lineTo(3.0, 18.6);
+  hs.absarc(0, 18.6, 3.0, 0, Math.PI, false);
+  hs.lineTo(-2.35, 10.6); hs.lineTo(-3.85, 10.6);
+  const hookG = new THREE.ExtrudeGeometry(hs, { depth: 1.8, bevelEnabled: true, bevelThickness: 0.25, bevelSize: 0.2, bevelSegments: 4, curveSegments: 64 });
+  hookG.translate(0, 0, -0.9);
+  g.add(mesh(hookG));
+  // spring gate: the right-hand side bar, from the plate up to the hook tip with a matching diagonal joint
+  const gs = new THREE.Shape();
+  gs.moveTo(2.35, 11.1); gs.lineTo(3.85, 11.1); gs.lineTo(4.46, 17.12); gs.lineTo(2.96, 17.92); gs.lineTo(2.35, 11.1);
+  const gateG = new THREE.ExtrudeGeometry(gs, { depth: 1.5, bevelEnabled: true, bevelThickness: 0.15, bevelSize: 0.12, bevelSegments: 2 });
+  gateG.translate(0, 0, -0.75); g.add(mesh(gateG));
+  // spring coil visible at the gate root
+  const spring = mesh(new THREE.TubeGeometry(new (class extends THREE.Curve { getPoint(u, o = new THREE.Vector3()){ const a = u * Math.PI * 9; return o.set(0.8 + u * 1.5, 11.65 + 0.32 * Math.cos(a), 0.32 * Math.sin(a)); } })(), 120, 0.1, 6, false), steelDark);
+  g.add(spring);
+  return { g, eR, eT, top: 23.1 };
+}
+
+// 5. engraved tag: 21 × 8 × 1.5, hole near one end, frosted laser text on polished steel
+function engravedTag(){
+  const L = 21, W = 8, r = 3.2, hy = L / 2 - 2.0, hr = 0.8;
+  const s = new THREE.Shape(), w = W / 2, h = L / 2;
+  s.moveTo(-w + r, -h); s.lineTo(w - r, -h); s.quadraticCurveTo(w, -h, w, -h + r);
+  s.lineTo(w, h - r); s.quadraticCurveTo(w, h, w - r, h); s.lineTo(-w + r, h);
+  s.quadraticCurveTo(-w, h, -w, h - r); s.lineTo(-w, -h + r); s.quadraticCurveTo(-w, -h, -w + r, -h);
+  const hole = new THREE.Path(); hole.absarc(0, hy, hr, 0, Math.PI * 2, true); s.holes.push(hole);
+  const geo = new THREE.ExtrudeGeometry(s, { depth: 1.3, bevelEnabled: true, bevelThickness: 0.1, bevelSize: 0.1, bevelSegments: 2, curveSegments: 24 });
+  geo.translate(0, 0, -0.65);
+  const PX = 60, cw = W * PX, ch = L * PX;
+  const draw = (bg, fg) => {
+    const c = document.createElement('canvas'); c.width = cw; c.height = ch; const x = c.getContext('2d');
+    x.fillStyle = bg; x.fillRect(0, 0, cw, ch);
+    x.save(); x.translate(cw / 2, 11.0 * PX); x.rotate(Math.PI / 2);   // logo runs vertically, centred on the tag
+    x.font = '300 100px "Avenir Next", "Century Gothic", "Helvetica Neue", Arial, sans-serif';
+    const k = (13.3 * PX) / x.measureText('Alltäglich').width; x.scale(k, k);
+    x.fillStyle = fg; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText('Alltäglich', 0, 0); x.restore();
+    const t = new THREE.CanvasTexture(c); t.repeat.set(1 / W, 1 / L); t.offset.set(0.5, 0.5); t.anisotropy = 8; return t;
   };
-  // Rings: `flat` lie on the deck (optionally tilted about x); `standing` eyes
-  // stand upright with the chain running through them.
-  const flat = (x, d, R, r, lift = 0, tilt = 0, yaw = 0) => add(new THREE.TorusGeometry(R, r, 16, 72), chrome, x, deckY + r + lift, d, -Math.PI / 2 + tilt, yaw);
-  const standing = (x, y, d, R, r, yaw = Math.PI / 2) => add(new THREE.TorusGeometry(R, r, 14, 56), chrome, x, y, d, 0, yaw);
-  const rod = (x, y, d0, d1, r, mat = chrome) => add(new THREE.CylinderGeometry(r, r, Math.abs(d1 - d0), 24), mat, x, y, (d0 + d1) / 2, Math.PI / 2);
-
-  // Screw eye set into the back wall, low in the clear base.
-  rod(0, eyeY, -.6, .2, .1);
-  add(new THREE.CylinderGeometry(.17, .17, .08, 24), chrome, 0, eyeY, .05, Math.PI / 2);
-  standing(0, eyeY, .5, .3, .08);
-  // Small jump ring sloping down from the eye, then the first full ring.
-  const slope = Math.atan2(eyeY - (deckY + .26), 1.44);
-  add(new THREE.TorusGeometry(.72, .09, 16, 64), chrome, 0, (eyeY + deckY + .26) / 2, 1.2, -Math.PI / 2 - slope);
-  flat(0, 3.15, 1.3, .14);
-  // Swivel clasp: lower eye, collar, flattened barrel with its side lever, upper eye.
-  const clasp = deckY + .4;
-  standing(0, clasp, 4.45, .34, .08);
-  rod(0, clasp, 4.75, 5.35, .12);
-  rod(0, clasp, 5.3, 5.52, .34);
-  const barrel = add(new THREE.CapsuleGeometry(.42, 2.1, 8, 28), chrome, 0, clasp, 6.75, Math.PI / 2);
-  barrel.scale.set(1, 1, .9);
-  add(new THREE.BoxGeometry(.2, .2, 2), satin, .5, clasp + .05, 6.85);
-  rod(.5, clasp + .05, 7.85, 8, .14, dark);
-  rod(0, clasp, 8.05, 8.3, .14);
-  standing(0, deckY + .5, 8.8, .48, .1);
-  // Two linked rings; the second rests across the first.
-  flat(0, 10.6, 1.35, .14);
-  flat(0, 13.25, 1.4, .14, .22, -.16);
-  // Tag ring and the thin rounded Alltäglich plate.
-  // Like the photo: the tag ring sits on the side of the ring, the plate trails
-  // off diagonally towards the pool. Directions are (x, d).
-  const attach = new THREE.Vector2(.9, -.43).normalize(), trail = new THREE.Vector2(.67, -.74).normalize();
-  const tagRing = new THREE.Vector2(0, 10.6).addScaledVector(attach, 1.35);
-  standing(tagRing.x, deckY + .24, tagRing.y, .3, .06, Math.atan2(-attach.y, -attach.x));
-  createTag(group, satin, dark, tagRing, trail, deckY, Z);
-  // Swivel snap hook: eye, shaft with washers, screw housing, hook and gate.
-  standing(0, deckY + .42, 14.55, .42, .1);
-  rod(0, deckY + .42, 14.85, 15.4, .15);
-  for (const d of [15, 15.25]) rod(0, deckY + .42, d, d + .06, .3);
-  add(roundedSlab(2.3, 2.1, .7, .3), chrome, 0, deckY + .07, 16.5);
-  add(new THREE.CylinderGeometry(.4, .4, .1, 28), satin, .35, deckY + .8, 16.4);
-  add(new THREE.BoxGeometry(.62, .05, .1), dark, .35, deckY + .86, 16.4, 0, .7);
-  const hookPath = [[-.75, 17.4], [-1.05, 18.6], [-1.15, 19.9], [-.95, 21.05], [-.4, 21.7], [.3, 21.75], [.9, 21.25], [1.12, 20.4], [1.02, 19.75]]
-    .map(([x, d]) => new THREE.Vector3(x, deckY + .3, Z(d)));
-  const hook = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(hookPath), 80, .3, 18), chrome);
-  hook.castShadow = true; hook.receiveShadow = true; group.add(hook);
-  add(new THREE.SphereGeometry(.3, 18, 12), chrome, 1.02, deckY + .3, 19.75);
-  const gate = [[.82, 17.45], [.9, 18.4], [1.0, 19.55]].map(([x, d]) => new THREE.Vector3(x, deckY + .3, Z(d)));
-  const gateMesh = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(gate), 24, .18, 14), satin);
-  gateMesh.castShadow = true; group.add(gateMesh);
-  add(new THREE.BoxGeometry(.32, .2, .5), satin, .95, deckY + .32, 17.85);
-  rod(.82, deckY + .3, 17.3, 17.55, .2, satin);
-
-  const materials = [chrome, satin, dark];
-  return { object: group, materials };
+  const map = draw('#c4c6c9', '#eceef0'); map.colorSpace = THREE.SRGBColorSpace;
+  const rough = draw('#454545', '#e0e0e0');
+  // body: plain brushed steel everywhere (edges and back carry no lettering)
+  const body = new THREE.MeshPhysicalMaterial({ color: 0xbcbfc2, metalness: 1, roughness: 0.3, anisotropy: 0.6, anisotropyRotation: Math.PI / 2, envMapIntensity: 0.3 });
+  const tag = mesh(geo, [body, steel]);
+  // laser marking: a thin decal on the front face only, running vertically along the tag
+  const mark = new THREE.Mesh(new THREE.ShapeGeometry(s, 24), new THREE.MeshPhysicalMaterial({
+    color: 0xffffff, map, roughnessMap: rough, roughness: 1, metalness: 1, anisotropy: 0.6, anisotropyRotation: Math.PI / 2,
+    envMapIntensity: 0.3, polygonOffset: true, polygonOffsetFactor: -2 }));
+  mark.position.z = 0.751; tag.add(mark);
+  const k = 0.9; tag.scale.set(k, k, 1.2 / 1.5);   // 10% smaller outline, 1.2 mm thick
+  return { tag, holeY: hy * k, holeR: hr * k };
 }
 
-// Rounded rectangle slab, centred on x and d, resting on y = 0.
-function roundedSlab(width, depth, height, radius) {
-  const shape = roundedRect(width, depth, radius);
-  const geo = new THREE.ExtrudeGeometry(shape, { depth: height - .1, bevelEnabled: true, bevelSize: .06, bevelThickness: .05, bevelSegments: 3, curveSegments: 10 });
-  geo.rotateX(-Math.PI / 2); geo.translate(0, .05, 0);
-  return geo;
-}
-function roundedRect(width, depth, radius) {
-  const w = width / 2, d = depth / 2, shape = new THREE.Shape();
-  shape.moveTo(-w + radius, -d); shape.lineTo(w - radius, -d); shape.quadraticCurveTo(w, -d, w, -d + radius);
-  shape.lineTo(w, d - radius); shape.quadraticCurveTo(w, d, w - radius, d);
-  shape.lineTo(-w + radius, d); shape.quadraticCurveTo(-w, d, -w, d - radius);
-  shape.lineTo(-w, -d + radius); shape.quadraticCurveTo(-w, -d, -w + radius, -d);
-  return shape;
+function assemble(product, blockTop, FLOOR_Z){
+  // Laid flat on the table (local z = height; FLOOR_Z = table under the back doming).
+  // Links alternate: flat part → ring standing on edge → flat part, each wire passing through the next one's opening.
+  const zR = (R, t) => FLOOR_Z + R + t;                       // centre height of a ring standing on the table
+  const across = (R, dz) => Math.sqrt(Math.max(0, R * R - dz * dz)); // half-chord of a standing ring at height dz
+
+  // 1. eye pin screwed into the top edge; its eye lies flat at mid-thickness
+  const pin = eyePin(); pin.g.position.y = blockTop; product.add(pin.g);
+  const eyeC = blockTop + pin.eyeY, eyeZ = 0;
+
+  // 2. large jump ring Ø9, standing on edge, its near wire through the pin's eye
+  const BR = 4.0, BT = 0.48, rz = zR(BR, BT);
+  const r2c = eyeC + pin.R - pin.t - BT + across(BR, eyeZ - rz);
+  const r2 = ring(BR, BT); r2.rotation.y = Math.PI / 2; r2.position.set(0, r2c, rz); product.add(r2);
+
+  // 3. figure-8 swivel lying flat; ring 2's far wire sits inside its lower loop
+  const f8 = figure8(), z8 = FLOOR_Z + 2.25 * 0.9;
+  const loopEnd = r2c + across(BR, z8 - rz) - (BT + f8.t);
+  f8.g.position.set(0, loopEnd - f8.t, z8); product.add(f8.g);
+
+  // 4. large jump ring Ø9, standing on edge, its near wire inside the upper loop
+  const loopTop = f8.g.position.y + f8.len - f8.t;
+  const r4c = loopTop - (f8.t + BT) + across(BR, z8 - rz);
+  const r4 = ring(BR, BT); r4.rotation.y = Math.PI / 2; r4.position.set(0, r4c, rz); product.add(r4);
+
+  // 6. small jump ring Ø6.6 lying flat, ring 4's bottom arc dipping through it
+  const SR = 2.75, ST = 0.55;
+  const r6c = new THREE.Vector3(1.2, r4c, FLOOR_Z + ST + 0.05);
+  const r6 = ring(SR, ST); r6.position.copy(r6c); product.add(r6);
+
+  // 5. tag lying flat beside the chain, its hole threaded on ring 6
+  const tg = engravedTag();
+  const pivot = new THREE.Group();
+  pivot.position.set(r6c.x + SR, r6c.y, FLOOR_Z + 0.6);
+  pivot.rotation.set(0, 0, 1.35);
+  tg.tag.position.y = -tg.holeY; pivot.add(tg.tag); product.add(pivot);
+
+  // 7. snap hook lying flat (resting on its rivet); its eye catches ring 4's far wire
+  const sh = snapHook(), zh = FLOOR_Z + 2.2;
+  const wire4 = r4c + across(BR, zh - rz);
+  const eyeY = wire4 - (BT + sh.eT) + sh.eR;
+  sh.g.position.set(0, eyeY, zh); product.add(sh.g);
 }
 
-// Thin rounded metal tag with a hanging hole and the engraved wordmark.
-function createTag(group, metal, ink, ring, outward, deckY, Z) {
-  const W = 2.2, L = 4.9, T = .12, holeFromEnd = .45;
-  const shape = roundedRect(W, L, .55), hole = new THREE.Path();
-  hole.absarc(0, L / 2 - holeFromEnd, .2, 0, Math.PI * 2, true); shape.holes.push(hole);
-  const geo = new THREE.ExtrudeGeometry(shape, { depth: T - .04, bevelEnabled: true, bevelSize: .03, bevelThickness: .02, bevelSegments: 2, curveSegments: 14 });
-  geo.rotateX(-Math.PI / 2); geo.translate(0, .02, 0);
-  const tag = new THREE.Group();
-  const plate = new THREE.Mesh(geo, metal); plate.castShadow = true; plate.receiveShadow = true; tag.add(plate);
-  // Engraving: dark letters along the long axis, just above the top face.
-  const canvas = document.createElement('canvas'); canvas.width = 512; canvas.height = 128;
-  const ctx = canvas.getContext('2d'); ctx.fillStyle = '#fff'; ctx.font = '500 70px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('Alltäglich', 256, 66);
-  const texture = new THREE.CanvasTexture(canvas); texture.colorSpace = THREE.SRGBColorSpace; texture.anisotropy = 8;
-  const engraving = new THREE.Mesh(new THREE.PlaneGeometry(3.3, .82), new THREE.MeshStandardMaterial({ color: ink.color, metalness: .6, roughness: .55, alphaMap: texture, transparent: true, depthWrite: false }));
-  engraving.rotation.set(-Math.PI / 2, 0, -Math.PI / 2); engraving.position.set(0, T + .005, .3); tag.add(engraving);
-  // Shape +y (after rotateX: -z) points to the hole end; aim that end at the ring.
-  const along = new THREE.Vector2(-outward.x, -outward.y);
-  const center = ring.clone().addScaledVector(outward, L / 2 - holeFromEnd);
-  tag.position.set(center.x, deckY, Z(center.y));
-  // Local -z must point (in world x/z) towards the ring: world dir = (along.x, -along.y).
-  tag.rotation.y = Math.atan2(-along.x, along.y);
-  group.add(tag);
+
+export function createKeyringHardware(root, { wallZ, deckY }) {
+  const group = new THREE.Group(); group.name = 'KeyringHardware'; root.add(group);
+  // mm → world: the back wall (23.18 mm from the block centre) lands on wallZ.
+  const s = wallZ / BLOCK_HALF_LENGTH;
+  // Local frame: x across, y away from the block along the chain, z up from the deck.
+  group.rotation.x = -Math.PI / 2; group.scale.setScalar(s);
+  group.position.set(0, deckY + BLOCK_HALF_HEIGHT * s, 0);
+  assemble(group, BLOCK_HALF_LENGTH, -BLOCK_HALF_HEIGHT);
+  group.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  const materials = new Set();
+  group.traverse(o => { if (o.material) for (const m of [].concat(o.material)) { m.userData.envDefault = m.envMapIntensity; materials.add(m); } });
+  return { object: group, materials: [...materials] };
 }
