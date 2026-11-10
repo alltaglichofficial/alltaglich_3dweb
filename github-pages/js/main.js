@@ -200,41 +200,41 @@ async function start() {
   const activePointers = new Set();
   let press = null, gesture = false;
   const canvas = renderer.domElement;
-  // Pick up something on the current island (the pool's bear), carry it above the
-  // water and let go to drop it back in. Runs before the orbit/petting handlers.
+  // Pick up things on the current island (the pool's bear, the keyring chain):
+  // each target in world.grabTargets gets grab(point, camera) / drag(ray, camera) /
+  // release(). Runs before the orbit and petting handlers.
   let carry = null;
-  const carryPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), carryHit = new THREE.Vector3();
   const carryRay = event => {
     const r = canvas.getBoundingClientRect();
     pointer.set((event.clientX - r.left) / r.width * 2 - 1, -(event.clientY - r.top) / r.height * 2 + 1);
     raycaster.setFromCamera(pointer, camera);
   };
-  const carryTo = event => {
-    const g = world.grabbable; carryRay(event);
-    carryPlane.constant = -(g.holdHeight() + world.root.position.y);
-    if (!raycaster.ray.intersectPlane(carryPlane, carryHit)) return;
-    const local = world.root.worldToLocal(carryHit.clone()), [x, z] = g.clamp(local.x, local.z);
-    g.drag(new THREE.Vector3(x, g.holdHeight(), z));
-  };
   canvas.addEventListener('pointerdown', event => {
-    const g = world.grabbable;
-    if (!g || event.button !== 0 || carry) return;
+    const targets = world.grabTargets;
+    if (!targets?.length || event.button !== 0 || carry) return;
     carryRay(event);
-    if (!raycaster.intersectObject(g.object, true).length) return;
+    let best = null;
+    for (const t of targets) {
+      const hit = raycaster.intersectObjects(t.meshes || [t.object], true)[0];
+      if (hit && (!best || hit.distance < best.hit.distance)) best = { t, hit };
+    }
+    if (!best) return;
+    best.t.hitObject = best.hit.object;
+    if (best.t.grab(best.hit.point, camera) === false) return;
     event.stopImmediatePropagation(); event.preventDefault();
-    carry = event.pointerId; controls.enabled = false; transition = false;
+    carry = { id: event.pointerId, target: best.t }; controls.enabled = false; transition = false;
     canvas.setPointerCapture(event.pointerId); canvas.style.cursor = 'grabbing';
-    g.grab(); carryTo(event);
-    document.querySelector('#status').textContent = '곰을 들어 올렸어요. 놓으면 물로 풍덩 떨어져요.';
+    best.t.drag(raycaster.ray, camera);
   }, { capture: true });
   canvas.addEventListener('pointermove', event => {
-    if (carry === event.pointerId) { event.stopImmediatePropagation(); carryTo(event); }
+    if (carry?.id !== event.pointerId) return;
+    event.stopImmediatePropagation(); carryRay(event); carry.target.drag(raycaster.ray, camera);
   }, { capture: true });
   const drop = event => {
-    if (carry !== event.pointerId) return;
+    if (carry?.id !== event.pointerId) return;
     event.stopImmediatePropagation();
-    carry = null; controls.enabled = true; canvas.style.cursor = '';
-    world.grabbable?.release();
+    const t = carry.target; carry = null; controls.enabled = true; canvas.style.cursor = '';
+    t.release();
   };
   canvas.addEventListener('pointerup', drop, { capture: true });
   canvas.addEventListener('pointercancel', drop, { capture: true });

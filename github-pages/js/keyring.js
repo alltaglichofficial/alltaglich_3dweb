@@ -175,19 +175,105 @@ function assemble(product, blockTop, FLOOR_Z){
   const wire4 = r4c + across(BR, zh - rz);
   const eyeY = wire4 - (BT + sh.eT) + sh.eR;
   sh.g.position.set(0, eyeY, zh); product.add(sh.g);
+  const V = (x, y, z) => new THREE.Vector3(x, y, z);
+  return {
+    tagHoleY: tg.holeY,
+    parts: { r2, f8: f8.g, r4, r6, tag: pivot, hook: sh.g },
+    joints: [
+      ['block', 'r2', V(0, eyeC + pin.R - pin.t, eyeZ)],
+      ['r2', 'f8', V(0, loopEnd, z8)],
+      ['f8', 'r4', V(0, loopTop, z8)],
+      ['r4', 'hook', V(0, wire4, zh)],
+      ['r4', 'r6', V(0, r4c, FLOOR_Z + BT)],
+      ['r6', 'tag', V(r6c.x + SR, r6c.y, FLOOR_Z + 0.6)],
+    ],
+  };
 }
 
 
-export function createKeyringHardware(root, { wallZ, deckY }) {
+export function createKeyringHardware(root, { wallZ, deckY, wallX = 5.6, blockTop = 1.8 }) {
   const group = new THREE.Group(); group.name = 'KeyringHardware'; root.add(group);
   // mm → world: the back wall (23.18 mm from the block centre) lands on wallZ.
   const s = wallZ / BLOCK_HALF_LENGTH;
   // Local frame: x across, y away from the block along the chain, z up from the deck.
   group.rotation.x = -Math.PI / 2; group.scale.setScalar(s);
   group.position.set(0, deckY + BLOCK_HALF_HEIGHT * s, 0);
-  assemble(group, BLOCK_HALF_LENGTH, -BLOCK_HALF_HEIGHT);
+  const layout = assemble(group, BLOCK_HALF_LENGTH, -BLOCK_HALF_HEIGHT);
   group.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
   const materials = new Set();
   group.traverse(o => { if (o.material) for (const m of [].concat(o.material)) { m.userData.envDefault = m.envMapIntensity; materials.add(m); } });
-  return { object: group, materials: [...materials] };
+
+  // ---- physics: the chain hangs from the eye pin in the (fixed) block and can be
+  // picked up, lifted and dropped. Loaded lazily; until then the chain just lies still.
+  group.updateMatrixWorld(true);
+  const jointPoints = layout.joints.map(([a, b, p]) => [a, b, group.localToWorld(p.clone())]);
+  let world = null, CANNON = null, grab = null;
+  const pairs = [], meshes = [];
+  for (const obj of Object.values(layout.parts)) obj.traverse(o => { if (o.isMesh) meshes.push(o); });
+  const pickRoot = new THREE.Group(); // grab target object: raycast over all chain meshes
+  const ready = import('https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/dist/cannon-es.js').then(mod => {
+    CANNON = mod;
+    world = new CANNON.World({ gravity: new CANNON.Vec3(0, -90, 0) });
+    world.solver.iterations = 30; world.allowSleep = true;
+    world.defaultContactMaterial.friction = .5; world.defaultContactMaterial.restitution = .05;
+    const GROUND = 1, BLOCK = 2, PART = 4;
+    const ground = new CANNON.Body({ mass: 0, shape: new CANNON.Plane(), collisionFilterGroup: GROUND, collisionFilterMask: PART });
+    ground.quaternion.setFromEuler(-Math.PI / 2, 0, 0); ground.position.set(0, deckY, 0); world.addBody(ground);
+    const blockH = (blockTop - deckY) / 2;
+    const block = new CANNON.Body({ mass: 0, shape: new CANNON.Box(new CANNON.Vec3(wallX, blockH, wallZ)), collisionFilterGroup: BLOCK, collisionFilterMask: PART });
+    block.position.set(0, deckY + blockH, 0); world.addBody(block);
+    const bodies = { block };
+    const v = (x, y, z) => new CANNON.Vec3(x * s, y * s, z * s);
+    const ringShapes = (b, R, t) => { for (let i = 0; i < 10; i++) { const a = i / 10 * Math.PI * 2; b.addShape(new CANNON.Sphere(Math.max(t, .5) * s), v(R * Math.cos(a), R * Math.sin(a), 0)); } };
+    const make = (name, obj, mass, add) => {
+      obj.updateMatrixWorld(true);
+      const p = new THREE.Vector3(), q = new THREE.Quaternion(), sc = new THREE.Vector3();
+      obj.matrixWorld.decompose(p, q, sc); root.attach(obj);
+      const b = new CANNON.Body({ mass, linearDamping: .25, angularDamping: .5, sleepSpeedLimit: .05, collisionFilterGroup: PART, collisionFilterMask: GROUND | BLOCK });
+      add(b); b.position.set(p.x, p.y, p.z); b.quaternion.set(q.x, q.y, q.z, q.w);
+      world.addBody(b); bodies[name] = b; pairs.push({ obj, b }); obj.userData.body = b;
+    };
+    const P = layout.parts;
+    make('r2', P.r2, .4, b => ringShapes(b, 4.0, .48));
+    make('f8', P.f8, .9, b => b.addShape(new CANNON.Box(v(3.6, 8.1, 2.03)), v(0, 8.1, 0)));
+    make('r4', P.r4, .4, b => ringShapes(b, 4.0, .48));
+    make('r6', P.r6, .3, b => ringShapes(b, 2.75, .55));
+    make('tag', P.tag, 1, b => b.addShape(new CANNON.Box(v(3.6, 9.45, .6)), v(0, -layout.tagHoleY, 0)));
+    make('hook', P.hook, 2, b => { ringShapes(b, 4.85, .95); b.addShape(new CANNON.Box(v(4.5, 9, 2.2)), v(0, 14, 0)); });
+    for (const [a, c, w] of jointPoints) {
+      const W = new CANNON.Vec3(w.x, w.y, w.z), A = bodies[a], B = bodies[c];
+      world.addConstraint(new CANNON.PointToPointConstraint(A, A.pointToLocalFrame(W), B, B.pointToLocalFrame(W), 1e6));
+    }
+  }).catch(err => console.warn('Keyring physics unavailable; the chain stays still.', err));
+
+  const plane = new THREE.Plane(), hit = new THREE.Vector3();
+  const target = {
+    object: pickRoot, meshes,
+    grab(point, camera) {
+      if (!world) return false;
+      const local = point.clone().sub(root.position);
+      let o = target.hitObject; while (o && !o.userData.body) o = o.parent;
+      if (!o) return false;
+      const b = o.userData.body, W = new CANNON.Vec3(local.x, local.y, local.z);
+      const mouse = new CANNON.Body({ mass: 0, type: CANNON.Body.KINEMATIC }); mouse.position.copy(W); world.addBody(mouse);
+      const joint = new CANNON.PointToPointConstraint(b, b.pointToLocalFrame(W), mouse, new CANNON.Vec3(), 400); world.addConstraint(joint);
+      plane.setFromNormalAndCoplanarPoint(camera.getWorldDirection(new THREE.Vector3()).negate(), point);
+      world.allowSleep = false; for (const { b: x } of pairs) x.wakeUp();
+      grab = { mouse, joint }; return true;
+    },
+    drag(ray) {
+      if (!grab || !ray.intersectPlane(plane, hit)) return;
+      const l = hit.clone().sub(root.position); l.y = Math.max(l.y, deckY + .3);
+      grab.mouse.position.set(l.x, l.y, l.z);
+    },
+    release() { if (!grab) return; world.removeConstraint(grab.joint); world.removeBody(grab.mouse); grab = null; world.allowSleep = true; },
+  };
+  return {
+    object: group, materials: [...materials], ready, grabTargets: [target],
+    step(dt) {
+      if (!world || dt <= 0) return;
+      world.step(1 / 120, dt, 8);
+      for (const { obj, b } of pairs) { obj.position.set(b.position.x, b.position.y, b.position.z); obj.quaternion.set(b.quaternion.x, b.quaternion.y, b.quaternion.z, b.quaternion.w); }
+    },
+  };
 }

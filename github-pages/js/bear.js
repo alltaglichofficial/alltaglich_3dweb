@@ -4,7 +4,9 @@ import { fluffGeometry } from './geometry.js';
 // The Alltäglich swim bear: sky-blue plush, black swim goggles pushed up on the
 // forehead, a black swimsuit with white trim and a small sewn-on brand tag.
 // It bobs, paddles and spins slowly in the middle of the pool.
-export function createSwimBear(root, home) {
+// `pool` (optional): { inPool(x, z), groundY, clampIn(x, z) } lets the bear be thrown
+// out of the water, land on the ground and hop back in.
+export function createSwimBear(root, home, pool = null) {
   const bear = new THREE.Group(); bear.name = 'AlltaglichSwimBear'; bear.scale.setScalar(1.32); root.add(bear);
   const fur = plushMaterial(0x8ccbea, 0xe6f8ff, .05);
   const muzzleFur = plushMaterial(0xa9daee, 0xf2fbff, .03);
@@ -78,8 +80,11 @@ export function createSwimBear(root, home) {
   }
 
   // States: 'swim' (paddling around home), 'held' (picked up by the visitor),
-  // 'falling' (let go above the water) and 'sink' (plunged under, bobbing back up).
+  // 'falling' (let go / thrown), 'sink' (plunged under, bobbing back up), 'ground'
+  // (landed outside the pool) and 'hop' (jumping back into the water).
   let lastLift = 0, state = 'swim', last = null, vy = 0, sinkT = 0, heldAt = new THREE.Vector3(), swing = 0;
+  const vel = new THREE.Vector3(), track = [], hopFrom = new THREE.Vector3(), hopTo = new THREE.Vector3();
+  let groundT = 0, hopT = 0;
   const pose = (t, flail) => {
     arms.forEach((arm, i) => {
       const side = i ? 1 : -1, stroke = Math.sin(t * (flail ? 9 : 4.2) + i * Math.PI);
@@ -91,9 +96,16 @@ export function createSwimBear(root, home) {
   return {
     object: bear,
     get state() { return state; },
-    grab() { state = 'held'; heldAt.copy(bear.position); swing = 0; rings.forEach(r => { r.visible = false; }); },
-    drag(point) { heldAt.copy(point); },
-    release() { if (state !== 'held') return; state = 'falling'; vy = 0; home.x = bear.position.x; home.z = bear.position.z; },
+    grab() { state = 'held'; heldAt.copy(bear.position); swing = 0; track.length = 0; rings.forEach(r => { r.visible = false; }); },
+    drag(point) { heldAt.copy(point); track.push({ t: performance.now() / 1000, p: point.clone() }); while (track.length > 6) track.shift(); },
+    release() {
+      if (state !== 'held') return;
+      // throw with the pointer's recent velocity (gentle cap so it stays on screen)
+      vel.set(0, 0, 0);
+      if (track.length > 1) { const a = track[0], b = track[track.length - 1], dt = Math.max(.016, b.t - a.t); vel.subVectors(b.p, a.p).divideScalar(dt).multiplyScalar(.7); }
+      vel.y = 0; if (vel.length() > 18) vel.setLength(18);
+      state = 'falling'; vy = vel.length() > 2 ? 3 : 0;
+    },
     update(time, reducedMotion, surfaceHeight) {
       const dt = last === null ? 0 : Math.min(.05, Math.max(0, time - last)); last = time;
       const t = reducedMotion ? 0 : time;
@@ -106,11 +118,32 @@ export function createSwimBear(root, home) {
         pose(time, true); head.rotation.z = Math.sin(time * 6) * .12;
         return { x: bear.position.x, z: bear.position.z, landed: false, splash: 0 };
       }
+      if (state === 'ground') {
+        // sat on the ground for a moment, then hop back into the pool
+        groundT += dt; pose(time, false);
+        bear.rotation.x *= Math.max(0, 1 - dt * 6); bear.rotation.z *= Math.max(0, 1 - dt * 6);
+        if (groundT > 1.3) { state = 'hop'; hopT = 0; hopFrom.copy(bear.position); const [hx, hz] = pool.clampIn(bear.position.x, bear.position.z); hopTo.set(hx, surfaceHeight(hx, hz), hz); bear.rotation.y = Math.atan2(hx - bear.position.x, hz - bear.position.z); }
+        return { x: bear.position.x, z: bear.position.z, landed: false, splash: 0 };
+      }
+      if (state === 'hop') {
+        hopT += dt / 1.0; const k = Math.min(1, hopT);
+        bear.position.lerpVectors(hopFrom, hopTo, k); bear.position.y += Math.sin(k * Math.PI) * 3.2;
+        pose(time, true);
+        if (k >= 1) { state = 'sink'; sinkT = 0; home.x = hopTo.x; home.z = hopTo.z; rings.forEach(r => { r.visible = true; }); return { x: hopTo.x, z: hopTo.z, landed: false, splash: 1.3 }; }
+        return { x: bear.position.x, z: bear.position.z, landed: false, splash: 0 };
+      }
       if (state === 'falling') {
         vy -= 26 * dt; bear.position.y += vy * dt;
+        bear.position.x += vel.x * dt; bear.position.z += vel.z * dt; vel.multiplyScalar(Math.max(0, 1 - dt * .4));
         bear.rotation.x += dt * 1.2; pose(time, true);
+        const inside = !pool || pool.inPool(bear.position.x, bear.position.z);
+        if (!inside && bear.position.y <= pool.groundY + .62) {
+          bear.position.y = pool.groundY + .62; state = 'ground'; groundT = 0; vel.set(0, 0, 0);
+          return { x: bear.position.x, z: bear.position.z, landed: false, splash: 0 };
+        }
         const surface = surfaceHeight(bear.position.x, bear.position.z);
-        if (bear.position.y <= surface - .02) {
+        if (inside && bear.position.y <= surface - .02) {
+          home.x = bear.position.x; home.z = bear.position.z;
           const strength = Math.min(2.4, .8 + Math.abs(vy) * .09);
           state = 'sink'; sinkT = 0; vy = Math.min(-2, vy * .25);
           rings.forEach(r => { r.visible = true; });
