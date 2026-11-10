@@ -251,7 +251,13 @@ export function createKeyringHardware(root, { wallZ, deckY, wallX = 5.6, blockTo
     if (body) world.addEventListener('preStep', () => {
       if (grab) return;
       const up = new CANNON.Vec3(0, 1, 0), bodyUp = block.quaternion.vmult(up);
-      block.torque.vadd(bodyUp.cross(up).scale(block.mass * 900), block.torque);
+      if (bodyUp.y > .995) return;
+      let axis = bodyUp.cross(up);
+      // upside down: the cross product vanishes, so roll about the block's own long axis
+      if (axis.length() < .35) axis = block.quaternion.vmult(new CANNON.Vec3(0, 0, 1));
+      axis.normalize();
+      block.wakeUp();
+      block.torque.vadd(axis.scale(block.mass * 1400 * (1.2 - bodyUp.y)), block.torque);
     });
     for (const [a, c, w] of jointPoints) {
       const W = new CANNON.Vec3(w.x, w.y, w.z), A = bodies[a], B = bodies[c];
