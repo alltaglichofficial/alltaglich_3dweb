@@ -30,12 +30,29 @@ export function createDropletIsland(scene, island) {
   const acrylic = new THREE.MeshPhysicalMaterial({ color: 0xffffff, transparent: true, depthWrite: false, roughness: .04, ior: 1.49, specularIntensity: 1, clearcoat: 1, clearcoatRoughness: .03, envMapIntensity: 1.4 });
   acrylic.onBeforeCompile = shader => {
     shader.fragmentShader = shader.fragmentShader.replace('#include <opaque_fragment>', `#include <opaque_fragment>
-      float rim = pow(1.0 - saturate(abs(dot(normal, normalize(vViewPosition)))), 3.0);
-      float glint = saturate((max(max(outgoingLight.r, outgoingLight.g), outgoingLight.b) - 1.35) * 1.2);
-      gl_FragColor.rgb = mix(vec3(.80, .88, .90), vec3(1.), glint) * mix(1.0, .82, rim);
-      gl_FragColor.a = saturate(.035 + rim * .55 + glint * .6);`);
+      vec3 V = normalize(vViewPosition);
+      vec3 up = normalize((viewMatrix * vec4(0., 1., 0., 0.)).xyz);
+      // two fixed sparkle lights: the overhead lamp and a soft one from the front right
+      vec3 L1 = normalize((viewMatrix * vec4(-.24, .88, .42, 0.)).xyz), L2 = normalize((viewMatrix * vec4(.45, .6, .66, 0.)).xyz);
+      float fres = pow(1.0 - saturate(abs(dot(normal, V))), 4.0);
+      // polished cut edges glow pale green-cyan, like real acrylic
+      float side = smoothstep(.55, .9, 1.0 - abs(dot(normal, up)));
+      float sp = pow(max(dot(normal, normalize(L1 + V)), 0.), 90.) * .55 + pow(max(dot(normal, normalize(L2 + V)), 0.), 40.) * .25;
+      vec3 col = mix(vec3(.9, .95, .96), vec3(.52, .84, .80), side);
+      col = mix(col, vec3(1.), fres * .5) + sp;
+      gl_FragColor = vec4(col, saturate(.03 + side * .78 + fres * .38 + min(sp, 1.) * .7));`);
   };
   const sheet = new THREE.Mesh(sheetGeo, acrylic); sheet.renderOrder = 1; root.add(sheet);
+  // Soft contact shadow just outside the sheet's outline (offset away from the lamp),
+  // so the sheet's edge and thickness read on the table without darkening what's under it.
+  {
+    const c = document.createElement('canvas'), px = 512, py = Math.round(px * D / W), pad = 14; c.width = px + pad * 2; c.height = py + pad * 2;
+    const g = c.getContext('2d'), rr = (x, y, w, h, r) => { g.beginPath(); g.roundRect(x, y, w, h, r); };
+    // a soft falloff band hugging the outline (drawn as fading rings, no canvas filters needed)
+    for (let i = pad; i >= 0; i--) { g.strokeStyle = `rgba(255,255,255,${(.16 * Math.pow(1 - i / pad, 2)).toFixed(3)})`; g.lineWidth = 2.2; rr(pad + 2 - i, pad + 1 - i, px + i * 2, py + i * 2, 19 + i); g.stroke(); }
+    const halo = new THREE.Mesh(new THREE.PlaneGeometry(W * (px + pad * 2) / px, D * (py + pad * 2) / py), new THREE.MeshBasicMaterial({ color: 0x3a342a, alphaMap: new THREE.CanvasTexture(c), transparent: true, opacity: .2, depthWrite: false }));
+    halo.rotation.x = -Math.PI / 2; halo.position.set(0, SHEET_Y - .035, 0); root.add(halo);
+  }
 
   // Water: clear epoxy-like lenses with the guide's faint cyan/mint tint. Every drop gets
   // its own material (same shader source, so they share one compiled program) carrying
@@ -44,12 +61,22 @@ export function createDropletIsland(scene, island) {
   const waterShader = (tint, strength) => shader => {
     shader.uniforms.uTint = { value: tint }; shader.uniforms.uStrength = { value: strength };
     shader.fragmentShader = 'uniform vec3 uTint;\nuniform float uStrength;\n' + shader.fragmentShader.replace('#include <opaque_fragment>', `#include <opaque_fragment>
-      float rim = pow(1.0 - saturate(dot(normal, normalize(vViewPosition))), 2.2);
-      // only true highlights (well above the white studio's level) become glints
-      float glint = saturate((max(max(outgoingLight.r, outgoingLight.g), outgoingLight.b) - 1.45) * 1.4);
-      vec3 body = mix(uTint, uTint * vec3(.62, .70, .74), rim);
-      gl_FragColor.rgb = mix(body, vec3(1.), glint);
-      gl_FragColor.a = saturate(uStrength * 2.4 + rim * .5 + glint * .85);`);
+      vec3 V = normalize(vViewPosition);
+      vec3 up = normalize((viewMatrix * vec4(0., 1., 0., 0.)).xyz);
+      // two fixed sparkle lights: the overhead lamp and a soft one from the front right
+      vec3 L1 = normalize((viewMatrix * vec4(-.24, .88, .42, 0.)).xyz), L2 = normalize((viewMatrix * vec4(.45, .6, .66, 0.)).xyz);
+      float fres = pow(1.0 - saturate(abs(dot(normal, V))), 4.0);
+      // Fake refraction of a drop on a surface: the steep outer wall bends in the dark
+      // surroundings (a dark outline), the light focuses into a bright band just inside
+      // it (caustic), the flat top stays clear, and two sharp sparkles from the lights.
+      float slope = 1.0 - saturate(dot(normal, up));
+      float edge = smoothstep(.45, .85, slope);
+      float caustic = smoothstep(.05, .18, slope) * (1.0 - smoothstep(.3, .5, slope));
+      float sp = pow(max(dot(normal, normalize(L1 + V)), 0.), 420.) * 3.0 + pow(max(dot(normal, normalize(L2 + V)), 0.), 160.) * 1.2;
+      vec3 col = mix(uTint, uTint * vec3(.36, .46, .5), edge);
+      col = mix(col, vec3(1.15, 1.15, 1.12), caustic * .75);
+      col = mix(col, vec3(.95, .98, 1.), fres * .55) + sp;
+      gl_FragColor = vec4(col, saturate(uStrength * 2.0 + edge * .7 + caustic * .45 + fres * .3 + min(sp, 1.) * .9));`);
   };
   const waterMaterial = (hex, strength) => {
     const m = new THREE.MeshPhysicalMaterial({ color: 0xffffff, transparent: true, opacity: 1, depthWrite: false, roughness: .03, ior: 1.33, specularIntensity: 1, clearcoat: 1, clearcoatRoughness: .02, envMapIntensity: 1.8 });
