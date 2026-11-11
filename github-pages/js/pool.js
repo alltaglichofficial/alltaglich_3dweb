@@ -67,7 +67,7 @@ export function createPoolIsland(scene, island) {
     // playing bear, then climbs back out onto the deck the same way.
     activity: { type: 'swim', entry: { x: 0, z: 10 }, ladderTop: { x: 0, z: WALL_Z - .15, y: 1 }, waterEntry: { x: 0, z: 7 }, corridorStart: { x: 0, z: 2.8 }, route: [{ x: 0, z: 2.8 }, { x: -1.65, z: 2.35 }, { x: -1.65, z: -2.6 }, { x: 1.6, z: -2.6 }, { x: 1.6, z: 2.35 }, { x: 0, z: 2.8 }] },
     bear, droplets, hardware,
-    // 'lane' (lane-mark tiles) or 'photo' (the product photo's print); switched from the bottom tab.
+    // 'lane' (lane-mark tiles) or 'photo' (navy tiles in a black grid); switched from the bottom tab.
     print: 'lane',
     setPrint(kind) { world.print = kind === 'photo' ? 'photo' : 'lane'; setPrintTexture(world.print); },
     // Things the visitor can pick up (see main.js): the bear, anywhere over the
@@ -178,19 +178,29 @@ function paintSampleTiles(floor) {
     if (width !== 256) { printTop.mesh = object; printTop.lane = texture; }
   });
 }
-// The print can be switched to the real keyring's photographed print (deep blue
-// tiles with sunlit ripples), cropped from the product photo and turned so the
-// ring end sits at the back like the lane print.
+// The alternative print, from the product photo: navy tiles in a black grid
+// (8 × 12, as on the photographed keyring), without the lane mark.
 const printTop = { mesh: null, lane: null, photo: null };
+function navyGridTexture(width, height) {
+  const canvas = document.createElement('canvas'); canvas.width = width; canvas.height = height;
+  const ctx = canvas.getContext('2d'), cols = 8, rows = 12, tw = width / cols, th = height / rows, line = Math.max(4, tw * .07);
+  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+    const j = (Math.sin(c * 91.7 + r * 47.3) * 9631.1 % 1) * 8;
+    ctx.fillStyle = `rgb(${Math.round(52 + j * .6)},${Math.round(96 + j)},${Math.round(142 + j)})`;
+    ctx.fillRect(c * tw, r * th, tw + 1, th + 1);
+  }
+  ctx.fillStyle = '#121418';
+  for (let c = 0; c <= cols; c++) ctx.fillRect(c * tw - line / 2, 0, line, height);
+  for (let r = 0; r <= rows; r++) ctx.fillRect(0, r * th - line / 2, width, line);
+  const tex = new THREE.CanvasTexture(canvas); tex.flipY = false; tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 8;
+  return tex;
+}
 function setPrintTexture(kind) {
   const m = printTop.mesh?.material; if (!m) return;
   const apply = tex => { m.map = tex; m.emissiveMap = tex; m.needsUpdate = true; };
   if (kind !== 'photo') { apply(printTop.lane); return; }
-  if (printTop.photo) { apply(printTop.photo); return; }
-  new THREE.TextureLoader().load(new URL('../assets/pool-print-photo.jpg', import.meta.url).href, tex => {
-    tex.flipY = false; tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 8;
-    printTop.photo = tex; apply(tex);
-  });
+  if (!printTop.photo) { const { width, height } = printTop.lane.image; printTop.photo = navyGridTexture(width, height); }
+  apply(printTop.photo);
 }
 
 // Clear resin with a light blue cast, as on the keyring: barely-there micro
