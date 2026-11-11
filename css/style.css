@@ -59,3 +59,38 @@
 .zone-nav .nav-dot.print{background:#245e8a}
 .zone-nav [hidden]{display:none!important}
 .zone-nav .nav-dot.drops{background:#9fc6d3}
+
+/* Lighting picker: the bulb button opens a sheet with the 34 lighting set-ups */
+.island-indicator .light-menu{display:grid;place-items:center;padding:0}
+.light-menu svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linejoin:round;stroke-linecap:round}
+.light-menu[aria-expanded=true]{background:#374731;border-color:#374731;color:#f3f0e8}
+.light-panel{position:fixed;inset:auto 0 max(12px,env(safe-area-inset-bottom)) 0;margin:0 auto;width:min(600px,calc(100vw - 20px));max-height:min(44vh,360px);padding:0;border:1px solid #d8dfcd;border-radius:20px;background:#fffdf6f2;color:#3f4a36;box-shadow:0 10px 40px #42512b26;backdrop-filter:blur(14px);overflow:hidden;font:inherit}
+.light-panel:popover-open{display:flex;flex-direction:column}
+.light-panel header{display:flex;align-items:center;gap:10px;padding:11px 12px 9px 16px;border-bottom:1px solid #e3e7d9}
+.light-eyebrow{font-size:9px;letter-spacing:1.4px;color:#8a9679;white-space:nowrap}
+.light-panel header strong{flex:1;min-width:0;font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.light-steps{display:flex;gap:6px}
+.light-steps button{width:34px;height:34px;border-radius:50%;border:1px solid #d3dac6;background:transparent;color:#5d6d4d;font-size:18px;line-height:1;cursor:pointer}
+.light-steps button:hover{background:#e7ebdc}
+.light-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(128px,1fr));gap:6px;padding:10px 12px 12px;overflow-y:auto;overscroll-behavior:contain}
+.light-list button{display:flex;align-items:center;gap:8px;min-height:40px;padding:0 10px;border:1px solid #dfe4d4;border-radius:12px;background:#f6f7ee;color:#46523b;font-size:11px;text-align:left;cursor:pointer}
+.light-list button b{font-weight:500;font-size:9px;color:#93a082;font-variant-numeric:tabular-nums;min-width:14px}
+.light-list button span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.light-list button:hover{background:#eaeedd}
+.light-list button[aria-pressed=true]{background:#374731;border-color:#374731;color:#f3f0e8}
+.light-list button[aria-pressed=true] b{color:#c5d1b3}
+.light-panel button:focus-visible{outline:2px solid #627e48;outline-offset:2px}
+@media(max-width:650px){.light-list{grid-template-columns:repeat(3,1fr)}.light-eyebrow{display:none}.light-list button{padding:0 8px;gap:6px;font-size:10.5px}}
+@media(max-width:360px){.light-list{grid-template-columns:repeat(2,1fr)}}
+:root[data-mood=dark] .light-menu[aria-expanded=true]{background:#33402d;border-color:#4c5d43;color:#eef3e4}
+:root[data-mood=dark] .light-panel{background:#1a1c20f2;border-color:#33363c;color:#d9d6cb;box-shadow:0 10px 40px #0008}
+:root[data-mood=dark] .light-panel header{border-color:#2e3137}
+:root[data-mood=dark] .light-eyebrow{color:#7f8279}
+:root[data-mood=dark] .light-steps button{border-color:#3a3d44;color:#c9c6bb}
+:root[data-mood=dark] .light-steps button:hover{background:#262930}
+:root[data-mood=dark] .light-list button{background:#1f2126;border-color:#35383f;color:#d4d1c6}
+:root[data-mood=dark] .light-list button b{color:#7f8279}
+:root[data-mood=dark] .light-list button:hover{background:#282b31}
+:root[data-mood=dark] .light-list button[aria-pressed=true]{background:#33402d;border-color:#4c5d43;color:#eef3e4}
+.island-indicator>span{white-space:nowrap}
+@media(max-width:650px){.light-panel{max-height:36vh}.island-indicator{gap:8px}}

@@ -5,7 +5,7 @@ import { ISLANDS } from './islands.js';
 import { Navigation } from './navigation.js';
 import { createDog } from './dog.js';
 import { createBondInteractions } from './bond.js';
-import { createLighting } from './lighting.js';
+import { createLighting, LIGHTS } from './lighting.js';
 
 const loading = document.querySelector('#load-state');
 const errorPanel = document.querySelector('#error-state');
@@ -51,21 +51,52 @@ async function start() {
   await Promise.all(worlds.map(world => world.ready));
   worlds.forEach(world => world.setupEnvironment?.(renderer));
   worlds.forEach(world => world.precompile?.(renderer, scene, camera));
-  // Room mood: lamp-lit studio or a dark room. ?mood=dark opens straight in the dark.
+  // Lighting: the lamp-lit studio, a dark room, or one of 34 photographic
+  // set-ups from the picker. ?mood=dark (or ?mood=rembrandt ...) opens straight in it.
   const moodButton = document.querySelector('#moodToggle');
+  const lightPanel = document.querySelector('#light-panel'), lightName = document.querySelector('#light-name');
   const storedMood = () => { try { return localStorage.getItem('alltaglich-mood'); } catch { return null; } };
+  for (const light of LIGHTS) {
+    const button = document.createElement('button');
+    button.type = 'button'; button.dataset.light = light.id; button.title = light.en;
+    button.innerHTML = `<b>${light.no ? String(light.no).padStart(2, '0') : '·'}</b><span>${light.ko}</span>`;
+    document.querySelector('#light-list').appendChild(button);
+  }
   function setMood(name) {
     const mood = lighting.setMood(name, worlds);
-    moodButton.setAttribute('aria-pressed', String(mood === 'dark'));
-    moodButton.setAttribute('aria-label', mood === 'dark' ? '밝은 조명으로 바꾸기' : '어두운 방 분위기로 바꾸기');
+    const dark = lighting.ui === 'dark';
+    moodButton.setAttribute('aria-pressed', String(dark));
+    moodButton.setAttribute('aria-label', dark ? '밝은 조명으로 바꾸기' : '어두운 방 분위기로 바꾸기');
     moodButton.title = moodButton.getAttribute('aria-label');
+    document.querySelectorAll('[data-light]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.light === mood)));
+    lightName.textContent = lighting.label;
+    document.querySelector('meta[name=theme-color]')?.setAttribute('content', dark ? '#0f1013' : '#f3f0e8');
+    return mood;
+  }
+  function chooseMood(name, message) {
+    const mood = setMood(name);
+    try { localStorage.setItem('alltaglich-mood', mood); } catch { /* private mode: mood just isn't remembered */ }
+    document.querySelector('#status').textContent = message || `조명을 ${lighting.label}(으)로 바꿨어요.`;
     return mood;
   }
   setMood(new URLSearchParams(location.search).get('mood') || storedMood() || 'lamp');
   moodButton.addEventListener('click', () => {
-    const mood = setMood(lighting.mood === 'dark' ? 'lamp' : 'dark');
-    try { localStorage.setItem('alltaglich-mood', mood); } catch { /* private mode: mood just isn't remembered */ }
-    document.querySelector('#status').textContent = mood === 'dark' ? '어두운 방에서 조명 하나만 켠 분위기예요.' : '부드러운 실내 조명으로 밝혔어요.';
+    const mood = lighting.ui === 'dark' ? 'lamp' : 'dark';
+    chooseMood(mood, mood === 'dark' ? '어두운 방에서 조명 하나만 켠 분위기예요.' : '부드러운 실내 조명으로 밝혔어요.');
+  });
+  document.querySelector('#light-list').addEventListener('click', event => {
+    const button = event.target.closest('[data-light]'); if (button) chooseMood(button.dataset.light);
+  });
+  // Step through the set-ups without opening the list.
+  document.querySelectorAll('[data-light-step]').forEach(button => button.addEventListener('click', () => {
+    const index = LIGHTS.findIndex(light => light.id === lighting.mood);
+    chooseMood(LIGHTS[(index + Number(button.dataset.lightStep) + LIGHTS.length) % LIGHTS.length].id);
+    document.querySelector(`[data-light="${lighting.mood}"]`)?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }));
+  lightPanel.addEventListener('toggle', () => {
+    const open = lightPanel.matches(':popover-open');
+    document.querySelector('#lightMenu').setAttribute('aria-expanded', String(open));
+    if (open) document.querySelector('[data-light][aria-pressed=true]')?.scrollIntoView({ block: 'center' });
   });
   let islandIndex = 0, world = worlds[0], navigation = world.navigation;
   world.root.visible = true;
@@ -125,7 +156,7 @@ async function start() {
     dogView = false; controls.minDistance = 12;
     goalTarget.copy(viewCenter());
     goalCamera.copy(goalTarget).addScaledVector(world.viewDirection ?? direction, fitDistance());
-    lighting.aim(goalTarget.x, goalTarget.z);
+    lighting.aim(goalTarget.x, goalTarget.z, world.viewDirection ?? direction);
     if (immediate || motionPreference.matches) {
       camera.position.copy(goalCamera); controls.target.copy(goalTarget); controls.update(); transition = false;
     } else transition = true;
@@ -286,7 +317,7 @@ async function start() {
     if (paused) return;
     const dt = previous === null ? 0 : Math.min((now - previous) / 1000, .05);
     previous = now; elapsed += dt;
-    puppy.update(dt, elapsed, reducedMotion); world.update(elapsed, reducedMotion);
+    puppy.update(dt, elapsed, reducedMotion); world.update(elapsed, reducedMotion); lighting.update(elapsed, reducedMotion, camera);
     const dog = puppy.snapshot();
     if (dog.trick.kind && dog.trick.kind !== lastTrick) focusDog();
     lastTrick = dog.trick.kind;
