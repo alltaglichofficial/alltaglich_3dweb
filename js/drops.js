@@ -49,7 +49,7 @@ export function createDropletIsland(scene, island) {
       float glint = saturate((max(max(outgoingLight.r, outgoingLight.g), outgoingLight.b) - 1.45) * 1.4);
       vec3 body = mix(uTint, uTint * vec3(.62, .70, .74), rim);
       gl_FragColor.rgb = mix(body, vec3(1.), glint);
-      gl_FragColor.a = saturate(uStrength * 1.9 + rim * .5 + glint * .85);`);
+      gl_FragColor.a = saturate(uStrength * 2.4 + rim * .5 + glint * .85);`);
   };
   const waterMaterial = (hex, strength) => {
     const m = new THREE.MeshPhysicalMaterial({ color: 0xffffff, transparent: true, opacity: 1, depthWrite: false, roughness: .03, ior: 1.33, specularIntensity: 1, clearcoat: 1, clearcoatRoughness: .02, envMapIntensity: 1.8 });

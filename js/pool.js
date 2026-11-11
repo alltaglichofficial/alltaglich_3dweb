@@ -39,6 +39,8 @@ export function createPoolIsland(scene, island) {
   const poolGroup = new THREE.Group(); poolGroup.name = 'PoolKeyringBody'; root.add(poolGroup);
   const hardware = createKeyringHardware(root, { wallZ: WALL_Z, deckY: DECK_Y, wallX: WALL_X, blockTop: BASE + .2584 * SCALE, body: poolGroup });
   const surfaceHeight = (x, z) => motion ? motion.heightAt(x / SCALE, z / SCALE) * SCALE + BASE : .08;
+  // Water thrown up when the bear plunges in; each drop rings the surface where it falls back.
+  const spray = createSpray(poolGroup, (x, z, k) => splash(x, z, k));
   const house = createDogHouse(root, obstacles, { x: 4.6, z: 11.3, y: DECK_Y, color: 0x8cb9bc });
   const toy = createFetchToy(root, { x: -3, y: DECK_Y + .17, z: 12.8 }, island.spawn);
   // No puppy on this island: its house and ball stay in the data (the shared dog
@@ -114,6 +116,8 @@ export function createPoolIsland(scene, island) {
       const b = bear.update(time, reducedMotion, surfaceHeight);
       motion?.setMover(1, b.x / SCALE, b.z / SCALE, reducedMotion ? 0 : .55);
       if (b.landed) splash(b.x, b.z, .9);
+      if (b.splash >= .8 && !reducedMotion) spray.burst(b.x, surfaceHeight(b.x, b.z), b.z, b.splash);
+      spray.update(Math.min(.05, Math.max(0, time - (spray.last ?? time))), surfaceHeight, inPool); spray.last = time;
       if (b.splash) { splash(b.x, b.z, b.splash); if (b.splash > .5) splash(b.x + .6, b.z - .4, b.splash * .5); }
       if (swimmer) { wake.position.set(swimmer.x, surfaceHeight(swimmer.x, swimmer.z) + .025, swimmer.z); wake.children.forEach((ring, i) => { const t = (time * .75 + i / 3) % 1; ring.scale.setScalar(.6 + t * 1.8); ring.material.opacity = (1 - t) * .35; }); }
     },
@@ -346,4 +350,60 @@ function dropletGeometry(rand, size, kind) {
   geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
   geo.setIndex(indices); geo.computeVertexNormals();
   return geo.toNonIndexed();
+}
+
+// Splash spray: a crown of clear drops flung out and up from where the bear hits the
+// water, plus a few tall ones from the centre. One instanced mesh, so it costs a
+// single draw call however many drops are in the air.
+function createSpray(parent, ripple) {
+  const COUNT = 140;
+  const material = new THREE.MeshPhysicalMaterial({ color: 0xffffff, transparent: true, depthWrite: false, roughness: .03, ior: 1.33, clearcoat: 1, clearcoatRoughness: .02, specularIntensity: 1 });
+  material.onBeforeCompile = shader => {
+    shader.fragmentShader = shader.fragmentShader.replace('#include <opaque_fragment>', `#include <opaque_fragment>
+      float rim = pow(1.0 - saturate(dot(normal, normalize(vViewPosition))), 1.8);
+      float glint = saturate((max(max(outgoingLight.r, outgoingLight.g), outgoingLight.b) - 1.0) * 1.2);
+      gl_FragColor.rgb = mix(vec3(.66, .84, .90), vec3(1.), glint) * mix(1.0, .78, rim);
+      gl_FragColor.a = saturate(.16 + rim * .6 + glint * .8);`);
+  };
+  const mesh = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 12, 9), material, COUNT);
+  mesh.name = 'BearSplashSpray'; mesh.frustumCulled = false; mesh.renderOrder = 4; mesh.castShadow = true;
+  mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage); parent.add(mesh);
+  const drops = Array.from({ length: COUNT }, () => ({ life: 0, p: new THREE.Vector3(), v: new THREE.Vector3(), r: 0 }));
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0), dir = new THREE.Vector3();
+  let next = 0;
+  const hideAll = () => { m.makeScale(0, 0, 0); for (let i = 0; i < COUNT; i++) mesh.setMatrixAt(i, m); mesh.instanceMatrix.needsUpdate = true; };
+  hideAll();
+  return {
+    burst(x, y, z, strength) {
+      const k = Math.min(1.6, strength / 1.3), n = Math.round(34 + 30 * k);
+      for (let i = 0; i < n; i++) {
+        const d = drops[next++ % COUNT], a = Math.random() * Math.PI * 2, crown = i < n * .8;
+        // crown drops leave the rim of the hole at a steep angle; the rest shoot up the middle
+        const ring = crown ? .35 + Math.random() * .25 : Math.random() * .15;
+        d.p.set(x + Math.cos(a) * ring, y + .05, z + Math.sin(a) * ring);
+        const out = crown ? (1.6 + Math.random() * 2.6) * k : Math.random() * .6, rise = crown ? (3.2 + Math.random() * 3.4) * k : (6 + Math.random() * 4) * k;
+        d.v.set(Math.cos(a) * out, rise, Math.sin(a) * out);
+        d.r = crown ? .035 + Math.random() * .07 : .05 + Math.random() * .08; d.life = 3;
+      }
+    },
+    update(dt, surfaceHeight, inPool) {
+      if (!dt) return;
+      let any = false;
+      for (let i = 0; i < COUNT; i++) {
+        const d = drops[i]; if (d.life <= 0) continue;
+        any = true; d.life -= dt; d.v.y -= 26 * dt; d.v.multiplyScalar(1 - dt * .25); d.p.addScaledVector(d.v, dt);
+        const floor = inPool(d.p.x, d.p.z) ? surfaceHeight(d.p.x, d.p.z) : -1.6;
+        if ((d.v.y < 0 && d.p.y <= floor) || d.life <= 0) {
+          if (d.life > 0 && d.r > .06 && floor > -1.6) ripple(d.p.x, d.p.z, .12);
+          d.life = 0; m.makeScale(0, 0, 0); mesh.setMatrixAt(i, m); continue;
+        }
+        // stretched along the direction of travel, like a real flying drop
+        const speed = d.v.length(); dir.copy(d.v).divideScalar(speed || 1); q.setFromUnitVectors(up, dir);
+        const stretch = 1 + Math.min(1.4, speed * .08);
+        sc.set(d.r / Math.sqrt(stretch), d.r * stretch, d.r / Math.sqrt(stretch));
+        m.compose(d.p, q, sc); mesh.setMatrixAt(i, m);
+      }
+      if (any) mesh.instanceMatrix.needsUpdate = true;
+    },
+  };
 }

@@ -30,34 +30,17 @@ async function start() {
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(36, innerWidth / innerHeight, .1, 250);
   const renderer = new THREE.WebGLRenderer({ antialias: !coarse, powerPreference: 'low-power' });
-  renderer.setPixelRatio(Math.min(devicePixelRatio, coarse ? 1.5 : 2));
+  renderer.setPixelRatio(Math.min(devicePixelRatio, coarse ? 1.5 : 1.8));
   renderer.setSize(innerWidth, innerHeight);
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
-  // Neutral tone mapping keeps whites white and colours true to the products.
-  renderer.toneMapping = THREE.NeutralToneMapping;
-  renderer.toneMappingExposure = 1;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = .98;
   renderer.domElement.setAttribute('aria-label', '회전과 확대가 가능한 3D 스포츠 섬');
   mount.appendChild(renderer.domElement);
 
   const lighting = createLighting(scene, renderer, { coarse });
-  // Ambient occlusion (desktop only): soft contact darkening where things meet —
-  // under the dog, along the tennis net posts, in the pool corners — for a more
-  // photographic look. Loaded lazily; without it the scene renders as before.
-  let composer = null;
-  if (!coarse && !location.search.includes('noao')) {
-    const jsm = 'https://cdn.jsdelivr.net/npm/three@0.179.0/examples/jsm/postprocessing/';
-    Promise.all(['EffectComposer', 'RenderPass', 'GTAOPass', 'OutputPass'].map(n => import(jsm + n + '.js'))).then(([{ EffectComposer }, { RenderPass }, { GTAOPass }, { OutputPass }]) => {
-      const c = new EffectComposer(renderer); c.setPixelRatio(renderer.getPixelRatio()); c.setSize(innerWidth, innerHeight);
-      c.addPass(new RenderPass(scene, camera));
-      const ao = new GTAOPass(scene, camera, innerWidth, innerHeight);
-      ao.updateGtaoMaterial({ radius: .9, distanceExponent: 1.4, thickness: 1.2, scale: 1, samples: 16 });
-      ao.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: 6, rings: 2, samples: 16 });
-      ao.blendIntensity = .85; c.addPass(ao); c.addPass(new OutputPass());
-      composer = c; lighting.toneMappedBackground = true; lighting.setMood(lighting.mood, worlds);
-    }).catch(err => console.warn('Ambient occlusion unavailable', err));
-  }
 
   const worlds = ISLANDS.map(island => {
     const world = createWorld(scene, island);
@@ -328,7 +311,7 @@ async function start() {
       camera.position.lerp(goalCamera, blend); controls.target.lerp(goalTarget, blend);
       if (camera.position.distanceTo(goalCamera) < .025 && controls.target.distanceTo(goalTarget) < .025) transition = false;
     }
-    controls.update(); if (composer) composer.render(); else renderer.render(scene, camera);
+    controls.update(); renderer.render(scene, camera);
     if (!loading.hidden) loading.hidden = true;
     frame = requestAnimationFrame(render);
   }
@@ -340,8 +323,8 @@ async function start() {
   canvas.addEventListener('webglcontextrestored', () => location.reload());
   addEventListener('resize', () => {
     camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
-    renderer.setPixelRatio(Math.min(devicePixelRatio, coarse ? 1.5 : 2));
-    renderer.setSize(innerWidth, innerHeight); composer?.setSize(innerWidth, innerHeight); viewOffset(); if (dogView) focusDog(); else resetCamera(true);
+    renderer.setPixelRatio(Math.min(devicePixelRatio, coarse ? 1.5 : 1.8));
+    renderer.setSize(innerWidth, innerHeight); viewOffset(); if (dogView) focusDog(); else resetCamera(true);
   });
   resume();
 
