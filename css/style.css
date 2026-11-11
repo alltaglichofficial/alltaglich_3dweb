@@ -94,3 +94,20 @@
 :root[data-mood=dark] .light-list button[aria-pressed=true]{background:#33402d;border-color:#4c5d43;color:#eef3e4}
 .island-indicator>span{white-space:nowrap}
 @media(max-width:650px){.light-panel{max-height:36vh}.island-indicator{gap:8px}}
+
+/* Plush bears: hidden render frames, and the large viewer */
+#plush-host{position:fixed;left:0;bottom:0;width:300px;height:300px;opacity:0;pointer-events:none;z-index:-1;overflow:hidden}
+.plush-frame{position:absolute;inset:0;width:300px;height:300px;border:0;background:transparent}
+.plush-viewer{position:fixed;inset:0;z-index:50;display:grid;place-items:center;background:#f3f0e8cc;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);animation:plushIn .25s ease-out}
+.plush-viewer[hidden]{display:none}
+.plush-card{position:relative;width:min(92vw,760px);height:min(86vh,760px);display:flex;flex-direction:column;align-items:center}
+.plush-name{margin:0;font-size:clamp(20px,2.4vw,30px);font-weight:500;letter-spacing:-1px;color:#364532}
+.plush-big{flex:1;width:100%;border:0;background:transparent}
+.plush-hint{margin:0;font-size:11px;color:#7a8273;text-align:center}
+.plush-close{position:absolute;top:-6px;right:0;width:44px;height:44px;border-radius:50%;border:1px solid #e2dfd4;background:#fffdf6;color:#364532;font-size:24px;line-height:1}
+.plush-close:hover{background:#3d5036;color:#fffdf5}
+[data-mood=dark] .plush-viewer{background:#0f1013cc}
+[data-mood=dark] .plush-name{color:#eef0e6}
+@keyframes plushIn{from{opacity:0;transform:scale(.97)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){.plush-viewer{animation:none}}
+.plush-big:focus,.plush-big:focus-visible{outline:none}

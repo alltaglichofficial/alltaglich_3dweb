@@ -1,3 +1,4 @@
+import { createPlushBear, tapTarget } from './plush.js';
 import * as THREE from 'three';
 import { box, sphere, ico, cylinder, tube, flatPath, roundedPad, mesh, batchStatic } from './geometry.js';
 import { createDropletIsland } from './drops.js';
@@ -121,10 +122,25 @@ export function createWorld(scene, island) {
   const house = createDogHouse(root, obstacles, island.id === 'tennis' ? { x: 5.3, z: -2, color: 0x8fa980 } : { x: -5.05, z: -.5, color: 0xd0a285 });
   const fetchActivity = activity.type === 'fetch' ? activity : createFetchToy(root, { x: 1.4, y: .3, z: 3 }, island.spawn);
 
+  // The island's Alltäglich plush bears, standing at the front and turning a little.
+  const PLUSH_SPOTS = { tennis: [['tennis', 2.3, .16, 3.4, -.35]], climb: [['climbBrown', -1.25, .25, 1.15, .25], ['climbOrange', 1.25, .25, 1.15, -.25]] }[island.id] || [];
+  const plushBears = PLUSH_SPOTS.map(([kind, x, y, z, yaw], i) => {
+    const anchor = new THREE.Object3D(); anchor.position.set(x, y + .75, z); root.add(anchor);
+    const bear = createPlushBear(root, kind, { height: 1.5 });
+    obstacles.push({ type: 'circle', x, z, r: .55 });
+    return { bear, anchor, yaw, i };
+  });
+
   return {
     root, island, obstacles, activity, house, fetchActivity,
     navigationOptions: { radiusX: 8.2, radiusZ: 7.05, clearance: .75 },
-    update() {},
+    grabTargets: plushBears.map(p => tapTarget(p.bear)),
+    update(time = 0, reducedMotion = false) {
+      for (const p of plushBears) {
+        p.anchor.rotation.y = p.yaw + (reducedMotion ? 0 : Math.sin(time * .55 + p.i * 2.1) * .35);
+        p.bear.update(p.anchor);
+      }
+    },
     heightAt(x, z) {
       if (island.id === 'tennis' && Math.abs(x) < 3.95 && Math.abs(z) < 5.05) return .16;
       if (island.id === 'pool' && Math.abs(x) < 4.05 && Math.abs(z) < 3.25) return .14;

@@ -7,7 +7,7 @@ import { RoomEnvironment } from '../product/vendor/environments/RoomEnvironment.
 import { createDogHouse, createFetchToy } from './house.js';
 import { createSwimBear } from './bear.js';
 import { createKeyringHardware } from './keyring.js';
-import { createClipLamp } from './lamp.js';
+import { replaceWithPlush } from './plush.js';
 
 // Normalised keyring units (body width 1): footprint half-sizes and corner
 // radius of the GLB outline, top of the tile floor, acrylic slab and dome rise.
@@ -41,8 +41,6 @@ export function createPoolIsland(scene, island) {
   const hardware = createKeyringHardware(root, { wallZ: WALL_Z, deckY: DECK_Y, wallX: WALL_X, blockTop: BASE + .2584 * SCALE, body: poolGroup });
   const surfaceHeight = (x, z) => motion ? motion.heightAt(x / SCALE, z / SCALE) * SCALE + BASE : .08;
   // Water thrown up when the bear plunges in; each drop rings the surface where it falls back.
-  // A big clip-on lamp biting onto the left pool wall, its shade leaning in over the water.
-  const lamp = createClipLamp(poolGroup, { x: -WALL_X - .02, z: 1.2, rimY: BASE + .2584 * SCALE, wall: .45, aim: new THREE.Vector3(-.8, 1, -.6), scale: 1.5 });
   // A bear fresh out of the water drips: drops fall from it and leave wet spots on
   // the ground, and where it lands it leaves a puddle that slowly dries.
   const wetMarks = createWetMarks(poolGroup, DECK_Y);
@@ -61,6 +59,8 @@ export function createPoolIsland(scene, island) {
     laneZ: WALL_Z - 1.5, laneX: WALL_X - 1.4,   // lengths are swum along Z, end wall to end wall
     clampIn: (x, z) => [Math.max(-WALL_X + 1.2, Math.min(WALL_X - 1.2, x)), Math.max(-WALL_Z + 1.2, Math.min(WALL_Z - 1.2, z))],
   });
+  // shown as the Alltäglich swim bear plush (bears/swim.html); the three.js bear drives it
+  const plush = replaceWithPlush(poolGroup, bear.object, 'swim');
   bear.object.userData.noGrab = true;
   // Nothing is drawn under the block, but a shadow-only ground keeps things grounded.
   const ground = new THREE.Mesh(new THREE.PlaneGeometry(90, 110), new THREE.ShadowMaterial({ opacity: .18 }));
@@ -97,9 +97,10 @@ export function createPoolIsland(scene, island) {
         bear.drag(p);
       },
       release() { bear.release(); },
+      tap() { plush.open(); },
     }, ...hardware.grabTargets],
     // Default view frames the block, the front deck and the hardware behind it.
-    view: { center: { x: 0, z: -7.6 }, min: [-9.4, -1.75, -32.5], max: [8.9, 6, 16.1] },
+    view: { center: { x: 0, z: -7.6 }, min: [-8.9, -1.75, -32.5], max: [8.9, 3.9, 16.1] },
     getSurfaceHeight: surfaceHeight,
     heightAt(x, z) {
       if (Math.abs(x - house.object.position.x) < 1.4 && Math.abs(z - house.object.position.z) < 1.3) return house.object.position.y + .02;
@@ -121,11 +122,12 @@ export function createPoolIsland(scene, island) {
       if (swimmer && time - lastPaddle > 1.05) { splash(swimmer.x, swimmer.z, .35); lastPaddle = time; }
       // The bear leaves a gentle wake as it bobs and paddles; each hop landing rings out.
       const b = bear.update(time, reducedMotion, surfaceHeight);
+      plush.update(plush.anchor, { swim: bear.state === 'swim' });
       motion?.setMover(1, b.x / SCALE, b.z / SCALE, reducedMotion ? 0 : .55);
       if (b.landed) splash(b.x, b.z, .9);
       if (b.splash >= .8 && !reducedMotion) spray.burst(b.x, surfaceHeight(b.x, b.z), b.z, b.splash);
       const sdt = Math.min(.05, Math.max(0, time - (spray.last ?? time))); spray.last = time;
-      spray.update(sdt, surfaceHeight, inPool); wetMarks.update(sdt); lamp.update(surfaceHeight);
+      spray.update(sdt, surfaceHeight, inPool); wetMarks.update(sdt);
       {
         const st = bear.state, bp = bear.object.position, inWater = st === 'sink' || st === 'swim';
         if (inWater) wet = 1; else wet = Math.max(0, wet - sdt / 30);
@@ -151,11 +153,10 @@ export function createPoolIsland(scene, island) {
     // like a pool with its underwater lights on at night. The tiles always carry
     // an emissive map (black in the lamp mood), so switching never recompiles.
     setMood(mood, { reflections }) {
-      for (const m of [world.water?.material, world.acrylic?.material, droplets.material, ...hardware.materials, ...lamp.materials]) if (m?.userData.envBase !== undefined) m.envMapIntensity = m.userData.envBase * reflections;
-      lamp.setMood(mood);
+      for (const m of [world.water?.material, world.acrylic?.material, droplets.material, ...hardware.materials]) if (m?.userData.envBase !== undefined) m.envMapIntensity = m.userData.envBase * reflections;
       world.floor?.traverse(object => { if (object.isMesh && object.material.emissiveMap) object.material.emissive.setHex(mood === 'dark' ? 0x5a7f99 : 0); });
     },
-    setupEnvironment(renderer) { const environment = new RoomEnvironment(); const pmrem = new THREE.PMREMGenerator(renderer); const texture = pmrem.fromScene(environment, .04).texture; environment.dispose(); pmrem.dispose(); for (const m of [world.water.material, world.acrylic.material, droplets.material, ...hardware.materials, ...lamp.materials]) { m.envMap = texture; m.userData.envBase = m === world.water.material ? WATER_REFLECTION : hardware.materials.includes(m) || lamp.materials.includes(m) ? (m.userData.envDefault ?? 1) : 1.15; m.envMapIntensity = m.userData.envBase; m.needsUpdate = true; } },
+    setupEnvironment(renderer) { const environment = new RoomEnvironment(); const pmrem = new THREE.PMREMGenerator(renderer); const texture = pmrem.fromScene(environment, .04).texture; environment.dispose(); pmrem.dispose(); for (const m of [world.water.material, world.acrylic.material, droplets.material, ...hardware.materials]) { m.envMap = texture; m.userData.envBase = m === world.water.material ? WATER_REFLECTION : hardware.materials.includes(m) ? (m.userData.envDefault ?? 1) : 1.15; m.envMapIntensity = m.userData.envBase; m.needsUpdate = true; } },
   };
   world.ready = loadSwimmingPoolKeyring().then(({ model, floor, water }) => {
     model.scale.setScalar(SCALE); model.position.y = BASE; poolGroup.add(model);

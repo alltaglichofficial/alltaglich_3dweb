@@ -5,6 +5,7 @@ import { ISLANDS } from './islands.js';
 import { Navigation } from './navigation.js';
 import { createDog } from './dog.js';
 import { createBondInteractions } from './bond.js';
+import { setPlushCamera } from './plush.js';
 import { createLighting, LIGHTS } from './lighting.js';
 
 const loading = document.querySelector('#load-state');
@@ -40,6 +41,7 @@ async function start() {
   renderer.domElement.setAttribute('aria-label', '회전과 확대가 가능한 3D 스포츠 섬');
   mount.appendChild(renderer.domElement);
 
+  setPlushCamera(camera);
   const lighting = createLighting(scene, renderer, { coarse });
 
   const worlds = ISLANDS.map(island => {
@@ -267,7 +269,7 @@ async function start() {
     best.t.hitObject = best.hit.object;
     if (best.t.grab(best.hit.point, camera) === false) return;
     event.stopImmediatePropagation(); event.preventDefault();
-    carry = { id: event.pointerId, target: best.t }; controls.enabled = false; transition = false;
+    carry = { id: event.pointerId, target: best.t, x: event.clientX, y: event.clientY, t: performance.now() }; controls.enabled = false; transition = false;
     canvas.setPointerCapture(event.pointerId); canvas.style.cursor = 'grabbing';
     best.t.drag(raycaster.ray, camera);
   }, { capture: true });
@@ -278,8 +280,10 @@ async function start() {
   const drop = event => {
     if (carry?.id !== event.pointerId) return;
     event.stopImmediatePropagation();
-    const t = carry.target; carry = null; controls.enabled = true; canvas.style.cursor = '';
+    const t = carry.target, tap = event.type === 'pointerup' && Math.hypot(event.clientX - carry.x, event.clientY - carry.y) < 7 && performance.now() - carry.t < 350;
+    carry = null; controls.enabled = true; canvas.style.cursor = '';
     t.release();
+    if (tap) t.tap?.();   // a quick tap on a plush bear opens it large
   };
   canvas.addEventListener('pointerup', drop, { capture: true });
   canvas.addEventListener('pointercancel', drop, { capture: true });
