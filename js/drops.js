@@ -68,7 +68,7 @@ export function createDropletIsland(scene, island) {
     let cx = 0, cz = 0; pts.forEach(p => { cx += p.x; cz -= p.y; }); cx /= pts.length; cz /= pts.length;
     const area = Math.abs(THREE.ShapeUtils.area(pts)), size = Math.sqrt(area);
     let reach = 0; pts.forEach(p => { reach = Math.max(reach, Math.hypot(p.x - cx, -p.y - cz)); });
-    const h = Math.min(.36, .07 + size * .085), edge = Math.min(h * .95, size * .22);
+    const h = Math.min(.2, .04 + size * .045), edge = Math.min(h * 1.1, size * .2);   // low, flat puddles
     const geo = new THREE.ExtrudeGeometry(shape, { depth: .005, bevelEnabled: true, bevelThickness: h, bevelSize: edge, bevelOffset: -edge, bevelSegments: 6, curveSegments: 14 });
     geo.rotateX(-Math.PI / 2);
     // flatten the underside so the puddle sits on the sheet
