@@ -13,7 +13,9 @@ const SHAPES = [[[0.7404,0.9111],[0.7357,0.9051],[0.7281,0.9002],[0.7178,0.8978]
 
 const W = 12, D = W / .6427;                     // sheet keeps the guide frame's proportions
 const SHEET_T = .22, SHEET_Y = -1.6, TOP = SHEET_Y + SHEET_T;
-const FALL_H = 15, GRAVITY = 32, INTERVAL = .42, START_DELAY = 1.2;
+const FALL_H = 11, GRAVITY = 30, INTERVAL = .42, START_DELAY = .35;
+// Epoxy tint per puddle, read from the guide (물방울에폭시시안, low opacity): [colour, strength].
+const TINTS = [["#8dc5d4",0.052],["#a2d9d0",0.152],["#8dc5d4",0.052],["#8dc5d4",0.088],["#83cdd9",0.104],["#83cdd9",0.104],["#a2d9d0",0.152],["#8dc5d4",0.149],["#8dc5d4",0.138],["#8dc5d4",0.104],["#8dc5d4",0.149],["#8dc5d4",0.104],["#8dc5d4",0.052],["#8dc5d4",0.149],["#8dc5d4",0.052],["#8dc5d4",0.052],["#83cdd9",0.104],["#83cdd9",0.104],["#83cdd9",0.057],["#a2d9d0",0.152],["#8dc5d4",0.104],["#8dc5d4",0.052],["#8dc5d4",0.052],["#83cdd9",0.104],["#8dc5d4",0.104],["#b4d4d3",0.215],["#a2d9d0",0.152],["#83cdd9",0.057],["#b4d4d3",0.215],["#b4d4d3",0.126],["#83cdd9",0.126],["#8dc5d4",0.052],["#8dc5d4",0.052],["#8dc5d4",0.143],["#8dc5d4",0.104],["#a2d9d0",0.1],["#a2d9d0",0.1],["#83cdd9",0.104],["#71a4c5",0.099],["#8dc5d4",0.052],["#a2d9d0",0.1]];
 
 export function createDropletIsland(scene, island) {
   const root = new THREE.Group(); root.name = 'island-drops'; scene.add(root);
@@ -23,25 +25,44 @@ export function createDropletIsland(scene, island) {
   const sheetShape = roundedRect(W, D, .45);
   const sheetGeo = new THREE.ExtrudeGeometry(sheetShape, { depth: SHEET_T - .04, bevelEnabled: true, bevelThickness: .02, bevelSize: .02, bevelSegments: 2, curveSegments: 10 });
   sheetGeo.rotateX(-Math.PI / 2); sheetGeo.translate(0, SHEET_Y + .02, 0);
-  const acrylic = new THREE.MeshPhysicalMaterial({ color: 0xf6fbfd, transmission: 1, roughness: .03, ior: 1.49, thickness: SHEET_T, attenuationColor: 0xe3f1f6, attenuationDistance: 2.5, specularIntensity: 1, envMapIntensity: 1 });
-  const sheet = new THREE.Mesh(sheetGeo, acrylic); sheet.receiveShadow = true; root.add(sheet);
-
-  // Water: a clear, slightly glossy lens material shared by every drop.
-  // Water reads as clear on a white sheet the way the photo does: almost invisible in
-  // the middle, a soft grey rim where the surface curves away, and bright glints.
-  const water = new THREE.MeshPhysicalMaterial({ color: 0xffffff, transparent: true, opacity: 1, depthWrite: false, roughness: .03, ior: 1.33, specularIntensity: 1, clearcoat: 1, clearcoatRoughness: .02, envMapIntensity: 1.8 });
-  water.onBeforeCompile = shader => {
+  // Clear acrylic: nearly invisible face-on, a cool sheen and bright edges where the
+  // surface turns away, like a real sheet seen on a white table.
+  const acrylic = new THREE.MeshPhysicalMaterial({ color: 0xffffff, transparent: true, depthWrite: false, roughness: .04, ior: 1.49, specularIntensity: 1, clearcoat: 1, clearcoatRoughness: .03, envMapIntensity: 1.4 });
+  acrylic.onBeforeCompile = shader => {
     shader.fragmentShader = shader.fragmentShader.replace('#include <opaque_fragment>', `#include <opaque_fragment>
+      float rim = pow(1.0 - saturate(abs(dot(normal, normalize(vViewPosition)))), 3.0);
+      float glint = saturate((max(max(outgoingLight.r, outgoingLight.g), outgoingLight.b) - 1.35) * 1.2);
+      gl_FragColor.rgb = mix(vec3(.80, .88, .90), vec3(1.), glint) * mix(1.0, .82, rim);
+      gl_FragColor.a = saturate(.035 + rim * .55 + glint * .6);`);
+  };
+  const sheet = new THREE.Mesh(sheetGeo, acrylic); sheet.renderOrder = 1; root.add(sheet);
+
+  // Water: clear epoxy-like lenses with the guide's faint cyan/mint tint. Every drop gets
+  // its own material (same shader source, so they share one compiled program) carrying
+  // its tint as uniforms: tinted in the middle, a deeper rim where the surface curves
+  // away, and bright glints.
+  const waterShader = (tint, strength) => shader => {
+    shader.uniforms.uTint = { value: tint }; shader.uniforms.uStrength = { value: strength };
+    shader.fragmentShader = 'uniform vec3 uTint;\nuniform float uStrength;\n' + shader.fragmentShader.replace('#include <opaque_fragment>', `#include <opaque_fragment>
       float rim = pow(1.0 - saturate(dot(normal, normalize(vViewPosition))), 2.2);
       // only true highlights (well above the white studio's level) become glints
       float glint = saturate((max(max(outgoingLight.r, outgoingLight.g), outgoingLight.b) - 1.45) * 1.4);
-      gl_FragColor.rgb = mix(vec3(.55, .61, .63), vec3(1.), glint) * mix(1.0, .8, rim);
-      gl_FragColor.a = saturate(mix(.04, .58, rim) + glint * .85);`);
+      vec3 body = mix(uTint, uTint * vec3(.62, .70, .74), rim);
+      gl_FragColor.rgb = mix(body, vec3(1.), glint);
+      gl_FragColor.a = saturate(uStrength * 1.9 + rim * .5 + glint * .85);`);
   };
+  const waterMaterial = (hex, strength) => {
+    const m = new THREE.MeshPhysicalMaterial({ color: 0xffffff, transparent: true, opacity: 1, depthWrite: false, roughness: .03, ior: 1.33, specularIntensity: 1, clearcoat: 1, clearcoatRoughness: .02, envMapIntensity: 1.8 });
+    m.onBeforeCompile = waterShader(new THREE.Color(hex), strength);
+    return m;
+  };
+  const water = waterMaterial('#8dc5d4', .08);
   const shadowMat = new THREE.MeshBasicMaterial({ color: 0x1d2a30, transparent: true, opacity: 0, depthWrite: false });
   const ball = new THREE.SphereGeometry(1, 20, 14), disc = new THREE.CircleGeometry(1, 28); disc.rotateX(-Math.PI / 2);
 
-  const drops = SHAPES.map(points => {
+  const drops = SHAPES.map((points, index) => {
+    const [tintHex, tintStrength] = TINTS[index] ?? ['#8dc5d4', .08];
+    const tinted = waterMaterial(tintHex, tintStrength), fallMat = waterMaterial(tintHex, Math.max(.16, tintStrength * 1.6));
     const pts = points.map(([u, v]) => new THREE.Vector2((u - .5) * W, (v - .5) * D * -1)); // shape y = -z
     const shape = new THREE.Shape(pts);
     let cx = 0, cz = 0; pts.forEach(p => { cx += p.x; cz -= p.y; }); cx /= pts.length; cz /= pts.length;
@@ -54,10 +75,10 @@ export function createDropletIsland(scene, island) {
     const pos = geo.attributes.position;
     for (let i = 0; i < pos.count; i++) { const y = pos.getY(i); pos.setY(i, y < 0 ? y * .04 : y); }
     geo.translate(-cx, 0, -cz); geo.computeVertexNormals();
-    const puddle = new THREE.Mesh(geo, water); puddle.position.set(cx, TOP + .004, cz); puddle.castShadow = true; puddle.renderOrder = 2; root.add(puddle);
+    const puddle = new THREE.Mesh(geo, tinted); puddle.position.set(cx, TOP + .004, cz); puddle.castShadow = true; puddle.renderOrder = 2; root.add(puddle);
     const r = THREE.MathUtils.clamp(size * .3, .1, .6);
-    const falling = new THREE.Mesh(ball, water); falling.castShadow = true; falling.renderOrder = 3; root.add(falling);
-    const blob = new THREE.Mesh(ball, water); blob.castShadow = true; blob.renderOrder = 2; root.add(blob);
+    const falling = new THREE.Mesh(ball, fallMat); falling.castShadow = true; falling.renderOrder = 3; root.add(falling);
+    const blob = new THREE.Mesh(ball, tinted); blob.castShadow = true; blob.renderOrder = 2; root.add(blob);
     const mark = new THREE.Mesh(disc, shadowMat.clone()); mark.position.set(cx, TOP + .006, cz); mark.scale.setScalar(Math.max(r, reach * .5)); mark.visible = false; root.add(mark);
     return { cx, cz, reach, r, puddle, falling, blob, mark, t0: 0, state: 'wait' };
   });
@@ -78,8 +99,10 @@ export function createDropletIsland(scene, island) {
   const bear = createSwimBear(root, { x: 0, z: 0 });
   const { arms, legs, head, rings } = bear.parts; rings.forEach(r => { r.visible = false; });
   const body = bear.object; body.rotation.set(0, 0, 0); body.updateMatrixWorld(true);
-  const footOffset = -new THREE.Box3().setFromObject(body).min.y;
-  const walker = { x: 0, z: 2, vx: 0, vz: 0, yaw: 0, phase: 0, target: new THREE.Vector2(0, 2), flinch: 0 };
+  const bearBox = new THREE.Box3().setFromObject(body), footOffset = body.position.y - bearBox.min.y;
+  const bearMid = (bearBox.max.y + bearBox.min.y) / 2 - body.position.y;   // centre height above the origin
+  const walker = { x: 0, z: 2, vx: 0, vz: 0, yaw: 0, phase: 0, target: new THREE.Vector2(0, 2), flinch: 0, act: null, cool: 0, lastAct: '' };
+  body.rotation.order = 'YXZ';   // yaw first, then pitch/roll in the bear's own frame (for flips)
   const LIMIT_X = W / 2 - .9, LIMIT_Z = D / 2 - .9;
   const newTarget = () => {
     // pick a spot away from drops that are about to land
@@ -98,7 +121,7 @@ export function createDropletIsland(scene, island) {
   const reset = time => {
     start = time; order = drops.map((_, i) => i).sort(() => Math.random() - .5);
     order.forEach((i, k) => { const d = drops[i]; d.t0 = START_DELAY + k * INTERVAL; d.state = 'wait'; hide(d.puddle); hide(d.falling); hide(d.blob); d.mark.visible = false; });
-    walker.x = 0; walker.z = 2; walker.vx = walker.vz = 0; newTarget();
+    walker.x = 0; walker.z = 2; walker.vx = walker.vz = 0; walker.act = null; walker.cool = 0; newTarget();
   };
 
   const house = createDogHouse(root, obstacles, { x: 0, z: D / 2 + 3, y: SHEET_Y });
@@ -109,6 +132,12 @@ export function createDropletIsland(scene, island) {
   const world = {
     // replay from the start every time the island is opened
     onEnter() { pendingReset = true; },
+    // compile every shader up front so the first drops never wait on the GPU
+    precompile(renderer, scene, camera) {
+      const was = root.visible; root.visible = true;
+      try { const job = renderer.compileAsync(root, camera, scene); root.visible = was; return job.catch(() => {}); }
+      catch { root.visible = was; return Promise.resolve(); }
+    },
     root, island, obstacles, house, fetchActivity: toy, bear, drops,
     navigationOptions: { bounds: { minX: -W / 2 + .5, maxX: W / 2 - .5, minZ: -D / 2 + .5, maxZ: D / 2 - .5 }, clearance: .6, min: -11, size: 60 },
     activity: { type: 'none' },
@@ -116,6 +145,7 @@ export function createDropletIsland(scene, island) {
     ready: Promise.resolve(),
     heightAt(x, z) { return Math.abs(x) <= W / 2 && Math.abs(z) <= D / 2 ? TOP : SHEET_Y; },
     get finished() { return drops.every(d => d.state === 'landed'); },
+    get stunt() { return walker.act?.type ?? null; },
     update(time, reducedMotion) {
       if (start === null || pendingReset) { pendingReset = false; reset(time); }
       const dt = last === null ? 0 : Math.min(.05, Math.max(0, time - last)); last = time;
@@ -156,7 +186,7 @@ export function createDropletIsland(scene, island) {
   };
 
   function updateBear(time, dt, t, reducedMotion) {
-    let ax = 0, az = 0, danger = 0;
+    let ax = 0, az = 0, danger = 0, threat = null;
     if (!reducedMotion && !world.finished) {
       // head for the wander target…
       const tx = walker.target.x - walker.x, tz = walker.target.y - walker.z, td = Math.hypot(tx, tz);
@@ -168,6 +198,8 @@ export function createDropletIsland(scene, island) {
           const left = d.t0 + Math.sqrt(2 * FALL_H / GRAVITY) - t, safe = d.reach + 1.3;
           if (dist < safe + 1.2 && left < 1.4) {
             const push = (safe + 1.2 - dist) * (1.6 - left) * 3.2; ax += dx / dist * push; az += dz / dist * push; danger = Math.max(danger, 1.4 - left);
+            // a drop about to land right next to the bear: time for a stunt
+            if (left < .7 && dist < d.reach + 1.6 && (!threat || left < threat.left)) threat = { left, dx: dx / dist, dz: dz / dist };
           }
         } else if (d.state !== 'wait' && dist < d.reach + .45) { const push = (d.reach + .45 - dist) * 2; ax += dx / dist * push; az += dz / dist * push; }
       }
@@ -176,6 +208,32 @@ export function createDropletIsland(scene, island) {
       if (Math.abs(walker.z) > LIMIT_Z) az -= Math.sign(walker.z) * (Math.abs(walker.z) - LIMIT_Z) * 6;
       if (danger > .2 && Math.random() < .02) newTarget();
     }
+    walker.cool = Math.max(0, walker.cool - dt);
+    // Spectacular dodges: forward roll, cartwheel, front flip or a spinning star jump,
+    // launched away from the drop that is about to land.
+    if (!walker.act && threat && walker.cool <= 0 && !reducedMotion) {
+      // pick the launch direction that ends farthest from every drop still in the air
+      let dx = threat.dx, dz = threat.dz, best = -1e9;
+      for (let k = 0; k < 16; k++) {
+        const a = Math.atan2(threat.dx, threat.dz) + (k / 16) * Math.PI * 2, cx = Math.sin(a), cz = Math.cos(a);
+        const ex = walker.x + cx * 2.3, ez = walker.z + cz * 2.3;
+        let score = -Math.abs(k / 16 - .5) * .4;   // mild preference for straight away from the threat
+        if (Math.abs(ex) > LIMIT_X || Math.abs(ez) > LIMIT_Z) score -= 50;
+        for (const d of drops) if (d.state === 'falling' || (d.state === 'wait' && d.t0 - t < 1)) {
+          const gap = Math.min(Math.hypot(ex - d.cx, ez - d.cz), Math.hypot(walker.x + cx * 1.2 - d.cx, walker.z + cz * 1.2 - d.cz)) - d.reach;
+          score += Math.min(0, gap - .9) * 6;
+        }
+        if (score > best) { best = score; dx = cx; dz = cz; }
+      }
+      const kinds = ['roll', 'cartwheel', 'flip', 'star'].filter(k => k !== walker.lastAct), type = kinds[Math.floor(Math.random() * kinds.length)];
+      const dur = { roll: .62, cartwheel: .78, flip: .72, star: .8 }[type], dist = { roll: 2.3, cartwheel: 2.4, flip: 2.2, star: 2.0 }[type];
+      const dirYaw = Math.atan2(dx, dz), side = Math.random() < .5 ? -1 : 1;
+      // a cartwheel travels sideways, so the bear faces across its path
+      const yaw = type === 'cartwheel' ? dirYaw - side * Math.PI / 2 : dirYaw;
+      walker.act = { type, t: 0, dur, dx, dz, speed: dist / dur, yaw0: walker.yaw, yaw, side };
+      walker.lastAct = type; walker.flinch = 0;
+    }
+    if (walker.act) { animateStunt(time, dt); return; }
     const max = danger > .1 ? 4.2 : 1.35, mag = Math.hypot(ax, az);
     const wantX = mag > 0 ? ax / Math.max(1, mag) * max : 0, wantZ = mag > 0 ? az / Math.max(1, mag) * max : 0;
     const blend = Math.min(1, dt * (danger > .1 ? 9 : 3));
@@ -192,7 +250,7 @@ export function createDropletIsland(scene, island) {
     const stride = Math.min(1, speed / 1.4), run = Math.min(1, Math.max(0, (speed - 1.6) / 2));
     const bob = Math.abs(Math.sin(walker.phase)) * .07 * stride;
     body.position.set(walker.x, TOP + footOffset + bob - walker.flinch * .12, walker.z);
-    body.rotation.set(run * .25 + walker.flinch * .2, walker.yaw, Math.sin(walker.phase) * .06 * stride);
+    body.rotation.set(run * .25 + walker.flinch * .2, walker.yaw, Math.sin(walker.phase) * .06 * stride, 'YXZ');
     body.scale.set(1.32 * (1 + walker.flinch * .15), 1.32 * (1 - walker.flinch * .2), 1.32 * (1 + walker.flinch * .15));
     arms.forEach((arm, i) => {
       const side = i ? 1 : -1, swing = Math.sin(walker.phase + i * Math.PI);
@@ -204,6 +262,53 @@ export function createDropletIsland(scene, island) {
     head.rotation.z = Math.sin(time * 1.3) * .05; head.rotation.x = danger > .3 ? -.25 : 0;
   }
 
+
+  function animateStunt(time, dt) {
+    const a = walker.act; a.t += dt;
+    const p = Math.min(1, a.t / a.dur), e = p * p * (3 - 2 * p), spin = e * Math.PI * 2;
+    walker.x = THREE.MathUtils.clamp(walker.x + a.dx * a.speed * dt * (1.25 - p * .5), -W / 2 + .5, W / 2 - .5);
+    walker.z = THREE.MathUtils.clamp(walker.z + a.dz * a.speed * dt * (1.25 - p * .5), -D / 2 + .5, D / 2 - .5);
+    walker.vx = a.dx * 1.2; walker.vz = a.dz * 1.2;
+    let dy = a.yaw - a.yaw0; dy = Math.atan2(Math.sin(dy), Math.cos(dy));
+    walker.yaw = a.yaw0 + dy * Math.min(1, p * 5);
+    const arc = Math.sin(p * Math.PI), c = bearMid;
+    let pitch = 0, roll = 0, lift = 0, twist = 0, squash = 1;
+    const side = a.side;
+    if (a.type === 'roll') {
+      // tuck, tip forward over the head and come up on the feet
+      pitch = spin; lift = arc * .25 - .22 * Math.sin(p * Math.PI); squash = 1 - arc * .18;
+      arms.forEach((arm, i) => { arm.rotation.x = -2.9; arm.rotation.z = (i ? 1 : -1) * .25; });
+      legs.forEach(leg => { leg.rotation.x = -1.4 * arc; leg.rotation.z = 0; });
+      head.rotation.x = .55 * arc;
+    } else if (a.type === 'cartwheel') {
+      roll = side * spin; lift = arc * .55;
+      arms.forEach((arm, i) => { arm.rotation.x = 0; arm.rotation.z = (i ? 1 : -1) * 2.7; });
+      legs.forEach((leg, i) => { leg.rotation.x = 0; leg.rotation.z = (i ? 1 : -1) * .75 * arc; });
+      head.rotation.x = 0;
+    } else if (a.type === 'flip') {
+      // spring up, front somersault in the air, land
+      pitch = THREE.MathUtils.smoothstep(p, .12, .88) * Math.PI * 2; lift = arc * 2.3;
+      const tuck = Math.sin(THREE.MathUtils.smoothstep(p, .1, .9) * Math.PI);
+      arms.forEach((arm, i) => { arm.rotation.x = -2.8 + tuck * .6; arm.rotation.z = (i ? 1 : -1) * (.3 + .3 * (1 - tuck)); });
+      legs.forEach(leg => { leg.rotation.x = -1.5 * tuck; leg.rotation.z = 0; });
+      head.rotation.x = .4 * tuck;
+    } else {
+      // star jump with a full twist
+      twist = THREE.MathUtils.smoothstep(p, .08, .9) * Math.PI * 2 * a.side; lift = arc * 2.6; pitch = -.15 * arc;
+      arms.forEach((arm, i) => { arm.rotation.x = -.2; arm.rotation.z = (i ? 1 : -1) * (.4 + 2.0 * arc); });
+      legs.forEach((leg, i) => { leg.rotation.x = 0; leg.rotation.z = (i ? 1 : -1) * .8 * arc; });
+      head.rotation.x = -.3 * arc;
+    }
+    // little crouch on take-off and landing
+    const crouch = Math.max(0, 1 - p / .12) * .12 + Math.max(0, (p - .9) / .1) * .1;
+    // flips turn round the bear's middle, not its origin
+    const ox = c * Math.sin(roll), oy = c * (1 - Math.cos(pitch) * Math.cos(roll)), oz = -c * Math.sin(pitch);
+    const sy = Math.sin(walker.yaw + twist), cy = Math.cos(walker.yaw + twist);
+    body.position.set(walker.x + ox * cy + oz * sy, TOP + footOffset + lift + oy - crouch, walker.z - ox * sy + oz * cy);
+    body.rotation.set(pitch, walker.yaw + twist, roll, 'YXZ');
+    body.scale.set(1.32 / Math.sqrt(squash), 1.32 * squash, 1.32 / Math.sqrt(squash));
+    if (p >= 1) { walker.act = null; walker.cool = .9; walker.phase = 0; body.rotation.set(0, walker.yaw, 0, 'YXZ'); }
+  }
   return world;
 }
 

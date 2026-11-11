@@ -72,7 +72,7 @@ export function createDogActivities(world, navigation, root, mouth) {
     cancel,
     start(kind) {
       if (!active) config = kind === 'fetch' ? world.fetchActivity || (world.activity?.type === 'fetch' ? world.activity : null) : world.activity;
-      if (active || !config) return false;
+      if (active || !config || config.type === 'none') return false;
       resetProps(); active = true; exiting = false; failure = false; completion = null;
       if (config.type === 'fetch') {
         queue = [

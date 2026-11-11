@@ -67,6 +67,7 @@ async function start() {
   });
   await Promise.all(worlds.map(world => world.ready));
   worlds.forEach(world => world.setupEnvironment?.(renderer));
+  worlds.forEach(world => world.precompile?.(renderer, scene, camera));
   // Room mood: lamp-lit studio or a dark room. ?mood=dark opens straight in the dark.
   const moodButton = document.querySelector('#moodToggle');
   const storedMood = () => { try { return localStorage.getItem('alltaglich-mood'); } catch { return null; } };
@@ -180,7 +181,8 @@ async function start() {
   }
   function selectIsland(id, immediate = false, step = 1) {
     const index = ISLANDS.findIndex(island => island.id === id);
-    if (index < 0 || index === islandIndex) return;
+    if (index < 0) return;
+    if (index === islandIndex) { world.onEnter?.(); return; }   // tapping the open island replays it
     bond?.endPetting();
     const outgoing = world;
     // Rapid clicks replace the current transition without leaving stray islands.
