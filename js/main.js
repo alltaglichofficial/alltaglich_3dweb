@@ -187,6 +187,7 @@ async function start() {
     for (const item of worlds) { item.root.visible = false; item.root.position.set(0, 0, 0); }
     islandIndex = index; world = worlds[index]; navigation = world.navigation;
     world.root.visible = true; puppy.setEnvironment(world, navigation);
+    world.onEnter?.();
     if (immediate || motionPreference.matches) islandTransition = null;
     else {
       outgoing.root.visible = true;
