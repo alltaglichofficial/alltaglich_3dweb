@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { RoomEnvironment } from '../product/vendor/environments/RoomEnvironment.js';
 import { createSwimBear } from './bear.js';
 import { createDogHouse, createFetchToy } from './house.js';
 
@@ -45,7 +46,7 @@ export function createDropletIsland(scene, island) {
       gl_FragColor = vec4(col, saturate(.03 + side * .78 + fres * .38 + min(sp, 1.) * .7));`);
   };
   const sheet = new THREE.Mesh(sheetGeo, acrylic); sheet.renderOrder = 1; root.add(sheet);
-  createLaptop(root);
+  const laptop = createLaptop(root);
 
   // Water: clear epoxy-like lenses with the guide's faint cyan/mint tint. Every drop gets
   // its own material (same shader source, so they share one compiled program) carrying
@@ -159,6 +160,13 @@ export function createDropletIsland(scene, island) {
       catch { root.visible = was; return Promise.resolve(); }
     },
     root, island, obstacles, house, fetchActivity: toy, bear, drops,
+    // opens looking across the laptop's long side (landscape diagonal)
+    viewDirection: new THREE.Vector3(29, 23, -15).normalize(),
+    // brushed-silver reflections for the laptop only
+    setupEnvironment(renderer) {
+      const pmrem = new THREE.PMREMGenerator(renderer), tex = pmrem.fromScene(new RoomEnvironment(), .04).texture; pmrem.dispose();
+      for (const m of laptop.materials) { m.envMap = tex; m.needsUpdate = true; }
+    },
     navigationOptions: { bounds: { minX: -W / 2 + .5, maxX: W / 2 - .5, minZ: -D / 2 + .5, maxZ: D / 2 - .5 }, clearance: .6, min: -11, size: 60 },
     activity: { type: 'none' },
     view: { center: { x: 0, z: 0 }, min: [-LAPTOP_W / 2 - .2, GROUND, -LAPTOP_D / 2 - .2], max: [LAPTOP_W / 2 + .2, 2.6, LAPTOP_D / 2 + .2] },
@@ -342,8 +350,8 @@ function roundedRect(w, d, r) {
 // A closed aluminium laptop, lid up, long side along the sheet. The lid carries the
 // Alltäglich ä mark (drawn as vector shapes, traced from the brand logo).
 function createLaptop(root) {
-  const alu = new THREE.MeshStandardMaterial({ color: 0xdcdee0, metalness: .18, roughness: .42 });
-  const dark = new THREE.MeshStandardMaterial({ color: 0x7d8186, metalness: .2, roughness: .55 });
+  const alu = new THREE.MeshStandardMaterial({ color: 0xc4c7cb, metalness: .9, roughness: .36, envMapIntensity: .75 });
+  const dark = new THREE.MeshStandardMaterial({ color: 0x8a8e93, metalness: .6, roughness: .5 });
   const slab = (t, r, y, mat, inset = 0) => {
     const g = new THREE.ExtrudeGeometry(roundedRect(LAPTOP_W - inset, LAPTOP_D - inset, r), { depth: t - .04, bevelEnabled: true, bevelThickness: .02, bevelSize: .02, bevelSegments: 2, curveSegments: 12 });
     g.rotateX(-Math.PI / 2); const m = new THREE.Mesh(g, mat); m.position.y = y + .02; m.castShadow = true; m.receiveShadow = true; root.add(m); return m;
@@ -364,6 +372,7 @@ function createLaptop(root) {
   g.fillRect(X(53), Y(32), 9 * u, 49.5 * u);
   for (const dx of [24.5, 40.5]) { g.beginPath(); g.arc(X(dx), Y(19.3), 4.6 * u, 0, Math.PI * 2); g.fill(); }
   const tex = new THREE.CanvasTexture(c); tex.anisotropy = 4;
-  const logo = new THREE.Mesh(new THREE.PlaneGeometry(3.4, 3.4), new THREE.MeshStandardMaterial({ color: 0xa9adb2, metalness: .3, roughness: .2, alphaMap: tex, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 }));
-  logo.rotation.x = -Math.PI / 2; logo.position.set(0, GROUND + LAPTOP_T + .004, 0); logo.renderOrder = 1; root.add(logo);
+  const logo = new THREE.Mesh(new THREE.PlaneGeometry(3.4, 3.4), new THREE.MeshStandardMaterial({ color: 0x9da2a8, metalness: 1, roughness: .12, envMapIntensity: .9, alphaMap: tex, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 }));
+  logo.rotation.set(-Math.PI / 2, 0, Math.PI / 2); logo.position.set(0, GROUND + LAPTOP_T + .004, 0); logo.renderOrder = 1; root.add(logo);
+  return { materials: [alu, dark, logo.material] };
 }

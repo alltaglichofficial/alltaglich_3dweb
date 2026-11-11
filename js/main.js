@@ -111,7 +111,7 @@ async function start() {
     let low = 12, high = 125;
     for (let i = 0; i < 16; i++) {
       const distance = (low + high) / 2;
-      testCamera.position.copy(target).addScaledVector(direction, distance);
+      testCamera.position.copy(target).addScaledVector(world.viewDirection ?? direction, distance);
       testCamera.lookAt(target); testCamera.updateMatrixWorld();
       const projected = corners.map(p => p.clone().project(testCamera));
       const w = Math.max(...projected.map(p => p.x)) - Math.min(...projected.map(p => p.x));
@@ -124,7 +124,7 @@ async function start() {
   function resetCamera(immediate = false) {
     dogView = false; controls.minDistance = 12;
     goalTarget.copy(viewCenter());
-    goalCamera.copy(goalTarget).addScaledVector(direction, fitDistance());
+    goalCamera.copy(goalTarget).addScaledVector(world.viewDirection ?? direction, fitDistance());
     lighting.aim(goalTarget.x, goalTarget.z);
     if (immediate || motionPreference.matches) {
       camera.position.copy(goalCamera); controls.target.copy(goalTarget); controls.update(); transition = false;
