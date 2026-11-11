@@ -55,7 +55,7 @@ async function start() {
       ao.updateGtaoMaterial({ radius: .9, distanceExponent: 1.4, thickness: 1.2, scale: 1, samples: 16 });
       ao.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: 6, rings: 2, samples: 16 });
       ao.blendIntensity = .85; c.addPass(ao); c.addPass(new OutputPass());
-      composer = c;
+      composer = c; lighting.toneMappedBackground = true; lighting.setMood(lighting.mood, worlds);
     }).catch(err => console.warn('Ambient occlusion unavailable', err));
   }
 

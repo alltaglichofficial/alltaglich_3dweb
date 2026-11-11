@@ -35,11 +35,15 @@ export function createLighting(scene, renderer, { coarse = false } = {}) {
   scene.environment = pmrem.fromScene(new RoomEnvironment(), .04).texture; pmrem.dispose();
   let mood = 'lamp';
   const lighting = {
+    toneMappedBackground: false,
     get mood() { return mood; },
     setMood(name, worlds = []) {
       mood = MOODS[name] ? name : 'lamp';
       const m = MOODS[mood];
       scene.background.set(m.background);
+      // With post-processing the background goes through tone mapping too; pre-compensate
+      // it so the page still shows the exact studio white (or night black).
+      if (lighting.toneMappedBackground) scene.background.copy(untonemap(new THREE.Color(m.background), m.exposure));
       room.color.set(m.room[0]); room.groundColor.set(m.room[1]); room.intensity = m.room[2];
       key.intensity = m.key; key.angle = m.keyAngle; key.penumbra = m.keyPenumbra;
       fill.intensity = m.fill; renderer.toneMappingExposure = m.exposure; floor.material.opacity = m.shadow;
@@ -53,4 +57,23 @@ export function createLighting(scene, renderer, { coarse = false } = {}) {
   };
   lighting.setMood('lamp');
   return lighting;
+}
+
+// Inverse of renderer exposure + Khronos PBR Neutral tone mapping, per channel
+// (good for the near-grey studio backgrounds): finds the linear input that maps
+// to the wanted displayed colour.
+function neutral(v) {
+  const start = .76, d = 1 - start, off = v < .08 ? v - 6.25 * v * v : .04, x = v - off;
+  if (x < start) return x;
+  const peak = 1 - d * d / (x + d - start), g = 1 - 1 / (.15 * (x - peak) + 1);
+  return peak + (peak - peak) * g;
+}
+function untonemap(color, exposure) {
+  const out = new THREE.Color();
+  for (const k of ['r', 'g', 'b']) {
+    const want = color[k]; let lo = 0, hi = 8; // color is linear (Color stores linear)
+    for (let i = 0; i < 40; i++) { const mid = (lo + hi) / 2; if (neutral(mid * exposure) < want) lo = mid; else hi = mid; }
+    out[k] = (lo + hi) / 2;
+  }
+  return out;
 }
