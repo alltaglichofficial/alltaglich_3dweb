@@ -25,4 +25,13 @@ export const ISLANDS = [
     spawn: { x: 0, z: 4.9 },
     stops: [{ x: 0, z: 4.9 }, { x: 2.7, z: 2.5 }, { x: -2.7, z: 2.5 }, { x: -4.9, z: -2.5 }, { x: 4.9, z: -2.5 }, { x: 0, z: -4.4 }],
   },
+  {
+    id: 'drops', label: '물방울 섬', english: 'THE DROPLET ISLAND', number: '04', accent: '#9fc6d3',
+    title: '똑, 똑, 떨어지는<br>투명한 물방울.',
+    description: '얇은 아크릴 위로 물방울이 하나씩 떨어져요.<br>수영곰이 요리조리 피해 다녀요.',
+    noDog: true,
+    playLabel: '피해!',
+    spawn: { x: 0, z: 6 },
+    stops: [{ x: 0, z: 6 }, { x: -3, z: 3 }, { x: 3, z: -3 }],
+  },
 ];

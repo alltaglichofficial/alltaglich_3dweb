@@ -1,10 +1,12 @@
 import * as THREE from 'three';
 import { box, sphere, ico, cylinder, tube, flatPath, roundedPad, mesh, batchStatic } from './geometry.js';
+import { createDropletIsland } from './drops.js';
 import { createPoolIsland } from './pool.js';
 import { createDogHouse, createFetchToy } from './house.js';
 
 export function createWorld(scene, island) {
   if (island.id === 'pool') return createPoolIsland(scene, island);
+  if (island.id === 'drops') return createDropletIsland(scene, island);
   const root = new THREE.Group(); root.name = `island-${island.id}`;
   const staticRoot = new THREE.Group(); root.add(staticRoot); scene.add(root);
   let group = staticRoot;

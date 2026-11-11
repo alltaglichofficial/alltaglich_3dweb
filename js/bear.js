@@ -189,6 +189,8 @@ export function createSwimBear(root, home, pool = null) {
       return { x: bear.position.x, z: bear.position.z, landed: false, splash, stroke: lap.turn > 0 ? 'turn' : lap.stroke };
     },
     get stroke() { return lap.stroke; },
+    // limbs for other islands that animate the bear themselves (the droplet island)
+    parts: { arms, legs, head, rings },
   };
 
   function clampLaneX(x) { const m = pool?.laneX ?? 3; return Math.max(-m, Math.min(m, x)); }

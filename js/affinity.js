@@ -1,6 +1,6 @@
 export const AFFINITY_KEY = 'alltaglich.affinity.v1';
 export const AFFINITY_GAINS = Object.freeze({ feed: 15, pet: 5, play: 10 });
-export const ISLAND_IDS = Object.freeze(['tennis', 'pool', 'climb']);
+export const ISLAND_IDS = Object.freeze(['tennis', 'pool', 'climb', 'drops']);
 
 // Progress belongs to this browser. Actual store coupon benefits can be configured
 // later; unlocking a card never invents a redeemable code or discount.
@@ -8,6 +8,7 @@ export const COUPONS = Object.freeze({
   tennis: { title: '테니스 섬의 작은 선물', benefit: '혜택 공개 예정' },
   pool: { title: '수영 섬의 작은 선물', benefit: '혜택 공개 예정' },
   climb: { title: '클라이밍 섬의 작은 선물', benefit: '혜택 공개 예정' },
+  drops: { title: '물방울 섬의 작은 선물', benefit: '혜택 공개 예정' },
 });
 
 export function createAffinityStore(storage = null, now = () => Date.now()) {

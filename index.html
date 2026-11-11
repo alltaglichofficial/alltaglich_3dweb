@@ -28,10 +28,10 @@
     <p id="error-message">3D 화면을 열지 못했어요. 브라우저의 하드웨어 가속을 확인해 주세요.</p>
     <button id="reload" type="button">다시 열기</button>
   </div>
-  <div class="scene-caption" aria-hidden="true">THREE ISLANDS. LITTLE EVERYDAY ESCAPES.</div>
+  <div class="scene-caption" aria-hidden="true">FOUR ISLANDS. LITTLE EVERYDAY ESCAPES.</div>
   <button type="button" id="prevIsland" class="island-arrow previous" aria-label="클라이밍 섬으로 이동"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 6-6 6 6 6"/></svg><span>PREV</span></button>
   <button type="button" id="nextIsland" class="island-arrow next" aria-label="수영 섬으로 이동"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m10 6 6 6-6 6"/></svg><span>NEXT</span></button>
-  <div class="island-indicator"><span class="island-count"><b id="island-number">01</b> / 03</span><span id="island-name">테니스 섬</span><button type="button" id="resetView" aria-label="현재 섬 전체 보기" title="현재 섬 전체 보기">↺</button><button type="button" id="moodToggle" class="mood-toggle" aria-pressed="false" aria-label="어두운 방 분위기로 바꾸기" title="어두운 방 분위기로 바꾸기"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5Z"/></svg></button></div>
+  <div class="island-indicator"><span class="island-count"><b id="island-number">01</b> / 04</span><span id="island-name">테니스 섬</span><button type="button" id="resetView" aria-label="현재 섬 전체 보기" title="현재 섬 전체 보기">↺</button><button type="button" id="moodToggle" class="mood-toggle" aria-pressed="false" aria-label="어두운 방 분위기로 바꾸기" title="어두운 방 분위기로 바꾸기"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5Z"/></svg></button></div>
   <footer class="footer">
     <div class="control-hint"><span class="orbit-icon">↔</span><span class="desktop-hint">드래그로 회전 · 스크롤로 확대</span><span class="mobile-hint">한 손가락 회전 · 두 손가락 확대</span></div>
     <section id="bond-panel" class="bond-panel" aria-label="현재 섬에서 스피츠 돌보기">
@@ -71,6 +71,7 @@
       <button type="button" data-island="tennis" aria-pressed="true"><span class="nav-dot tennis"></span><span>테니스 섬</span></button>
       <button type="button" data-island="pool" aria-pressed="false"><span class="nav-dot pool"></span><span>수영 섬</span></button>
       <button type="button" data-island="climb" aria-pressed="false"><span class="nav-dot climb"></span><span>클라이밍 섬</span></button>
+      <button type="button" data-island="drops" aria-pressed="false"><span class="nav-dot drops"></span><span>물방울 섬</span></button>
       <span class="nav-divider print-tab" aria-hidden="true" hidden></span>
       <button type="button" class="print-tab" id="print-tab" aria-pressed="false" hidden title="수영장 바닥 프린트를 검정 격자의 프러시안 블루 타일로 바꿔요"><span class="nav-dot print"></span><span>Prussian Blue</span></button>
     </nav>
