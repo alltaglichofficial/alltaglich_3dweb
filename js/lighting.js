@@ -186,8 +186,8 @@ export function createLighting(scene, renderer, { coarse = false } = {}) {
         const flicker = reducedMotion ? 1 : .8 + .12 * Math.sin(time * 11.3) + .08 * Math.sin(time * 23.7 + 1.3) + .05 * Math.sin(time * 5.1 + .4);
         key.intensity = m.key.i * flicker;
       } else if (m.fx === 'pass') {
-        // every six seconds a bar of light crosses the island in two
-        const t = reducedMotion ? .5 : (time % 6) / 2.2;
+        // every four seconds a bar of light crosses the island
+        const t = reducedMotion ? .5 : (time % 4) / 2.4;
         key.intensity = t > 1 ? 0 : m.key.i * Math.sin(Math.PI * t) ** .5;
         const sweep = (Math.min(t, 1) - .5) * 26;
         key.target.position.set(centre.x + Math.cos(home) * sweep, centre.y, centre.z - Math.sin(home) * sweep);
