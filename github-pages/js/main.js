@@ -142,6 +142,11 @@ async function start() {
     document.querySelectorAll('[data-island]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.island === island.id)));
     document.querySelector('#island-title').innerHTML = island.title;
     document.querySelector('#island-description').innerHTML = island.description;
+    // The print tab only belongs to the pool island; it shows that island's current print.
+    const printTab = document.querySelector('#print-tab');
+    const here = worlds[islandIndex];
+    document.querySelectorAll('.print-tab').forEach(el => { el.hidden = !here?.setPrint; });
+    if (printTab && here?.setPrint) printTab.setAttribute('aria-pressed', String(here.print === 'photo'));
     document.querySelector('#island-eyebrow').textContent = island.english;
     document.querySelector('#island-name').textContent = island.label;
     document.querySelector('#island-number').textContent = island.number;
@@ -177,6 +182,12 @@ async function start() {
   function nextIsland(step) { selectIsland(ISLANDS[(islandIndex + step + ISLANDS.length) % ISLANDS.length].id, false, step); }
   viewOffset(); resetCamera(true); updateIslandUI();
   controls.addEventListener('start', () => { transition = false; });
+  document.querySelector('#print-tab')?.addEventListener('click', event => {
+    const pool = worlds.find(w => w.setPrint); if (!pool) return;
+    const next = pool.print === 'photo' ? 'lane' : 'photo';
+    pool.setPrint(next); event.currentTarget.setAttribute('aria-pressed', String(next === 'photo'));
+    document.querySelector('#status').textContent = next === 'photo' ? '수영장 바닥을 물빛 타일로 바꿨어요.' : '수영장 바닥을 레인 타일로 되돌렸어요.';
+  });
   document.querySelectorAll('[data-island]').forEach(button => button.addEventListener('click', () => selectIsland(button.dataset.island, false, ISLANDS.findIndex(i => i.id === button.dataset.island) > islandIndex ? 1 : -1)));
   document.querySelector('#prevIsland').addEventListener('click', () => nextIsland(-1));
   document.querySelector('#nextIsland').addEventListener('click', () => nextIsland(1));

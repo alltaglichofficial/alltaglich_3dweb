@@ -67,6 +67,9 @@ export function createPoolIsland(scene, island) {
     // playing bear, then climbs back out onto the deck the same way.
     activity: { type: 'swim', entry: { x: 0, z: 10 }, ladderTop: { x: 0, z: WALL_Z - .15, y: 1 }, waterEntry: { x: 0, z: 7 }, corridorStart: { x: 0, z: 2.8 }, route: [{ x: 0, z: 2.8 }, { x: -1.65, z: 2.35 }, { x: -1.65, z: -2.6 }, { x: 1.6, z: -2.6 }, { x: 1.6, z: 2.35 }, { x: 0, z: 2.8 }] },
     bear, droplets, hardware,
+    // 'lane' (lane-mark tiles) or 'photo' (the product photo's print); switched from the bottom tab.
+    print: 'lane',
+    setPrint(kind) { world.print = kind === 'photo' ? 'photo' : 'lane'; setPrintTexture(world.print); },
     // Things the visitor can pick up (see main.js): the bear, anywhere over the
     // island, and the keyring chain (physics, added by keyring.js).
     grabTargets: [{
@@ -172,6 +175,21 @@ function paintSampleTiles(floor) {
     texture.wrapS = texture.wrapT = object.material.map.wrapS; texture.anisotropy = 8;
     object.material.map.dispose(); object.material.map = texture; object.material.emissiveMap = texture; object.material.emissive.setHex(0);
     object.material.roughness = .55; object.material.metalness = 0; object.material.needsUpdate = true;
+    if (width !== 256) { printTop.mesh = object; printTop.lane = texture; }
+  });
+}
+// The print can be switched to the real keyring's photographed print (deep blue
+// tiles with sunlit ripples), cropped from the product photo and turned so the
+// ring end sits at the back like the lane print.
+const printTop = { mesh: null, lane: null, photo: null };
+function setPrintTexture(kind) {
+  const m = printTop.mesh?.material; if (!m) return;
+  const apply = tex => { m.map = tex; m.emissiveMap = tex; m.needsUpdate = true; };
+  if (kind !== 'photo') { apply(printTop.lane); return; }
+  if (printTop.photo) { apply(printTop.photo); return; }
+  new THREE.TextureLoader().load(new URL('../assets/pool-print-photo.jpg', import.meta.url).href, tex => {
+    tex.flipY = false; tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 8;
+    printTop.photo = tex; apply(tex);
   });
 }
 
