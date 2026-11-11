@@ -225,8 +225,9 @@ export function createSwimBear(root, home, pool = null) {
     if (turning || reducedMotion) { pose(time, false); return; }
     arms.forEach((arm, i) => {
       const side = i ? 1 : -1;
-      if (st.arms === 'alt') { arm.rotation.x = -(ph + i * Math.PI) * (lap.stroke === 'back' ? -1 : 1); arm.rotation.z = side * .25; }
-      else if (st.arms === 'both') { arm.rotation.x = -ph; arm.rotation.z = side * .35; }
+      // recovery over the water from behind to the front, pull under the body from front to back
+      if (st.arms === 'alt') { arm.rotation.x = (ph + i * Math.PI) * (lap.stroke === 'back' ? -1 : 1); arm.rotation.z = side * .25; }
+      else if (st.arms === 'both') { arm.rotation.x = ph; arm.rotation.z = side * .35; }
       else { const sw = (Math.sin(ph) + 1) / 2; arm.rotation.x = -2.5 + sw * 1.1; arm.rotation.z = side * (.3 + sw * 1.0); }
     });
     legs.forEach((leg, i) => {

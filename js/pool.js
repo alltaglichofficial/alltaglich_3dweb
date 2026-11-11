@@ -42,7 +42,7 @@ export function createPoolIsland(scene, island) {
   const surfaceHeight = (x, z) => motion ? motion.heightAt(x / SCALE, z / SCALE) * SCALE + BASE : .08;
   // Water thrown up when the bear plunges in; each drop rings the surface where it falls back.
   // Big poolside floor lamp standing beside the block, its shade hanging over the water.
-  const lamp = createPoolLamp(root, { x: -WALL_X - 3.2, z: 1.5, groundY: DECK_Y, reach: 5.6, height: 8, scale: 1.55 });
+  const lamp = createPoolLamp(root, { x: -WALL_X - 9, z: 1.5, groundY: DECK_Y, reach: 4.25, height: 8.4, scale: 3.4, lightSize: 13 });
   // A bear fresh out of the water drips: drops fall from it and leave wet spots on
   // the ground, and where it lands it leaves a puddle that slowly dries.
   const wetMarks = createWetMarks(poolGroup, DECK_Y);
@@ -99,7 +99,7 @@ export function createPoolIsland(scene, island) {
       release() { bear.release(); },
     }, ...hardware.grabTargets],
     // Default view frames the block, the front deck and the hardware behind it.
-    view: { center: { x: 0, z: -7.6 }, min: [-11.2, -1.75, -32.5], max: [8.9, 8, 16.1] },
+    view: { center: { x: 0, z: -7.6 }, min: [-8.9, -1.75, -32.5], max: [8.9, 3.9, 16.1] },
     getSurfaceHeight: surfaceHeight,
     heightAt(x, z) {
       if (Math.abs(x - house.object.position.x) < 1.4 && Math.abs(z - house.object.position.z) < 1.3) return house.object.position.y + .02;

@@ -5,7 +5,7 @@ import * as THREE from 'three';
 // round base and curving out over the water, where it ends in a wide, shallow
 // shade shaped like a swim cap (white with a pool-blue rim band). The warm
 // diffuser glows and throws a soft pool of light onto the water below.
-export function createPoolLamp(parent, { x, z, groundY, reach = 5, height = 7.6, yaw = 0, scale = 1 }) {
+export function createPoolLamp(parent, { x, z, groundY, reach = 5, height = 7.6, yaw = 0, scale = 1, lightSize = 6.2 * scale }) {
   const lamp = new THREE.Group(); lamp.name = 'PoolsideLamp'; lamp.position.set(x, groundY, z); lamp.rotation.y = yaw; lamp.scale.setScalar(scale); parent.add(lamp);
   const steel = new THREE.MeshStandardMaterial({ color: 0xdfe3e6, metalness: 1, roughness: .18 });
   const enamel = new THREE.MeshPhysicalMaterial({ color: 0xf7f6f1, roughness: .32, clearcoat: .6, clearcoatRoughness: .2 });
@@ -36,9 +36,9 @@ export function createPoolLamp(parent, { x, z, groundY, reach = 5, height = 7.6,
   const capProfile = [];
   for (let i = 0; i <= 24; i++) { const a = i / 24 * Math.PI / 2; capProfile.push(new THREE.Vector2(Math.max(.001, Math.sin(a) * 1.55), (Math.cos(a) - 1) * .72)); }
   const capGeo = new THREE.LatheGeometry(capProfile, 72);
-  const cap = new THREE.Mesh(capGeo, enamel); cap.castShadow = true; cap.position.y = .02; shade.add(cap);
+  const cap = new THREE.Mesh(capGeo, enamel); cap.castShadow = false; cap.position.y = .02; shade.add(cap);
   enamel.side = THREE.DoubleSide;
-  const stripe = new THREE.Mesh(new THREE.CylinderGeometry(1.565, 1.59, .2, 72, 1, true), band); stripe.position.y = -.62; stripe.castShadow = true; shade.add(stripe);
+  const stripe = new THREE.Mesh(new THREE.CylinderGeometry(1.565, 1.59, .2, 72, 1, true), band); stripe.position.y = -.62; shade.add(stripe);
   const lip = new THREE.Mesh(new THREE.TorusGeometry(1.575, .045, 10, 72), enamel); lip.rotation.x = Math.PI / 2; lip.position.y = -.73; shade.add(lip);
   const socket = new THREE.Mesh(new THREE.CylinderGeometry(.24, .28, .3, 24), steel); socket.position.y = .1; shade.add(socket);
   // frosted diffuser inside the cap, glowing warm
@@ -60,7 +60,7 @@ export function createPoolLamp(parent, { x, z, groundY, reach = 5, height = 7.6,
     // keep the light pool on the moving water surface
     update(surfaceAt) {
       const y = surfaceAt(tipWorld.x, tipWorld.z);
-      poolLight.position.set(tipWorld.x, y + .03, tipWorld.z); poolLight.scale.setScalar(6.2 * scale);
+      poolLight.position.set(tipWorld.x, y + .03, tipWorld.z); poolLight.scale.setScalar(lightSize);
     },
     setMood(mood) {
       const dark = mood === 'dark';
