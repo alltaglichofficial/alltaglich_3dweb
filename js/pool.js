@@ -49,6 +49,7 @@ export function createPoolIsland(scene, island) {
   const ladder = new THREE.Group(); ladder.name = 'PuppyPoolLadder'; root.add(ladder);
   const bear = createSwimBear(poolGroup, { x: 0, z: -.15 }, {
     inPool: (x, z) => Math.abs(x) <= WALL_X - .3 && Math.abs(z) <= WALL_Z - .3, groundY: DECK_Y,
+    laneZ: WALL_Z - 1.5, laneX: WALL_X - 1.4,   // lengths are swum along Z, end wall to end wall
     clampIn: (x, z) => [Math.max(-WALL_X + 1.2, Math.min(WALL_X - 1.2, x)), Math.max(-WALL_Z + 1.2, Math.min(WALL_Z - 1.2, z))],
   });
   bear.object.userData.noGrab = true;
@@ -113,7 +114,7 @@ export function createPoolIsland(scene, island) {
       const b = bear.update(time, reducedMotion, surfaceHeight);
       motion?.setMover(1, b.x / SCALE, b.z / SCALE, reducedMotion ? 0 : .55);
       if (b.landed) splash(b.x, b.z, .9);
-      if (b.splash) { splash(b.x, b.z, b.splash); splash(b.x + .6, b.z - .4, b.splash * .5); }
+      if (b.splash) { splash(b.x, b.z, b.splash); if (b.splash > .5) splash(b.x + .6, b.z - .4, b.splash * .5); }
       if (swimmer) { wake.position.set(swimmer.x, surfaceHeight(swimmer.x, swimmer.z) + .025, swimmer.z); wake.children.forEach((ring, i) => { const t = (time * .75 + i / 3) % 1; ring.scale.setScalar(.6 + t * 1.8); ring.material.opacity = (1 - t) * .35; }); }
     },
     // Dark room: studio reflections dim and the tiles glow softly from within,

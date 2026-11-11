@@ -3,7 +3,8 @@ import { fluffGeometry } from './geometry.js';
 
 // The Alltäglich swim bear: sky-blue plush, black swim goggles pushed up on the
 // forehead, a black swimsuit with white trim and a small sewn-on brand tag.
-// It bobs, paddles and spins slowly in the middle of the pool.
+// It swims lengths of the pool, picking a random stroke (freestyle, backstroke,
+// breaststroke, butterfly) at each end wall.
 // `pool` (optional): { inPool(x, z), groundY, clampIn(x, z) } lets the bear be thrown
 // out of the water, land on the ground and hop back in.
 export function createSwimBear(root, home, pool = null) {
@@ -85,6 +86,9 @@ export function createSwimBear(root, home, pool = null) {
   let lastLift = 0, state = 'swim', last = null, vy = 0, sinkT = 0, heldAt = new THREE.Vector3(), swing = 0;
   const vel = new THREE.Vector3(), track = [], hopFrom = new THREE.Vector3(), hopTo = new THREE.Vector3();
   let groundT = 0, hopT = 0;
+  const lap = { x: home.x, dir: 1, turn: 0, stroke: 'free', phase: 0, entry: 0 };
+  const qYaw = new THREE.Quaternion(), qPitch = new THREE.Quaternion(), qRoll = new THREE.Quaternion();
+  const AX = new THREE.Vector3(1, 0, 0), AY = new THREE.Vector3(0, 1, 0);
   const pose = (t, flail) => {
     arms.forEach((arm, i) => {
       const side = i ? 1 : -1, stroke = Math.sin(t * (flail ? 9 : 4.2) + i * Math.PI);
@@ -151,34 +155,96 @@ export function createSwimBear(root, home, pool = null) {
         }
         return { x: bear.position.x, z: bear.position.z, landed: false, splash: 0 };
       }
-      const x = home.x + Math.sin(t * .32) * .28, z = home.z + Math.cos(t * .32) * .22;
-      const lift = Math.sin(t * .9), hop = Math.pow(Math.max(0, lift), 10) * .22;
-      const landed = state === 'swim' && !reducedMotion && lastLift > .75 && lift <= .75;
-      lastLift = lift;
-      const surface = surfaceHeight(x, z);
-      let y = surface - .02 + Math.sin(t * 1.7) * .045 + hop;
+      const surface0 = surfaceHeight(bear.position.x, bear.position.z);
       if (state === 'sink') {
-        // plunge under, then bob back up to floating over ~1.4 s
+        // plunge under, then bob back up over ~1.4 s, then start swimming lengths
         sinkT += dt; const k = Math.min(1, sinkT / 1.4);
-        y = surface - .02 - Math.sin(k * Math.PI) * 1.1 * (1 - k * .5);
-        bear.position.x += (x - bear.position.x) * Math.min(1, dt * 3); bear.position.z += (z - bear.position.z) * Math.min(1, dt * 3);
-        bear.position.y = y; bear.rotation.x *= Math.max(0, 1 - dt * 4);
-        if (k >= 1) state = 'swim';
-      } else {
-        bear.position.set(x, y, z);
-        bear.rotation.set(Math.sin(t * 1.3) * .05, .35 + Math.sin(t * .4) * 1.1, Math.sin(t * 1.7) * .07);
+        bear.position.y = surface0 - .02 - Math.sin(k * Math.PI) * 1.1 * (1 - k * .5);
+        bear.rotation.x *= Math.max(0, 1 - dt * 4); pose(t, false);
+        if (k >= 1) { state = 'swim'; lap.x = clampLaneX(bear.position.x); lap.dir = bear.position.z > 0 ? -1 : 1; lap.turn = 0; pickStroke(); }
+        updateRings(t, reducedMotion, surface0);
+        return { x: bear.position.x, z: bear.position.z, landed: false, splash: 0 };
       }
-      pose(t, false);
-      head.rotation.z = Math.sin(t * 1.1) * .08;
-      rings.forEach((ring, i) => {
-        const p = (t * .6 + i / 2) % 1;
-        ring.position.set(bear.position.x, surface + .03, bear.position.z); ring.scale.setScalar(.8 + p * 1.4);
-        ring.material.opacity = reducedMotion ? .18 : (1 - p) * .35;
-      });
-      return { x: bear.position.x, z: bear.position.z, landed, splash: 0 };
+      // Swimming lengths of the pool: each length in one stroke, a random new
+      // stroke after every turn at the end wall.
+      let splash = 0;
+      if (!reducedMotion) {
+        const end = (pool?.laneZ ?? 6);
+        if (lap.turn > 0) {
+          lap.turn -= dt;
+          if (lap.turn <= 0) { lap.dir *= -1; pickStroke(); }
+        } else {
+          const st = STROKES[lap.stroke];
+          lap.phase += dt * st.rate;
+          const surge = st.pulse ? .35 + 1.1 * Math.max(0, Math.sin(lap.phase * Math.PI * 2)) : 1;
+          bear.position.z += lap.dir * st.speed * surge * dt;
+          bear.position.x += (lap.x - bear.position.x) * Math.min(1, dt * 2);
+          if (lap.dir * bear.position.z >= end) { bear.position.z = lap.dir * end; lap.turn = .9; splash = .6; }
+          const entry = Math.floor(lap.phase * 2); if (entry !== lap.entry) { lap.entry = entry; splash = Math.max(splash, .28); }
+        }
+      }
+      const surface = surfaceHeight(bear.position.x, bear.position.z);
+      swimPose(time, reducedMotion, surface);
+      updateRings(t, reducedMotion, surface);
+      return { x: bear.position.x, z: bear.position.z, landed: false, splash, stroke: lap.turn > 0 ? 'turn' : lap.stroke };
     },
+    get stroke() { return lap.stroke; },
   };
+
+  function clampLaneX(x) { const m = pool?.laneX ?? 3; return Math.max(-m, Math.min(m, x)); }
+  function pickStroke() {
+    const names = Object.keys(STROKES).filter(n => n !== lap.stroke);
+    lap.stroke = names[Math.floor(Math.random() * names.length)]; lap.phase = 0; lap.entry = 0;
+  }
+  function updateRings(t, reducedMotion, surface) {
+    rings.forEach((ring, i) => {
+      const p = (t * .6 + i / 2) % 1;
+      ring.position.set(bear.position.x, surface + .03, bear.position.z); ring.scale.setScalar(.8 + p * 1.4);
+      ring.material.opacity = reducedMotion ? .18 : (1 - p) * .35;
+    });
+  }
+  // Body orientation: yaw to the swimming direction, pitch forward to lie on the
+  // water (head leading), roll onto the back for backstroke.
+  function swimPose(time, reducedMotion, surface) {
+    const st = STROKES[lap.stroke], ph = lap.phase * Math.PI * 2, turning = lap.turn > 0;
+    const k = turning ? Math.sin(Math.min(1, (0.9 - lap.turn) / .9) * Math.PI) : 0; // 0→1→0 through the turn
+    const yaw = (lap.dir > 0 ? 0 : Math.PI) + (turning ? (lap.dir > 0 ? 1 : -1) * Math.PI * (1 - lap.turn / .9) : 0);
+    let pitch = 1.25 * (1 - k), roll = 0, bob = 0;
+    if (!turning) {
+      if (lap.stroke === 'free') roll = Math.sin(ph) * .4;
+      if (lap.stroke === 'back') roll = Math.PI + Math.sin(ph) * .35;
+      if (lap.stroke === 'breast') { pitch = 1.05 + Math.sin(ph) * .2; bob = Math.max(0, Math.sin(ph)) * .14; }
+      if (lap.stroke === 'fly') { pitch = 1.2 + Math.sin(ph) * .28; bob = Math.max(0, Math.sin(ph)) * .2; }
+    }
+    qYaw.setFromAxisAngle(AY, yaw); qPitch.setFromAxisAngle(AX, pitch); qRoll.setFromAxisAngle(AY, roll);
+    bear.quaternion.copy(qYaw).multiply(qPitch).multiply(qRoll);
+    bear.position.y = surface - .04 + bob + (reducedMotion ? 0 : Math.sin(time * 2.1) * .02);
+    head.rotation.z = 0;
+    if (turning || reducedMotion) { pose(time, false); return; }
+    arms.forEach((arm, i) => {
+      const side = i ? 1 : -1;
+      if (st.arms === 'alt') { arm.rotation.x = -(ph + i * Math.PI) * (lap.stroke === 'back' ? -1 : 1); arm.rotation.z = side * .25; }
+      else if (st.arms === 'both') { arm.rotation.x = -ph; arm.rotation.z = side * .35; }
+      else { const sw = (Math.sin(ph) + 1) / 2; arm.rotation.x = -2.5 + sw * 1.1; arm.rotation.z = side * (.3 + sw * 1.0); }
+    });
+    legs.forEach((leg, i) => {
+      const side = i ? 1 : -1;
+      if (st.legs === 'flutter') { leg.rotation.x = Math.sin(ph * 3 + i * Math.PI) * .55; leg.rotation.z = 0; }
+      else if (st.legs === 'dolphin') { leg.rotation.x = Math.sin(ph * 2) * .6; leg.rotation.z = 0; }
+      else { const kick = Math.max(0, Math.sin(ph - .8)); leg.rotation.x = .9 * kick; leg.rotation.z = side * .9 * kick; }
+    });
+  }
 }
+
+// The four strokes: forward speed (world units/s), stroke cycles per second,
+// arm pattern and kick. Breaststroke surges with each stroke.
+const STROKES = {
+  free:   { label: '자유영', speed: 2.3, rate: 1.1, arms: 'alt',  legs: 'flutter' },
+  back:   { label: '배영',   speed: 1.9, rate: 1.0, arms: 'alt',  legs: 'flutter' },
+  breast: { label: '평영',   speed: 1.4, rate: .8,  arms: 'sweep', legs: 'frog', pulse: true },
+  fly:    { label: '접영',   speed: 2.0, rate: .9,  arms: 'both', legs: 'dolphin' },
+};
+
 
 const FUR_SHELLS = 16;
 const FUR_VERTEX = /* glsl */`
