@@ -56,5 +56,5 @@
 
 /* Islands without the puppy (the pool island) */
 .no-dog .bond-panel, .no-dog .dog-controls, .no-dog .dog-tip { display: none !important; }
-.zone-nav .nav-dot.print{background:#003153}
+.zone-nav .nav-dot.print{background:#245e8a}
 .zone-nav [hidden]{display:none!important}

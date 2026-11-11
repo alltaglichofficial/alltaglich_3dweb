@@ -182,7 +182,7 @@ function paintSampleTiles(floor) {
 // The alternative print: solid Prussian blue tiles in a black grid (8 × 12, as on
 // the photographed keyring), without the lane mark.
 const printTop = { mesh: null, lane: null, photo: null };
-const PRUSSIAN_BLUE = '#003153';
+const PRUSSIAN_BLUE = '#245e8a'; // Prussian blue, lightened so the black grid stays visible
 function navyGridTexture(width, height) {
   const canvas = document.createElement('canvas'); canvas.width = width; canvas.height = height;
   const ctx = canvas.getContext('2d'), cols = 8, rows = 12, tw = width / cols, th = height / rows, line = Math.max(4, tw * .07);
