@@ -40,7 +40,11 @@ export function createPoolIsland(scene, island) {
   const hardware = createKeyringHardware(root, { wallZ: WALL_Z, deckY: DECK_Y, wallX: WALL_X, blockTop: BASE + .2584 * SCALE, body: poolGroup });
   const surfaceHeight = (x, z) => motion ? motion.heightAt(x / SCALE, z / SCALE) * SCALE + BASE : .08;
   // Water thrown up when the bear plunges in; each drop rings the surface where it falls back.
-  const spray = createSpray(poolGroup, (x, z, k) => splash(x, z, k));
+  // A bear fresh out of the water drips: drops fall from it and leave wet spots on
+  // the ground, and where it lands it leaves a puddle that slowly dries.
+  const wetMarks = createWetMarks(poolGroup, DECK_Y);
+  const spray = createSpray(poolGroup, (x, z, k) => splash(x, z, k), (x, z, r) => wetMarks.add(x, z, r), DECK_Y);
+  let wet = 0, dripIn = 0, lastBearState = '';
   const house = createDogHouse(root, obstacles, { x: 4.6, z: 11.3, y: DECK_Y, color: 0x8cb9bc });
   const toy = createFetchToy(root, { x: -3, y: DECK_Y + .17, z: 12.8 }, island.spawn);
   // No puppy on this island: its house and ball stay in the data (the shared dog
@@ -117,7 +121,26 @@ export function createPoolIsland(scene, island) {
       motion?.setMover(1, b.x / SCALE, b.z / SCALE, reducedMotion ? 0 : .55);
       if (b.landed) splash(b.x, b.z, .9);
       if (b.splash >= .8 && !reducedMotion) spray.burst(b.x, surfaceHeight(b.x, b.z), b.z, b.splash);
-      spray.update(Math.min(.05, Math.max(0, time - (spray.last ?? time))), surfaceHeight, inPool); spray.last = time;
+      const sdt = Math.min(.05, Math.max(0, time - (spray.last ?? time))); spray.last = time;
+      spray.update(sdt, surfaceHeight, inPool); wetMarks.update(sdt);
+      {
+        const st = bear.state, bp = bear.object.position, inWater = st === 'sink' || st === 'swim';
+        if (inWater) wet = 1; else wet = Math.max(0, wet - sdt / 30);
+        if (wet > .04 && !inWater && !reducedMotion) {
+          // drips, quicker while it is still soaked
+          dripIn -= sdt;
+          if (dripIn <= 0) { spray.drip(bp.x + (Math.random() - .5) * .7, bp.y - .2 - Math.random() * .3, bp.z + (Math.random() - .5) * .7, st === 'ground' ? .5 : 1); dripIn = (.05 + Math.random() * .2) / (.15 + wet); }
+          // landing on the ground: a splat of water under and around the bear
+          if (st === 'ground' && lastBearState !== 'ground') {
+            wetMarks.add(bp.x, bp.z, .75 + wet * .55, true);
+            for (let i = 0; i < 6; i++) { const a = Math.random() * Math.PI * 2, d = .6 + Math.random() * .9; wetMarks.add(bp.x + Math.cos(a) * d, bp.z + Math.sin(a) * d, .12 + Math.random() * .2); }
+            spray.burst(bp.x, DECK_Y, bp.z, .55 * wet);
+          }
+          // sitting on the ground the puddle under it keeps spreading a little
+          if (st === 'ground' && Math.random() < sdt * .7) wetMarks.add(bp.x + (Math.random() - .5) * .8, bp.z + (Math.random() - .5) * .8, .25 + Math.random() * .25 * wet);
+        }
+        lastBearState = st;
+      }
       if (b.splash) { splash(b.x, b.z, b.splash); if (b.splash > .5) splash(b.x + .6, b.z - .4, b.splash * .5); }
       if (swimmer) { wake.position.set(swimmer.x, surfaceHeight(swimmer.x, swimmer.z) + .025, swimmer.z); wake.children.forEach((ring, i) => { const t = (time * .75 + i / 3) % 1; ring.scale.setScalar(.6 + t * 1.8); ring.material.opacity = (1 - t) * .35; }); }
     },
@@ -355,7 +378,7 @@ function dropletGeometry(rand, size, kind) {
 // Splash spray: a crown of clear drops flung out and up from where the bear hits the
 // water, plus a few tall ones from the centre. One instanced mesh, so it costs a
 // single draw call however many drops are in the air.
-function createSpray(parent, ripple) {
+function createSpray(parent, ripple, onGround = () => {}, groundY = -1.6) {
   const COUNT = 140;
   const material = new THREE.MeshPhysicalMaterial({ color: 0xffffff, transparent: true, depthWrite: false, roughness: .03, ior: 1.33, clearcoat: 1, clearcoatRoughness: .02, specularIntensity: 1 });
   material.onBeforeCompile = shader => {
@@ -386,15 +409,22 @@ function createSpray(parent, ripple) {
         d.r = crown ? .035 + Math.random() * .07 : .05 + Math.random() * .08; d.life = 3;
       }
     },
+    drip(x, y, z, k = 1) {
+      const d = drops[next++ % COUNT], a = Math.random() * Math.PI * 2, sp = Math.random() * .4 * k;
+      d.p.set(x, y, z); d.v.set(Math.cos(a) * sp, -.5 - Math.random() * .5, Math.sin(a) * sp);
+      d.r = .03 + Math.random() * .035; d.life = 3;
+    },
     update(dt, surfaceHeight, inPool) {
       if (!dt) return;
       let any = false;
       for (let i = 0; i < COUNT; i++) {
         const d = drops[i]; if (d.life <= 0) continue;
         any = true; d.life -= dt; d.v.y -= 26 * dt; d.v.multiplyScalar(1 - dt * .25); d.p.addScaledVector(d.v, dt);
-        const floor = inPool(d.p.x, d.p.z) ? surfaceHeight(d.p.x, d.p.z) : -1.6;
+        const water = inPool(d.p.x, d.p.z), floor = water ? surfaceHeight(d.p.x, d.p.z) : groundY;
         if ((d.v.y < 0 && d.p.y <= floor) || d.life <= 0) {
-          if (d.life > 0 && d.r > .06 && floor > -1.6) ripple(d.p.x, d.p.z, .12);
+          if (d.life > 0 && water && d.r > .06) ripple(d.p.x, d.p.z, .12);
+          // outside the pool every drop leaves a little wet spot where it lands
+          if (d.life > 0 && !water) onGround(d.p.x, d.p.z, d.r * (2.2 + Math.random() * 1.6));
           d.life = 0; m.makeScale(0, 0, 0); mesh.setMatrixAt(i, m); continue;
         }
         // stretched along the direction of travel, like a real flying drop
@@ -404,6 +434,52 @@ function createSpray(parent, ripple) {
         m.compose(d.p, q, sc); mesh.setMatrixAt(i, m);
       }
       if (any) mesh.instanceMatrix.needsUpdate = true;
+    },
+  };
+}
+
+// Wet spots on the ground: soft-edged, slightly darker patches that dry out (fade)
+// over half a minute or so. A fixed pool of decals, recycled oldest first.
+function createWetMarks(parent, groundY) {
+  const COUNT = 90, LIFE = 38;
+  const canvas = document.createElement('canvas'); canvas.width = canvas.height = 128;
+  const g = canvas.getContext('2d');
+  // an irregular blob: a few overlapping soft circles
+  for (let i = 0; i < 7; i++) {
+    const a = i / 7 * Math.PI * 2, r = i ? 22 + Math.random() * 10 : 40, x = 64 + (i ? Math.cos(a) * 22 : 0), y = 64 + (i ? Math.sin(a) * 22 : 0);
+    const grad = g.createRadialGradient(x, y, r * .3, x, y, r); grad.addColorStop(0, 'rgba(255,255,255,1)'); grad.addColorStop(.75, 'rgba(255,255,255,1)'); grad.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = grad; g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill();
+  }
+  const tex = new THREE.CanvasTexture(canvas);
+  const geo = new THREE.PlaneGeometry(2, 2); geo.rotateX(-Math.PI / 2);
+  const marks = Array.from({ length: COUNT }, (_, i) => {
+    const material = new THREE.MeshBasicMaterial({ color: 0x7a6f5c, alphaMap: tex, transparent: true, opacity: 0, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 });
+    const mesh = new THREE.Mesh(geo, material); mesh.visible = false; mesh.renderOrder = 1; parent.add(mesh);
+    // a faint wet sheen on the bigger puddles
+    return { mesh, age: LIFE, peak: 0, grow: 0, size: 1 };
+  });
+  let next = 0;
+  return {
+    add(x, z, r, big = false) {
+      // merge into an existing fresh spot that it lands on, so puddles grow instead of stacking
+      for (const m of marks) if (m.age < LIFE * .5 && Math.hypot(m.mesh.position.x - x, m.mesh.position.z - z) < m.size * .35 && m.size > r) { m.age = Math.min(m.age, 2); m.peak = Math.min(.42, m.peak + .03); return; }
+      const m = marks[next++ % COUNT];
+      m.mesh.position.set(x, groundY + .005 + (next % 7) * .0006, z); m.mesh.rotation.y = Math.random() * Math.PI * 2;
+      m.size = r; m.grow = big ? .35 : .08; m.age = 0; m.peak = big ? .34 : .24; m.mesh.visible = true;
+    },
+    update(dt) {
+      if (!dt) return;
+      for (const m of marks) {
+        if (!m.mesh.visible) continue;
+        m.age += dt;
+        if (m.age >= LIFE) { m.mesh.visible = false; continue; }
+        const spread = Math.min(1, m.age / m.grow), s = m.size * (.55 + .45 * (1 - Math.pow(1 - spread, 3)));
+        m.mesh.scale.set(s, 1, s * .86);
+        // stays dark while fresh, then dries from the edges in
+        const dry = Math.max(0, (m.age - LIFE * .35) / (LIFE * .65));
+        m.mesh.material.opacity = m.peak * (1 - dry * dry);
+        if (dry > 0) m.mesh.scale.multiplyScalar(1 - dry * .35);
+      }
     },
   };
 }
