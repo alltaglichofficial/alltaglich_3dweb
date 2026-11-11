@@ -1,91 +1,11 @@
 <!doctype html>
 <html lang="ko">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#f3f0e8">
-  <meta name="description" content="매일의 움직임이 즐거워지는 곳. 알테그리히의 작은 3D 스포츠 섬을 산책해 보세요.">
-  <title>ALLTÄGLICH — A little everyday escape</title>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Crect width='48' height='48' rx='14' fill='%23374731'/%3E%3Ctext x='24' y='34' font-size='35' font-family='serif' fill='%23f3f0e8' text-anchor='middle'%3Ea%3C/text%3E%3C/svg%3E">
-  <link rel="stylesheet" href="./css/style.css">
-  <script type="importmap">{"imports":{"three":"./vendor/three/three.module.js","three/addons/controls/OrbitControls.js":"./vendor/three/OrbitControls.js"}}</script>
+<meta charset="utf-8">
+<title>ALLTÄGLICH — 이동했어요</title>
+<meta http-equiv="refresh" content="0; url=../">
+<link rel="canonical" href="https://alltaglichofficial.github.io/alltaglich_3dweb/">
+<script>location.replace('../' + location.search + location.hash);</script>
 </head>
-<body>
-  <main id="scene" aria-label="알테그리히 3D 스포츠 섬. 드래그로 회전하고 스크롤 또는 두 손가락으로 확대할 수 있습니다."></main>
-  <header class="masthead">
-    <a class="wordmark" href="./" aria-label="알테그리히 처음으로">alltäglich<span>®</span></a>
-    <span class="brand-note">MOVEMENT, EVERY DAY.</span>
-    <span class="edition"><i></i> THE EVERYDAY CLUB <span>VOL. 001</span></span>
-  </header>
-  <section class="intro" aria-label="스포츠 파크 소개">
-    <p class="eyebrow" id="island-eyebrow">THE TENNIS ISLAND</p>
-    <h1 id="island-title">초록 코트 위에서,<br>가볍게 한 게임.</h1>
-    <p class="intro-copy" id="island-description">공이 오가는 리듬을 따라, 오늘도 가볍게.<br>작은 스피츠와 테니스 섬을 산책해요.</p>
-    <p class="dog-tip"><span class="paw">✳</span> 스피츠 위에서 드래그해 쓰다듬어 주세요.</p>
-  </section>
-  <div id="load-state" class="load-state" role="status">작은 섬을 준비하고 있어요<span class="loading-dot">…</span></div>
-  <div id="error-state" class="error-state" role="alert" hidden>
-    <p id="error-message">3D 화면을 열지 못했어요. 브라우저의 하드웨어 가속을 확인해 주세요.</p>
-    <button id="reload" type="button">다시 열기</button>
-  </div>
-  <div class="scene-caption" aria-hidden="true">THREE ISLANDS. LITTLE EVERYDAY ESCAPES.</div>
-  <button type="button" id="prevIsland" class="island-arrow previous" aria-label="클라이밍 섬으로 이동"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 6-6 6 6 6"/></svg><span>PREV</span></button>
-  <button type="button" id="nextIsland" class="island-arrow next" aria-label="수영 섬으로 이동"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m10 6 6 6-6 6"/></svg><span>NEXT</span></button>
-  <div class="island-indicator"><span class="island-count"><b id="island-number">01</b> / 03</span><span id="island-name">테니스 섬</span><button type="button" id="resetView" aria-label="현재 섬 전체 보기" title="현재 섬 전체 보기">↺</button><button type="button" id="moodToggle" class="mood-toggle" aria-pressed="false" aria-label="어두운 방 분위기로 바꾸기" title="어두운 방 분위기로 바꾸기"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5Z"/></svg></button></div>
-  <footer class="footer">
-    <div class="control-hint"><span class="orbit-icon">↔</span><span class="desktop-hint">드래그로 회전 · 스크롤로 확대</span><span class="mobile-hint">한 손가락 회전 · 두 손가락 확대</span></div>
-    <section id="bond-panel" class="bond-panel" aria-label="현재 섬에서 스피츠 돌보기">
-      <div class="bond-summary">
-        <div class="bond-caption"><span><span class="bond-heart" aria-hidden="true">♥</span> 호감도</span><strong id="affinity-value">0%</strong></div>
-        <div id="affinity-meter" class="affinity-meter" role="progressbar" aria-label="현재 섬 호감도" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span id="affinity-fill"></span></div>
-      </div>
-      <div class="care-buttons">
-        <button type="button" id="feedDog" aria-label="스피츠에게 밥 주기">밥 주기</button>
-        <button type="button" id="petDog" aria-pressed="false">쓰다듬기</button>
-        <button type="button" id="showCoupon" disabled title="이 섬의 호감도 100%에 열려요">쿠폰</button>
-      </div>
-    </section>
-    <div class="dog-controls">
-      <p id="dog-message">산책! 스피츠가 자유롭게 돌아다녀요.</p>
-      <div class="command-buttons" role="group" aria-label="스피츠에게 명령하기">
-        <span class="dog-label">MY LITTLE SPITZ</span>
-        <button type="button" id="callDog" data-command="come" aria-pressed="false">이리 와!</button>
-        <button type="button" data-command="sit" aria-pressed="false">앉아</button>
-        <button type="button" data-command="stay" aria-pressed="false">기다려</button>
-        <button type="button" data-command="walk" aria-pressed="true">산책</button>
-        <button type="button" data-command="play" aria-pressed="false">공놀이</button>
-        <details class="trick-menu">
-          <summary>재주 · 집 <span aria-hidden="true">⌃</span></summary>
-          <div class="trick-buttons" role="group" aria-label="강아지 재주와 집 명령">
-            <button type="button" data-command="paw" aria-pressed="false">손</button>
-            <button type="button" data-command="highfive" aria-pressed="false">하이파이브</button>
-            <button type="button" data-command="bang" aria-pressed="false">빵!</button>
-            <button type="button" data-command="fetch" aria-pressed="false">가져와</button>
-            <button type="button" data-command="home" aria-pressed="false">집으로 들어가</button>
-            <button type="button" data-command="greet" aria-pressed="false">안녕하세요</button>
-          </div>
-        </details>
-      </div>
-    </div>
-    <nav class="zone-nav" aria-label="운동별 섬 선택">
-      <button type="button" data-island="tennis" aria-pressed="true"><span class="nav-dot tennis"></span><span>테니스 섬</span></button>
-      <button type="button" data-island="pool" aria-pressed="false"><span class="nav-dot pool"></span><span>수영 섬</span></button>
-      <button type="button" data-island="climb" aria-pressed="false"><span class="nav-dot climb"></span><span>클라이밍 섬</span></button>
-      <span class="nav-divider print-tab" aria-hidden="true" hidden></span>
-      <button type="button" class="print-tab" id="print-tab" aria-pressed="false" hidden title="수영장 바닥 프린트를 검정 격자의 남색 타일로 바꿔요"><span class="nav-dot print"></span><span>물빛 타일</span></button>
-    </nav>
-  </footer>
-  <div id="care-feedback" class="care-feedback" aria-hidden="true"></div>
-  <dialog id="coupon-dialog" class="coupon-dialog" aria-labelledby="coupon-title" aria-describedby="coupon-benefit">
-    <span class="coupon-eyebrow">ALLTÄGLICH · A LITTLE THANK YOU</span>
-    <span class="coupon-heart" aria-hidden="true">♥</span>
-    <p class="coupon-achievement" id="coupon-island">호감도 100% 달성</p>
-    <h2 id="coupon-title">스피츠의 작은 선물</h2>
-    <div class="coupon-benefit" id="coupon-benefit">혜택 공개 예정</div>
-    <p class="coupon-note">마음을 나눠 주셔서 고마워요.<br>특별한 혜택으로 다시 찾아올게요.</p>
-    <button type="button" id="closeCoupon" autofocus>섬으로 돌아가기</button>
-  </dialog>
-  <p id="status" class="sr-only" role="status" aria-live="polite"></p>
-  <script type="module" src="./js/main.js"></script>
-</body>
+<body><p>사이트 주소가 바뀌었어요. <a href="../">새 주소로 이동</a></p></body>
 </html>
