@@ -69,11 +69,9 @@ function neutral(v) {
   return peak + (peak - peak) * g;
 }
 function untonemap(color, exposure) {
-  const out = new THREE.Color();
-  for (const k of ['r', 'g', 'b']) {
-    const want = color[k]; let lo = 0, hi = 8; // color is linear (Color stores linear)
-    for (let i = 0; i < 40; i++) { const mid = (lo + hi) / 2; if (neutral(mid * exposure) < want) lo = mid; else hi = mid; }
-    out[k] = (lo + hi) / 2;
-  }
-  return out;
+  // invert on the brightest channel and scale the colour by the same factor, so a
+  // near-grey stays neutral instead of picking up a tint from per-channel inversion
+  const want = Math.max(color.r, color.g, color.b, 1e-4); let lo = 0, hi = 8;
+  for (let i = 0; i < 40; i++) { const mid = (lo + hi) / 2; if (neutral(mid * exposure) < want) lo = mid; else hi = mid; }
+  return color.clone().multiplyScalar((lo + hi) / 2 / want);
 }
