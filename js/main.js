@@ -186,7 +186,7 @@ async function start() {
     const pool = worlds.find(w => w.setPrint); if (!pool) return;
     const next = pool.print === 'photo' ? 'lane' : 'photo';
     pool.setPrint(next); event.currentTarget.setAttribute('aria-pressed', String(next === 'photo'));
-    document.querySelector('#status').textContent = next === 'photo' ? '수영장 바닥을 물빛 타일로 바꿨어요.' : '수영장 바닥을 레인 타일로 되돌렸어요.';
+    document.querySelector('#status').textContent = next === 'photo' ? '수영장 바닥을 Prussian Blue 타일로 바꿨어요.' : '수영장 바닥을 레인 타일로 되돌렸어요.';
   });
   document.querySelectorAll('[data-island]').forEach(button => button.addEventListener('click', () => selectIsland(button.dataset.island, false, ISLANDS.findIndex(i => i.id === button.dataset.island) > islandIndex ? 1 : -1)));
   document.querySelector('#prevIsland').addEventListener('click', () => nextIsland(-1));
