@@ -111,3 +111,11 @@
 @keyframes plushIn{from{opacity:0;transform:scale(.97)}to{opacity:1;transform:none}}
 @media (prefers-reduced-motion:reduce){.plush-viewer{animation:none}}
 .plush-big:focus,.plush-big:focus-visible{outline:none}
+/* phones: the swimming island's sub-tabs (Aquable · Prussian Blue · Water Drop) wrap onto
+   their own row, so all of them stay on screen and tappable */
+@media(max-width:650px){
+  .zone-nav{flex-wrap:wrap;justify-content:center;border-radius:26px;row-gap:3px}
+  .zone-nav .nav-divider.pool-sub{flex-basis:100%;height:1px;margin:1px 14px;background:#e6e4da}
+  .zone-nav button.pool-sub{min-height:36px;padding:0 13px}
+  .zone-nav .nav-divider.pool-sub{min-height:0;padding:0}
+}

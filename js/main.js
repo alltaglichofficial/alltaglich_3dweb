@@ -53,6 +53,13 @@ async function start() {
   await Promise.all(worlds.map(world => world.ready));
   worlds.forEach(world => world.setupEnvironment?.(renderer));
   worlds.forEach(world => world.precompile?.(renderer, scene, camera));
+  // compile every island's shaders up front (all roots briefly visible), so the first
+  // visit to an island doesn't stall on shader compiles
+  {
+    const shown = worlds.map(w => w.root.visible); worlds.forEach(w => { w.root.visible = true; });
+    try { renderer.compileAsync(scene, camera).catch(() => {}); } catch {}
+    worlds.forEach((w, i) => { w.root.visible = shown[i]; });
+  }
   // Lighting: the lamp-lit studio, a dark room, or one of 34 photographic
   // set-ups from the picker. ?mood=dark (or ?mood=rembrandt ...) opens straight in it.
   const moodButton = document.querySelector('#moodToggle');

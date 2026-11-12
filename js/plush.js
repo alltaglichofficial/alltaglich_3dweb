@@ -43,10 +43,11 @@ function host() {
 export function createPlushBear(parent, kind, { height = 1.4 } = {}) {
   const info = PLUSH[kind];
   const iframe = document.createElement('iframe');
-  iframe.src = info.src + '?drive'; iframe.tabIndex = -1; iframe.title = info.name;
+  // loaded lazily (first use, or a quiet moment after the page has settled)
+  iframe.dataset.src = info.src + '?drive'; iframe.tabIndex = -1; iframe.title = info.name;
   iframe.className = 'plush-frame';
   host().appendChild(iframe);
-  const canvas = document.createElement('canvas'); canvas.width = canvas.height = 512;
+  const TEX = 384, canvas = document.createElement('canvas'); canvas.width = canvas.height = TEX;
   const ctx = canvas.getContext('2d');
   const texture = new THREE.CanvasTexture(canvas); texture.colorSpace = THREE.SRGBColorSpace;
   const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true, alphaTest: .04, depthWrite: true }));
@@ -62,20 +63,29 @@ export function createPlushBear(parent, kind, { height = 1.4 } = {}) {
   const shadow = new THREE.Mesh(new THREE.CircleGeometry(.5, 40), new THREE.MeshBasicMaterial({ color: 0x2c2a22, map: blobTexture(), transparent: true, opacity: .32, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3 }));
   shadow.rotation.x = -Math.PI / 2; shadow.renderOrder = 2; shadow.visible = false; parent.add(shadow);
 
-  const qWorld = new THREE.Quaternion(), qCam = new THREE.Quaternion(), pos = new THREE.Vector3(), q = new THREE.Quaternion();
-  const bear = { info, sprite, proxy, shadow, iframe, height, lastUsed: 0, ready: false };
+  const camPos = new THREE.Vector3(), qWorld = new THREE.Quaternion(), qCam = new THREE.Quaternion(), pos = new THREE.Vector3(), q = new THREE.Quaternion();
+  const bear = { info, sprite, proxy, shadow, iframe, height, size, lastUsed: 0, ready: false, lastT: -1 };
+  bear.load = () => { if (!iframe.src) iframe.src = iframe.dataset.src; };
   iframe.addEventListener('load', () => { bear.ready = true; });
   bear.update = (follow, { swim = false, goggles = swim, ground = null, limbs = null } = {}) => {
     bear.lastUsed = performance.now();
-    if (iframe.style.display === 'none') iframe.style.display = '';
+    bear.load();
+    if (iframe.contentWindow) iframe.contentWindow.__paused = false;
     follow.updateWorldMatrix(true, false);
     follow.getWorldPosition(pos); follow.getWorldQuaternion(qWorld);
-    parent.worldToLocal(sprite.position.copy(pos)); proxy.position.copy(sprite.position); proxy.quaternion.copy(qWorld);
+    parent.worldToLocal(proxy.position.copy(pos)); proxy.quaternion.copy(qWorld);
+    // the picture is flat: stand it at the front of the bear (toward the camera), so it
+    // never cuts into a wall or floor right behind or under the bear; scaled to keep its size
+    if (sceneCamera) {
+      sceneCamera.getWorldPosition(camPos); const d = camPos.distanceTo(pos), off = Math.min(height * .3, d * .3);
+      pos.addScaledVector(camPos.sub(pos).normalize(), off); const k = (d - off) / d; sprite.scale.set(size * k, size * k, 1);
+    }
+    parent.worldToLocal(sprite.position.copy(pos));
     if (ground === null || ground === undefined) shadow.visible = false;
     else {
-      const above = Math.max(0, sprite.position.y - height * .5 - ground), k = 1 / (1 + above * .7);
-      shadow.visible = sprite.visible; shadow.position.set(sprite.position.x, ground + .012, sprite.position.z);
-      shadow.scale.setScalar(height * (.95 + above * .15)); shadow.material.opacity = .34 * k;
+      const above = Math.max(0, proxy.position.y - height * .5 - ground), k = 1 / (1 + above * .7);
+      shadow.visible = sprite.visible; shadow.position.set(proxy.position.x, ground + .012, proxy.position.z);
+      shadow.scale.setScalar(height * (.95 + above * .15)); shadow.material.opacity = .42 * k;
     }
     const B = bear.ready && iframe.contentWindow?.__bear;
     if (!B || !sceneCamera) return;
@@ -85,7 +95,8 @@ export function createPlushBear(parent, kind, { height = 1.4 } = {}) {
     const S = B.S; S.q[0] = q.x; S.q[1] = q.y; S.q[2] = q.z; S.q[3] = q.w;
     S.wx = S.wy = 0; S.lastTouch = S.t; S.swimTarget = swim ? 1 : 0; S.goggleTarget = goggles ? 1 : 0; S.limbs = limbs;
     const src = iframe.contentDocument?.getElementById('gl');
-    if (src?.width) { ctx.clearRect(0, 0, 512, 512); ctx.drawImage(src, 0, 0, 512, 512); texture.needsUpdate = true; sprite.visible = true; }
+    // only re-upload when the viewer has drawn a new frame
+    if (src?.width && S.t !== bear.lastT) { bear.lastT = S.t; ctx.clearRect(0, 0, TEX, TEX); ctx.drawImage(src, 0, 0, TEX, TEX); texture.needsUpdate = true; sprite.visible = true; }
   };
   bear.poke = () => iframe.contentWindow?.__bear?.poke();
   bear.open = () => openPlushViewer(kind);
@@ -103,10 +114,30 @@ function blobTexture() {
   return (blob = new THREE.CanvasTexture(c));
 }
 
+// Warm the other bears up one at a time once the page is quiet, so visiting an island
+// later doesn't stall while its viewer starts (each viewer builds its fur and shaders
+// on its first frames, then goes back to sleep).
+const whenLoaded = f => document.readyState === 'complete' ? f() : addEventListener('load', f);
+let lastInput = 0;
+addEventListener('pointerdown', () => { lastInput = performance.now(); }, true);
+addEventListener('wheel', () => { lastInput = performance.now(); }, { capture: true, passive: true });
+const idle = f => (window.requestIdleCallback ? requestIdleCallback(f, { timeout: 4000 }) : setTimeout(f, 200));
+whenLoaded(() => setTimeout(function warm() {
+  const next = all.find(b => !b.iframe.src);
+  if (!next) return;
+  // never while someone is dragging or zooming: try again a little later
+  if (performance.now() - lastInput < 1500) { setTimeout(warm, 1000); return; }
+  next.warming = true; idle(() => next.load());
+  const check = setInterval(() => {
+    const S = next.iframe.contentWindow?.__bear?.S;
+    if (S && S.t > .2) { clearInterval(check); next.warming = false; if (performance.now() - next.lastUsed > 1500) next.iframe.contentWindow.__paused = true; setTimeout(warm, 600); }
+  }, 200);
+}, 3500));
+
 // Bears on islands that aren't shown stop rendering (their iframe is hidden).
 setInterval(() => {
   const now = performance.now();
-  for (const b of all) if (now - b.lastUsed > 1500 && b.iframe.style.display !== 'none') { b.iframe.style.display = 'none'; b.sprite.visible = false; b.shadow.visible = false; }
+  for (const b of all) if (!b.warming && now - b.lastUsed > 1500 && b.iframe.contentWindow && !b.iframe.contentWindow.__paused) { b.iframe.contentWindow.__paused = true; b.sprite.visible = false; b.shadow.visible = false; }
 }, 300);
 
 // Large viewer: the stand-alone bear page over a soft backdrop.
