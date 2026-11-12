@@ -128,7 +128,7 @@ export function createWorld(scene, island) {
   // bears: one climbs the wall hold by hold, hand over hand, and jumps off with a back
   // flip; the other hops up the steps and leaps off. Arms and legs are posed through
   // the viewer (S.limbs: directions of the limb lobes in the bear's own frame).
-  const PLUSH_SPOTS = { tennis: [['tennis', 1.8, 2.6, 'tennis']], climb: [['climbBrown', -1.4, 1.1, 'wall'], ['climbOrange', 1.6, 1.2, 'steps']] }[island.id] || [];
+  const PLUSH_SPOTS = { tennis: [['tennis', -.9, 3.7, 'tennis'], ['tennis', .9, -3.7, 'tennis']], climb: [['climbBrown', -1.4, 1.1, 'wall'], ['climbOrange', 1.6, 1.2, 'steps']] }[island.id] || [];
   const BEAR_H = 1.5, HALF = BEAR_H / 2, K = BEAR_H / 2.51;   // world units per viewer unit
   const groundAt = (x, z) => worldHeight(x, z);
   const limit = (x, z) => { const k = Math.hypot(x / 7.4, z / 6.3); return k > 1 ? [x / k, z / k] : [x, z]; };
@@ -158,11 +158,16 @@ export function createWorld(scene, island) {
   const stand = p => { const a = p.anchor; a.position.y = groundAt(a.position.x, a.position.z) + HALF; a.rotation.x = 0; a.rotation.z = 0; };
   const face = (p, yaw, dt) => { let dy = yaw - p.anchor.rotation.y; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); p.anchor.rotation.y += dy * Math.min(1, dt * 6); };
 
-  // ---- tennis: racket in the right paw, a rally ball ----
-  const tennisBear = plushBears.find(p => p.play === 'tennis');
-  let racket = null, rally = null;
-  if (tennisBear) {
-    racket = new THREE.Group(); racket.name = 'BearRacket'; root.add(racket);
+  // ---- tennis: two tennis bears, each with a racket in the right paw, rallying ----
+  // The ball flies on exact parabolas, so where and when it can be hit is known as soon
+  // as it is struck: the receiver runs to the spot where its racket head will be at the
+  // contact point of its swing, and starts the swing so the contact frame lands on time.
+  const tennisBears = plushBears.filter(p => p.play === 'tennis');
+  const COURT_Y = .17, G = 13, BALL_R = .11, BOUNCE_Y = COURT_Y + BALL_R;
+  const SWING = .8, KC = .5;                       // swing length, and the contact point in it
+  const HEAD = .63 * 1.3, HAND = 1.18 * K, UP = new THREE.Vector3(0, 1, 0);
+  function makeRacket() {
+    const racket = new THREE.Group(); racket.name = 'BearRacket'; root.add(racket);
     const frameMat = new THREE.MeshStandardMaterial({ color: 0xf4f1e6, roughness: .35, metalness: .1 });
     const gripMat = new THREE.MeshStandardMaterial({ color: 0x3d5036, roughness: .8 });
     const handle = new THREE.Mesh(new THREE.CylinderGeometry(.032, .036, .3, 12), gripMat); handle.position.y = .1; racket.add(handle);
@@ -174,104 +179,139 @@ export function createWorld(scene, island) {
     strings.scale.set(1, 1.28, 1); strings.position.y = .63; racket.add(strings);
     racket.traverse(o => { if (o.isMesh) o.castShadow = true; });
     racket.scale.setScalar(1.3);
-    const ballMesh = new THREE.Mesh(new THREE.SphereGeometry(.11, 20, 14), new THREE.MeshStandardMaterial({ color: 0xd8ef4f, roughness: .9 }));
-    ballMesh.castShadow = true; ballMesh.visible = false; root.add(ballMesh);
-    rally = { ball: ballMesh, p: new THREE.Vector3(), v: new THREE.Vector3(), state: 'wait', t: .8, bounced: 0, hit: null, swingAt: 0, side: 1 };
+    return racket;
   }
-  const COURT_Y = .17, G = 13, BALL_R = .11;
-  // aim a ball from p0 to land at (x, z) after time T
-  function launch(p0, x, z, T) {
-    rally.p.copy(p0); rally.v.set((x - p0.x) / T, (COURT_Y + BALL_R - p0.y + .5 * G * T * T) / T, (z - p0.z) / T); rally.bounced = 0;
+  const smooth = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+  // forehand: shoulders turn back, racket back low, forward through the ball beside the
+  // body (contact at KC), then across and up to a high finish
+  function swingPose(k) {
+    const turn = .75 * smooth(0, .3, k) - .75 * smooth(.3, KC, k) - .9 * smooth(KC, 1, k);
+    const fwd = -1.25 * smooth(0, .3, k) + 1.25 * smooth(.3, KC, k) + 1.6 * smooth(KC, .95, k);
+    const elev = .3 + .1 * smooth(0, .3, k) - .32 * smooth(.3, KC, k) + .95 * smooth(KC, 1, k);
+    return {
+      turn, lift: .06 * Math.sin(Math.PI * k), tilt: -.1 * Math.sin(Math.PI * k),
+      limbs: { armL: arm(-1, .35 + .25 * k, .7 - .5 * k), armR: arm(1, elev, fwd), legL: leg(-1, .15 + .2 * smooth(.3, .6, k), .75), legR: leg(1, .25 - .15 * k, .75) },
+    };
   }
-  // where the ball will be at a good hitting height after its bounce on the bear's side
-  function predictHit() {
-    const p = rally.p.clone(), v = rally.v.clone(); let bounced = 0, t = 0, apex = false;
-    for (let i = 0; i < 400; i++) {
-      t += .01; v.y -= G * .01; p.addScaledVector(v, .01);
-      if (p.y < COURT_Y + BALL_R && v.y < 0) { p.y = COURT_Y + BALL_R; v.y *= -.6; v.x *= .8; v.z *= .8; bounced++; }
-      // take it at the top of its bounce (or as soon as it would run off the back of the court)
-      if (bounced === 1 && (v.y < 0 || p.z > 4.3)) return { p, t };
-    }
-    return { p, t };
+  // racket geometry in the bear's own frame, from its right-arm direction
+  function racketLocal(armR) {
+    const d = new THREE.Vector3(...armR).normalize(), axis = d.clone().lerp(UP, .35).normalize();
+    return { hand: d.multiplyScalar(HAND), axis, head: d.clone().addScaledVector(axis, HEAD) };
   }
-  function racketPose(p, dt) {
-    // hand at the tip of the right arm lobe, racket pointing on along the arm
-    const a = p.anchor, d = new THREE.Vector3(...(p.limbs?.armR ?? arm(1, .2, .1))).normalize();
-    const hand = d.clone().multiplyScalar(1.18 * K);
+  const euler = new THREE.Euler(0, 0, 0, 'YXZ'), qTmp = new THREE.Quaternion();
+  // where the racket head is (relative to the bear's middle, world axes) at contact, facing `yaw`
+  function contactOffset(yaw) {
+    const pose = swingPose(KC), r = racketLocal(pose.limbs.armR);
+    euler.set(.06, yaw + pose.turn, pose.tilt);
+    return r.head.clone().applyEuler(euler).add(new THREE.Vector3(0, pose.lift, 0));
+  }
+  function placeRacket(p) {
+    const a = p.anchor, r = racketLocal(p.limbs?.armR ?? arm(1, .3, .4));
     a.updateMatrixWorld();
-    racket.position.copy(a.localToWorld(hand.clone())); root.worldToLocal(racket.position);
-    const qa = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.clone().lerp(new THREE.Vector3(0, 1, 0), .35).normalize());
-    // the face of the racket looks the way the bear faces (forward is +z in its frame)
-    const roll = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), p.racketRoll ?? 0);
-    racket.quaternion.copy(a.getWorldQuaternion(new THREE.Quaternion())).multiply(qa).multiply(roll);
-    racket.visible = true;
+    p.racket.position.copy(a.localToWorld(r.hand.clone())); root.worldToLocal(p.racket.position);
+    a.getWorldQuaternion(qTmp);
+    p.racket.quaternion.copy(qTmp).multiply(new THREE.Quaternion().setFromUnitVectors(UP, r.axis));
+    p.racket.visible = true;
+  }
+  tennisBears.forEach((p, i) => { p.side = i === 0 ? 1 : -1; p.yawNet = p.side > 0 ? Math.PI : 0; p.racket = makeRacket(); p.home = new THREE.Vector2(-.9 * p.side, 3.7 * p.side); });
+
+  let rally = null;
+  if (tennisBears.length) {
+    const ball = new THREE.Mesh(new THREE.SphereGeometry(BALL_R, 20, 14), new THREE.MeshStandardMaterial({ color: 0xd8ef4f, roughness: .9 }));
+    ball.castShadow = true; ball.visible = false; root.add(ball);
+    rally = { ball, clock: 0, seg: null, bounces: 0, state: 'dead', wait: 1.2, server: 0, receiver: null };
+  }
+  // ball flight: one parabola per bounce, evaluated exactly at any time
+  const at = (seg, t, out = new THREE.Vector3()) => { const s = t - seg.t0; return out.set(seg.p.x + seg.v.x * s, seg.p.y + seg.v.y * s - .5 * G * s * s, seg.p.z + seg.v.z * s); };
+  const landsAfter = seg => (seg.v.y + Math.sqrt(seg.v.y * seg.v.y + 2 * G * Math.max(0, seg.p.y - BOUNCE_Y))) / G;
+  function strike(from, x, z, T) {
+    const R = rally; R.seg = { t0: R.clock, p: from.clone(), v: new THREE.Vector3((x - from.x) / T, (BOUNCE_Y - from.y + .5 * G * T * T) / T, (z - from.z) / T) };
+    R.bounces = 0; R.state = 'flying'; R.ball.visible = true;
+  }
+  // after a strike: plan the receiver's shot at the top part of the bounce
+  function plan(receiver) {
+    const R = rally, s1 = landsAfter(R.seg), b = at(R.seg, R.seg.t0 + s1);
+    const vy = (R.seg.v.y - G * s1) * -.6, vx = R.seg.v.x * .8, vz = R.seg.v.z * .8;
+    const off = contactOffset(receiver.yawNet), yHit = groundAt(0, 0) + HALF + off.y;
+    // ball height after the bounce: y = BOUNCE_Y + vy s - G s²/2 = yHit
+    const disc = vy * vy - 2 * G * (yHit - BOUNCE_Y);
+    let s2 = disc >= 0 ? (vy + Math.sqrt(disc)) / G : vy / G;            // coming down through racket height
+    if (Math.abs(b.z + vz * s2) > 4.9 && disc >= 0) s2 = (vy - Math.sqrt(disc)) / G;   // too deep: take it on the rise
+    const hit = new THREE.Vector3(b.x + vx * s2, BOUNCE_Y + vy * s2 - .5 * G * s2 * s2, b.z + vz * s2);
+    R.receiver = receiver; R.tHit = R.seg.t0 + s1 + s2; R.hit = hit;
+    receiver.stand = new THREE.Vector2(hit.x - off.x, hit.z - off.z);
+    receiver.mode = 'chase'; receiver.t = 0;
+  }
+  function serve() {
+    // the server swings from its baseline; the ball is struck from its racket head at contact
+    const p = tennisBears[rally.server % tennisBears.length]; rally.server++;
+    if (p.toss.busy()) return;
+    p.mode = 'serve'; p.t = 0; rally.state = 'serving'; rally.serverBear = p;
+  }
+  function rallyUpdate(dt) {
+    const R = rally; if (!R) return;
+    R.clock += dt;
+    if (R.state === 'dead') { R.ball.visible = false; R.wait -= dt; if (R.wait <= 0 && tennisBears.every(p => !p.toss.busy())) serve(); return; }
+    if (R.state === 'serving') return;
+    // bounces
+    let guard = 0;
+    while (R.seg && R.clock >= R.seg.t0 + landsAfter(R.seg) && guard++ < 4) {
+      const s1 = landsAfter(R.seg), b = at(R.seg, R.seg.t0 + s1), vy = (R.seg.v.y - G * s1) * -.6;
+      R.bounces++;
+      if (vy < .8 || R.bounces > 4) { R.state = 'dead'; R.wait = 1.1; return; }
+      R.seg = { t0: R.seg.t0 + s1, p: b.setY(BOUNCE_Y), v: new THREE.Vector3(R.seg.v.x * .8, vy, R.seg.v.z * .8) };
+    }
+    at(R.seg, R.clock, R.ball.position); R.ball.rotation.x += dt * 12;
+    if (Math.abs(R.ball.position.x) > 6.8 || Math.abs(R.ball.position.z) > 6.6) { R.state = 'dead'; R.wait = 1; }
+  }
+  function returnShot(p) {
+    // aim deep-ish into the other half, over the net
+    const R = rally, from = R.hit.clone(), other = tennisBears.find(o => o !== p);
+    strike(from, -2.1 + Math.random() * 4.2, -p.side * (1.3 + Math.random() * 1.6), .95 + Math.random() * .2);
+    if (other && !other.toss.busy()) plan(other); else R.receiver = null;
   }
   function playTennis(p, dt) {
-    const a = p.anchor, R = rally; p.t += dt; R.t -= dt;
-    // the ball
-    if (R.state === 'wait') {
-      R.ball.visible = false;
-      if (R.t <= 0) {   // a ball comes over the net from the far side
-        R.ball.visible = true; R.state = 'incoming';
-        launch(new THREE.Vector3(-1.8 + Math.random() * 3.6, 1.1, -4.6), -2 + Math.random() * 4, .9 + Math.random() * 1.6, 1.2 + Math.random() * .3);
-        R.hit = predictHit(); R.timeToHit = R.hit.t;
-        // forehand when the ball is on the racket side, backhand otherwise
-        R.side = R.hit.p.x <= a.position.x ? 1 : -1;
-        p.mode = 'chase'; p.t = 0;
-      }
-    } else {
-      R.v.y -= G * dt; R.p.addScaledVector(R.v, dt);
-      if (R.p.y < COURT_Y + BALL_R && R.v.y < 0) {
-        R.p.y = COURT_Y + BALL_R; R.v.y *= -.6; R.v.x *= .8; R.v.z *= .8; R.bounced++;
-        if (Math.abs(R.v.y) < .6 || (R.state === 'out' && R.bounced > 3)) { R.state = 'wait'; R.t = .9 + Math.random() * .8; }
-      }
-      if (Math.abs(R.p.x) > 6.5 || Math.abs(R.p.z) > 6.4) { R.state = 'wait'; R.t = 1; }
-      R.ball.position.copy(R.p); R.ball.rotation.x += dt * 9;
-      if (R.state === 'incoming') R.timeToHit -= dt;
+    const a = p.anchor, R = rally; p.t += dt;
+    if (p.mode === 'chase') {
+      // run to the spot, then wait in a crouch; the swing starts so contact meets the ball
+      p.target.copy(p.stand);
+      const startAt = R.tHit - KC * SWING;
+      if (walkTo(p, dt, 3.6)) { stand(p); face(p, p.yawNet, dt * 2); const c = Math.sin(p.t * 6) * .03; p.limbs = { armL: arm(-1, .35, .7), armR: arm(1, .3 + c, .5), legL: leg(-1, .3, .8), legR: leg(1, .3, .8) }; }
+      if (R.receiver !== p || R.state !== 'flying') { p.mode = 'recover'; return placeRacket(p); }
+      if (R.clock >= startAt) { p.mode = 'swing'; p.t = R.clock - startAt; p.swingFrom = a.position.clone(); p.reach = Math.hypot(a.position.x - p.stand.x, a.position.z - p.stand.y) < .45; }
     }
-    // the bear
-    if (p.mode === 'idle') {
-      stand(p); face(p, Math.PI, dt);
-      // ready position: knees bent a little, racket up in front
-      const b = Math.sin(p.t * 4) * .04;
-      p.limbs = { armL: arm(-1, .35, .55), armR: arm(1, .45 + b, .6), legL: leg(-1, .15, .7), legR: leg(1, .15, .7) };
-      a.position.y += Math.abs(Math.sin(p.t * 5)) * .05;   // light on its feet
-      p.racketRoll = 0;
-    } else if (p.mode === 'chase') {
-      // stand beside the ball's hitting point, racket side toward it (the bear faces -z)
-      const off = .95 * R.side;
-      p.target.set(R.hit.p.x + off, Math.min(5.2, R.hit.p.z + .25));
-      const arrived = walkTo(p, dt, 3.4);
-      if (arrived) { stand(p); face(p, Math.PI, dt); p.limbs = { armL: arm(-1, .3, .3), armR: arm(1, .35, R.side > 0 ? -.9 : 1.6), legL: leg(-1, .25, .75), legR: leg(1, .25, .75) }; }
-      p.racketRoll = 0;
-      if (R.timeToHit < .3) { p.mode = 'swing'; p.t = 0; R.reached = Math.hypot(a.position.x - (R.hit.p.x + off), a.position.z - (R.hit.p.z + .25)) < .7; }
-    } else if (p.mode === 'swing') {
-      // turn the shoulders, racket back, then through the ball and across the body
-      const k = Math.min(1, p.t / .6), side = R.side;
-      face(p, Math.PI, dt);
-      const turn = side * (k < .5 ? .7 - k * 1.6 : -.1 - (k - .5) * 1.4);
-      a.rotation.y = Math.PI + turn;
-      a.position.y = groundAt(a.position.x, a.position.z) + HALF + Math.sin(k * Math.PI) * .1;
-      a.rotation.z = -side * .12 * Math.sin(k * Math.PI); a.rotation.x = .08;
-      const sweep = side > 0 ? -1.3 + k * 2.9 : 1.9 - k * 2.6;        // forward swing angle of the right arm
-      p.limbs = { armL: arm(-1, .35 + .3 * k, .4 - k * .4), armR: arm(1, .15 + .55 * Math.sin(k * Math.PI), sweep), legL: leg(-1, .2, .75), legR: leg(1, .2 + .2 * k, .75) };
-      p.racketRoll = side > 0 ? 0 : Math.PI;
-      // contact
-      if (R.state === 'incoming' && p.t > .28) {
-        if (R.reached) { R.state = 'return'; launch(R.p.clone(), -2.2 + Math.random() * 4.4, -1.6 - Math.random() * 2.6, .95 + Math.random() * .25); }
-        else R.state = 'out';   // missed it!
+    if (p.mode === 'swing' || p.mode === 'serve') {
+      const k = Math.min(1, p.t / SWING), pose = swingPose(k);
+      if (p.mode === 'swing' && p.reach) {
+        // slide the last bit onto the exact spot so racket and ball meet
+        const f = smooth(0, KC, k); a.position.x = THREE.MathUtils.lerp(p.swingFrom.x, p.stand.x, f); a.position.z = THREE.MathUtils.lerp(p.swingFrom.z, p.stand.y, f);
       }
-      if (k >= 1) { a.rotation.y = Math.PI; p.mode = R.state === 'out' ? 'miss' : 'idle'; p.t = 0; }
-    } else if (p.mode === 'miss') {
-      // shrug, then back to the middle
-      stand(p); face(p, 0, dt * .6);
-      p.limbs = { armL: arm(-1, .9, .2), armR: arm(1, .9, .2), legL: leg(-1), legR: leg(1) };
-      if (p.t > 1) { p.mode = 'recover'; p.target.set(0, 3.3); }
-    } else if (p.mode === 'recover') { if (walkTo(p, dt, 2.2)) { p.mode = 'idle'; p.t = 0; } }
-    if (R.state === 'return' && p.mode === 'idle' && p.t > .2 && Math.random() < dt * .7) { p.target.set(-.6 + Math.random() * 1.2, 3.2 + Math.random() * .6); p.mode = 'recover'; }
-    racketPose(p, dt);
+      a.rotation.set(.06, p.yawNet + pose.turn, pose.tilt, 'YXZ');
+      a.position.y = groundAt(a.position.x, a.position.z) + HALF + pose.lift;
+      p.limbs = pose.limbs;
+      const contact = p.mode === 'swing' ? R.clock >= R.tHit && !p.struck : k >= KC && !p.struck;
+      if (contact) {
+        p.struck = true;
+        if (p.mode === 'serve') {
+          placeRacket(p); const r = racketLocal(p.limbs.armR); a.updateMatrixWorld();
+          R.hit = root.worldToLocal(a.localToWorld(r.head.clone()));
+          returnShot(p);
+        } else if (p.reach && R.receiver === p && R.state === 'flying') returnShot(p);
+        else if (R.receiver === p) R.receiver = null;   // missed it — the ball runs on
+      }
+      if (k >= 1) { p.struck = false; p.mode = 'recover'; p.t = 0; }
+    } else if (p.mode === 'recover') {
+      p.target.copy(p.home);
+      if (walkTo(p, dt, 2.4)) { p.mode = 'ready'; p.t = 0; }
+    } else if (p.mode === 'ready' || p.mode === 'idle') {
+      // split-step ready position facing the net, light on its feet
+      stand(p); face(p, p.yawNet, dt);
+      const c = Math.sin(p.t * 4) * .04;
+      p.limbs = { armL: arm(-1, .35, .65), armR: arm(1, .4 + c, .55), legL: leg(-1, .18, .72), legR: leg(1, .18, .72) };
+      a.position.y += Math.abs(Math.sin(p.t * 5)) * .05;
+    }
+    placeRacket(p);
   }
-
   // ---- climbing ----
   const WALL_Z = -1.45;   // the bear's middle when pressed to the bouldering wall's face
   function playWall(p, dt) {
@@ -292,11 +332,12 @@ export function createWorld(scene, island) {
       const rise = .42;
       a.position.set(a.position.x + side * Math.sin(f * Math.PI) * .004, p.base + (Math.min(m, p.moves) + (m < p.moves ? ease : 0)) * rise, WALL_Z);
       a.rotation.z = side * .12 * Math.sin(f * Math.PI); a.rotation.x = -.18;
-      const high = 1.25, low = .55;
+      // paws reach forward to the wall and a little up — not straight overhead
+      const high = .8, low = .35;
       const up = side < 0 ? 'armL' : 'armR', down = side < 0 ? 'armR' : 'armL';
       p.limbs = {};
-      p.limbs[up] = arm(side, low + (high - low) * reach - .25 * ease, .35);
-      p.limbs[down] = arm(-side, high - (high - low) * ease * .8, .35);
+      p.limbs[up] = arm(side, low + (high - low) * reach - .2 * ease, 1.05);
+      p.limbs[down] = arm(-side, high - (high - low) * ease * .8, 1.05);
       p.limbs[side < 0 ? 'legR' : 'legL'] = leg(-side, .9 * Math.sin(Math.min(1, f * 1.3) * Math.PI), .5);
       p.limbs[side < 0 ? 'legL' : 'legR'] = leg(side, .25, .5);
       if (m >= p.moves) { p.mode = 'hang'; p.t = 0; }
@@ -305,7 +346,7 @@ export function createWorld(scene, island) {
       a.rotation.z = Math.sin(p.t * 3) * .08;
       a.rotation.y = Math.PI + Math.sin(Math.min(1, p.t / 1.2) * Math.PI) * .7;
       const kick = Math.sin(p.t * 6) * .4;
-      p.limbs = { armL: arm(-1, 1.3, .3), armR: arm(1, 1.3, .3), legL: leg(-1, Math.max(0, kick)), legR: leg(1, Math.max(0, -kick)) };
+      p.limbs = { armL: arm(-1, .8, 1.05), armR: arm(1, .8, 1.05), legL: leg(-1, Math.max(0, kick)), legR: leg(1, Math.max(0, -kick)) };
       if (p.t > 1.4) { p.mode = 'jump'; p.t = 0; p.vy = 3.6; p.vz = 2.6; }
     } else if (p.mode === 'jump') {
       // push off, tuck into a back flip, land on the mat
@@ -316,7 +357,9 @@ export function createWorld(scene, island) {
       const floor = groundAt(a.position.x, a.position.z) + HALF;
       if (a.position.y <= floor && p.vy < 0) { a.position.y = floor; a.rotation.set(0, Math.PI, 0, 'YXZ'); p.mode = 'cheer'; p.t = 0; }
     } else if (p.mode === 'cheer') {
-      stand(p); p.limbs = { armL: arm(-1, 1.35, .1), armR: arm(1, 1.35, .1), legL: leg(-1), legR: leg(1) };
+      // pleased with itself: paws forward and a little up, a small clap
+      const clap = Math.abs(Math.sin(p.t * 9)) * .25;
+      stand(p); p.limbs = { armL: arm(-1, .55, .95 + clap), armR: arm(1, .55, .95 + clap), legL: leg(-1), legR: leg(1) };
       face(p, 0, dt * 2);
       if (p.t > .9) { p.mode = 'idle'; p.t = 0; p.wait = 1 + Math.random() * 1.5; }
     }
@@ -328,7 +371,7 @@ export function createWorld(scene, island) {
       stand(p); face(p, -.3, dt);
       // stretching: arms up, side to side
       const s = Math.sin(p.t * 2.4);
-      p.limbs = { armL: arm(-1, 1.1 + s * .25, 0), armR: arm(1, 1.1 - s * .25, 0), legL: leg(-1), legR: leg(1) }; a.rotation.z = s * .12;
+      p.limbs = { armL: arm(-1, .6 + s * .15, .9), armR: arm(1, .6 - s * .15, .9), legL: leg(-1), legR: leg(1) }; a.rotation.z = s * .1;
       if (p.t > p.wait) { p.mode = 'toStep'; p.step = 0; p.target.set(STEPS[0][0] - 1.1, STEPS[0][1] + .9); }
     } else if (p.mode === 'toStep') { if (walkTo(p, dt)) { p.mode = 'hop'; p.t = 0; p.from = a.position.clone(); } }
     else if (p.mode === 'hop') {
@@ -337,12 +380,12 @@ export function createWorld(scene, island) {
       a.position.lerpVectors(p.from, to, k); a.position.y += Math.sin(k * Math.PI) * .7;
       face(p, Math.atan2(to.x - p.from.x, to.z - p.from.z), dt * 2); a.rotation.x = Math.sin(k * Math.PI) * -.2; a.rotation.z = 0;
       const air = Math.sin(k * Math.PI);
-      p.limbs = { armL: arm(-1, .2 + air * 1.1, .3), armR: arm(1, .2 + air * 1.1, .3), legL: leg(-1, air * .6), legR: leg(1, air * .6) };
+      p.limbs = { armL: arm(-1, .2 + air * .5, .4 + air * .6), armR: arm(1, .2 + air * .5, .4 + air * .6), legL: leg(-1, air * .6), legR: leg(1, air * .6) };
       if (k >= 1) { p.step++; p.t = 0; p.from = a.position.clone(); if (p.step >= STEPS.length) { p.mode = 'leap'; p.vy = 6; p.vx = 1.6; p.vz = 1.4; } }
     } else if (p.mode === 'leap') {
       // star jump with a spin off the top step
       p.vy -= 26 * dt; a.position.x += p.vx * dt; a.position.z += p.vz * dt; a.position.y += p.vy * dt; a.rotation.y += dt * 9; a.rotation.x = 0;
-      p.limbs = { armL: arm(-1, 1.2, 0), armR: arm(1, 1.2, 0), legL: leg(-1, 0, 1), legR: leg(1, 0, 1) };
+      p.limbs = { armL: arm(-1, .7, .9), armR: arm(1, .7, .9), legL: leg(-1, 0, 1), legR: leg(1, 0, 1) };
       const floor = groundAt(a.position.x, a.position.z) + HALF;
       if (a.position.y <= floor && p.vy < 0) { a.position.y = floor; p.mode = 'idle'; p.t = 0; p.wait = 1 + Math.random() * 1.5; }
     }
@@ -353,7 +396,10 @@ export function createWorld(scene, island) {
     root, island, obstacles, activity, house, fetchActivity,
     navigationOptions: { radiusX: 8.2, radiusZ: 7.05, clearance: .75 },
     grabTargets: plushBears.map(p => bearTarget(p.bear, p.toss)),
+    get tennis() { return { rally, bears: tennisBears }; },
     update(time = 0, reducedMotion = false) {
+      const fdt = Math.min(.05, Math.max(0, time - (rally?.last ?? time))); if (rally) rally.last = time;
+      if (!reducedMotion) rallyUpdate(fdt);
       for (const p of plushBears) {
         const dt = Math.min(.05, Math.max(0, time - p.last)); p.last = time;
         if (p.toss.busy()) {
@@ -361,7 +407,7 @@ export function createWorld(scene, island) {
           const st = p.toss.update(dt);
           p.limbs = st === 'held' || st === 'fall' ? { armL: arm(-1, 1.2, .2), armR: arm(1, 1.2, .2), legL: leg(-1, .3, .9), legR: leg(1, .3, .9) } : null;
           if (st === 'landed') { p.mode = 'idle'; p.t = 0; p.wait = .6; }
-          if (p.play === 'tennis') { racketPose(p, dt); if (rally) { rally.state = 'wait'; rally.t = 1.5; rally.ball.visible = false; } }
+          if (p.play === 'tennis') { placeRacket(p); p.struck = false; if (st === 'landed') p.mode = 'recover'; if (rally && rally.state !== 'dead') { rally.state = 'dead'; rally.wait = 1.6; } }
         } else if (!reducedMotion) PLAY[p.play](p, dt);
         p.bear.update(p.anchor, { ground: groundAt(p.anchor.position.x, p.anchor.position.z), limbs: p.limbs });
       }
