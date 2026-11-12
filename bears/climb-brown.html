@@ -501,7 +501,7 @@ void main(){
   vec3 base = mix(mix(mix(mix(uColor, uBelly, belly), vec3(0.97, 0.97, 0.95) * (0.9 + 0.1*hash(floor(n*420.0))), seam), vec3(0.95, 0.95, 0.96), white), vec3(0.05, 0.055, 0.07), face);
   // climbing chalk dusted on the paws: patchy white, thickest at the tips
   float paw = uIsFur > 0.5 ? 1.0 - smoothstep(0.14, 0.34, min(armDist(n, uArmL), armDist(n, uArmR))) : 0.0;
-  base = mix(base, vec3(0.97, 0.96, 0.93), paw * (0.35 + 0.45 * hash(floor(n * 150.0))));
+  base = mix(base, vec3(0.97, 0.96, 0.93), paw * (0.35 + 0.45 * hash(floor(n * 150.0))) * 0.1);   // just a trace
   vec3 col = base * mix(0.66, 1.04, diff*diff) * occ * (0.93 + 0.14*r);
   float rim = pow(1.0 - max(dot(N, V), 0.0), 2.5);
   col += vec3(1.0) * rim * 0.14 * uShell * (1.0 - max(face, white));
