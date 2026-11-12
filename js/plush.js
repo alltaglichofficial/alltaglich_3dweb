@@ -173,11 +173,12 @@ export function createThrowable(object, { bottom, groundAt, limit = (x, z) => [x
   T.launch = (vel, spin = 4) => { v.copy(vel); T.spin.set(spin, 0, 0); T.state = 'fall'; };
   T.cancel = () => { T.state = null; };
   T.grab = (point, camera) => {
+    if (T.locked) return;   // stuck in a water drop
     camera.getWorldDirection(normal); plane.setFromNormalAndCoplanarPoint(normal, point);
     object.getWorldPosition(offset).sub(point); track.length = 0; T.state = 'held'; v.set(0, 0, 0);
   };
   T.drag = ray => {
-    if (!ray.intersectPlane(plane, hit)) return;
+    if (T.locked || T.state !== 'held' || !ray.intersectPlane(plane, hit)) return;
     w.copy(hit).add(offset); local(w);
     const [x, z] = limit(w.x, w.z); w.x = x; w.z = z;
     w.y = Math.max(w.y, groundAt(w.x, w.z) + bottom + .05);

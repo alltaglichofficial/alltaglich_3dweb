@@ -138,7 +138,10 @@ export function createDropletIsland(scene, island, opts = {}) {
   const sheetAt = (x, z) => onLid(x, z) ? TOP : GROUND;
   // on its own island it always comes down on the lid; beside the pool it can be thrown off it
   const toss = createThrowable(body, { bottom: footOffset, groundAt: sheetAt, limit: (x, z) => [THREE.MathUtils.clamp(x, -W / 2 + .7, W / 2 - .7), THREE.MathUtils.clamp(z, -D / 2 + .7, D / 2 - .7)] });
-  let active = !embedded, incoming = false;
+  let active = !embedded, incoming = false, trap = null;
+  // the drop that holds a caught bear
+  const BUBBLE_R = (opts.plush?.height ?? plush.height ?? 1.9) * .68;
+  const bubble = new THREE.Mesh(ball, waterMaterial('#8dc5d4', .07)); bubble.renderOrder = 5; bubble.visible = false; root.add(bubble);
   const walker = { x: 0, z: 2, vx: 0, vz: 0, yaw: 0, phase: 0, target: new THREE.Vector2(0, 2), flinch: 0, act: null, cool: 0, lastAct: '' };
   body.rotation.order = 'YXZ';   // yaw first, then pitch/roll in the bear's own frame (for flips)
   const LIMIT_X = W / 2 - .9, LIMIT_Z = D / 2 - .9;
@@ -157,6 +160,7 @@ export function createDropletIsland(scene, island, opts = {}) {
   const HIDE = 1e-4, hide = m => m.scale.setScalar(HIDE);
   let start = null, last = null, order = [];
   const reset = time => {
+    trap = null; bubble.visible = false; toss.locked = false;
     start = time; order = drops.map((_, i) => i).sort(() => Math.random() - .5);
     order.forEach((i, k) => { const d = drops[i]; d.t0 = START_DELAY + k * INTERVAL; d.state = 'wait'; hide(d.puddle); hide(d.falling); hide(d.blob); d.mark.visible = false; });
     if (!embedded) { walker.x = 0; walker.z = 2; }
@@ -194,6 +198,7 @@ export function createDropletIsland(scene, island, opts = {}) {
     heightAt(x, z) { return Math.abs(x) <= W / 2 && Math.abs(z) <= D / 2 ? TOP : GROUND; },
     get finished() { return drops.every(d => d.state === 'landed'); },
     get stunt() { return walker.act?.type ?? null; },
+    get trapped() { return !!trap; },
     get active() { return active; },
     get held() { return toss.state === 'held'; },
     top: TOP, size: [LAPTOP_W, LAPTOP_D], bearBottom: footOffset,
@@ -212,7 +217,7 @@ export function createDropletIsland(scene, island, opts = {}) {
     },
     bearTarget: bearTarget(plush, toss),
     // the pool takes the bear back
-    letGo() { active = false; toss.cancel(); walker.act = null; },
+    letGo() { active = false; toss.cancel(); toss.locked = false; trap = null; bubble.visible = false; walker.act = null; },
     update(time, reducedMotion) {
       if (fx.visible && (start === null || pendingReset)) { pendingReset = false; reset(time); }
       const dt = last === null ? 0 : Math.min(.05, Math.max(0, time - last)); last = time;
@@ -224,6 +229,18 @@ export function createDropletIsland(scene, island, opts = {}) {
           const ft = t - d.t0, y = FALL_H - .5 * GRAVITY * ft * ft, k = Math.min(1, ft / Math.sqrt(2 * FALL_H / GRAVITY));
           d.falling.scale.set(d.r * .8, d.r * (1.35 + .35 * k), d.r * .8);
           d.falling.position.set(d.cx, TOP + d.r * 1.5 + Math.max(0, y), d.cz);
+          // carried or thrown into a falling drop: the drop swallows the bear
+          if (active && !trap && !reducedMotion && (toss.state === 'held' || toss.state === 'fall')) {
+            const by = body.position.y + bearMid;
+            if (Math.hypot(body.position.x - d.cx, by - d.falling.position.y, body.position.z - d.cz) < d.r * 1.25 + BUBBLE_R * .6) {
+              trap = { d, until: t + 2, c: new THREE.Vector3(body.position.x, by, body.position.z), vy: -2, born: t };
+              toss.cancel(); toss.locked = true; walker.act = null;
+              d.state = 'caught'; hide(d.falling); d.mark.visible = false;
+              bubble.visible = true;
+              splash(d.cx, d.cz, .5);
+              continue;
+            }
+          }
           d.mark.material.opacity = .05 + .2 * k; d.mark.scale.setScalar(Math.max(d.r, d.reach * .5) * (1.6 - .6 * k));
           if (y <= 0 || reducedMotion) {
             d.state = 'splat'; d.splatAt = t; hide(d.falling); d.mark.visible = false;
@@ -248,6 +265,28 @@ export function createDropletIsland(scene, island, opts = {}) {
         if (s.life <= 0) s.m.scale.setScalar(1e-4);
       }
       if (!active) return;
+      if (trap) {
+        // floating inside the drop for two seconds: it sinks gently onto the lid and
+        // wobbles while the bear paddles about inside, then bursts
+        const c = trap.c, age = t - trap.born, rest = TOP + BUBBLE_R * .92;
+        trap.vy -= 6 * dt; c.y += trap.vy * dt; if (c.y < rest) { c.y = rest; trap.vy *= -.35; }
+        const grow = Math.min(1, age / .2), w = Math.sin(age * 9) * .06 * Math.exp(-age * .6) + Math.sin(age * 3.1) * .025;
+        bubble.position.copy(c); bubble.scale.set(BUBBLE_R * grow * (1 + w), BUBBLE_R * grow * (1 - w), BUBBLE_R * grow * (1 + w));
+        body.rotation.set(Math.sin(age * 2.3) * .5, body.rotation.y + dt * 1.6, Math.sin(age * 1.7) * .6, 'YXZ');
+        // keep the bear's middle at the drop's middle whichever way it tumbles
+        body.position.copy(c).sub(new THREE.Vector3(0, bearMid, 0).applyEuler(body.rotation));
+        const f = Math.sin(age * 12);
+        const limbs = { armL: [-.6, .5 + f * .3, .5], armR: [.6, .5 - f * .3, .5], legL: [-.5, -.7, .2 + f * .4], legR: [.5, -.7, .2 - f * .4] };
+        if (t >= trap.until || !fx.visible) {
+          // pop! the water falls where the drop was headed and the bear drops out
+          bubble.visible = false; toss.locked = false;
+          splash(c.x, c.z, 1.6);
+          trap.d.state = 'splat'; trap.d.splatAt = t;
+          trap = null; toss.launch(new THREE.Vector3(0, 3, 0), 0);
+        }
+        plush.update(anchor, { ground: sheetAt(body.position.x, body.position.z), limbs });
+        return;
+      }
       if (toss.busy()) {
         const st = toss.update(dt);
         if (embedded && st === 'fall') {
