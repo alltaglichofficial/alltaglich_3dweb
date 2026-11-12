@@ -65,7 +65,7 @@ export function createPlushBear(parent, kind, { height = 1.4 } = {}) {
   const qWorld = new THREE.Quaternion(), qCam = new THREE.Quaternion(), pos = new THREE.Vector3(), q = new THREE.Quaternion();
   const bear = { info, sprite, proxy, shadow, iframe, height, lastUsed: 0, ready: false };
   iframe.addEventListener('load', () => { bear.ready = true; });
-  bear.update = (follow, { swim = false, goggles = swim, ground = null } = {}) => {
+  bear.update = (follow, { swim = false, goggles = swim, ground = null, limbs = null } = {}) => {
     bear.lastUsed = performance.now();
     if (iframe.style.display === 'none') iframe.style.display = '';
     follow.updateWorldMatrix(true, false);
@@ -83,7 +83,7 @@ export function createPlushBear(parent, kind, { height = 1.4 } = {}) {
     sceneCamera.getWorldQuaternion(qCam);
     q.copy(qCam).invert().multiply(qWorld).premultiply(TILT);
     const S = B.S; S.q[0] = q.x; S.q[1] = q.y; S.q[2] = q.z; S.q[3] = q.w;
-    S.wx = S.wy = 0; S.lastTouch = S.t; S.swimTarget = swim ? 1 : 0; S.goggleTarget = goggles ? 1 : 0;
+    S.wx = S.wy = 0; S.lastTouch = S.t; S.swimTarget = swim ? 1 : 0; S.goggleTarget = goggles ? 1 : 0; S.limbs = limbs;
     const src = iframe.contentDocument?.getElementById('gl');
     if (src?.width) { ctx.clearRect(0, 0, 512, 512); ctx.drawImage(src, 0, 0, 512, 512); texture.needsUpdate = true; sprite.visible = true; }
   };

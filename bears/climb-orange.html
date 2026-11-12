@@ -661,7 +661,7 @@ const S = {
   q:[0,0,0,1], wx:0, wy:0, dragging:false, lastTouch:-10,
   y:0, vy:0, air:false, airT:0, airDur:1, flip:false,
   sq:0, sqv:0, wiggle:0,
-  goggle:0, goggleTarget:0, swim:0, swimTarget:0, swimPhase:0,
+  goggle:0, goggleTarget:0, swim:0, swimTarget:0, swimPhase:0, limbs:null,
   bears:[
     {x:0, fur:hex('#de864f'), furTarget:hex('#de864f'), belly:hex('#f2ede3'), bellyTarget:hex('#f2ede3')}
   ], pick:0,
@@ -830,6 +830,8 @@ function frame(now){
     const leg = norm([side*0.60, -0.80, 0.06 + kick]);
     if(side < 0){ LIMB.armL = arm; LIMB.legL = leg; } else { LIMB.armR = arm; LIMB.legR = leg; }
   }
+  // the island scene can pose the arms and legs directly (climbing, a tennis swing)
+  if(S.limbs) for(const k in S.limbs) if(LIMB[k] && S.limbs[k]) LIMB[k] = norm(S.limbs[k]);
 
   const bob = reduced ? 0 : Math.sin(S.t*1.7)*0.05;
   const posY = DRIVE ? S.y : S.y + bob + sw*0.15 + Math.sin(S.swimPhase*2)*0.03*sw;

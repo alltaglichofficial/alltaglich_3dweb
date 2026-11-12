@@ -122,86 +122,227 @@ export function createWorld(scene, island) {
   const house = createDogHouse(root, obstacles, island.id === 'tennis' ? { x: 5.3, z: -2, color: 0x8fa980 } : { x: -5.05, z: -.5, color: 0xd0a285 });
   const fetchActivity = activity.type === 'fetch' ? activity : createFetchToy(root, { x: 1.4, y: .3, z: 3 }, island.spawn);
 
-  // The island's Alltäglich plush bears. They play on their own (tennis bear: runs
-  // about its half of the court and swings at rallies; climbing bears: climb the
-  // wall and jump down, or hop up the steps), and can be picked up and thrown.
+  // The island's Alltäglich plush bears. They play on their own and can be picked up
+  // and thrown. Tennis bear: holds a racket and rallies — balls come over the net, it
+  // runs to them and swings (forehand or backhand), and sometimes misses. Climbing
+  // bears: one climbs the wall hold by hold, hand over hand, and jumps off with a back
+  // flip; the other hops up the steps and leaps off. Arms and legs are posed through
+  // the viewer (S.limbs: directions of the limb lobes in the bear's own frame).
   const PLUSH_SPOTS = { tennis: [['tennis', 1.8, 2.6, 'tennis']], climb: [['climbBrown', -1.4, 1.1, 'wall'], ['climbOrange', 1.6, 1.2, 'steps']] }[island.id] || [];
-  const BEAR_H = 1.5, HALF = BEAR_H / 2;
+  const BEAR_H = 1.5, HALF = BEAR_H / 2, K = BEAR_H / 2.51;   // world units per viewer unit
   const groundAt = (x, z) => worldHeight(x, z);
   const limit = (x, z) => { const k = Math.hypot(x / 7.4, z / 6.3); return k > 1 ? [x / k, z / k] : [x, z]; };
+  // a limb direction from elevation (up from the side) and forward swing, like the viewer's own
+  const arm = (side, elev, fwd) => [side * Math.cos(elev) * Math.cos(fwd), Math.sin(elev), Math.cos(elev) * Math.sin(fwd)];
+  const leg = (side, lift = 0, out = .6) => [side * out, -.8 + lift * .45, .06 + lift * .7];
   const plushBears = PLUSH_SPOTS.map(([kind, x, z, play], i) => {
     const anchor = new THREE.Object3D(); anchor.rotation.order = 'YXZ'; anchor.position.set(x, groundAt(x, z) + HALF, z); root.add(anchor);
     const bear = createPlushBear(root, kind, { height: BEAR_H });
     const toss = createThrowable(anchor, { bottom: HALF, groundAt, limit });
-    return { bear, anchor, toss, play, i, mode: 'idle', t: 0, wait: 1 + i * 1.3, target: new THREE.Vector2(x, z), phase: 0, climbTop: 0, last: 0 };
+    return { bear, anchor, toss, play, i, mode: 'idle', t: 0, wait: 1 + i * 1.3, target: new THREE.Vector2(x, z), phase: 0, last: 0, limbs: null };
   });
   function walkTo(p, dt, speed = 1.7) {
     const a = p.anchor, dx = p.target.x - a.position.x, dz = p.target.y - a.position.z, d = Math.hypot(dx, dz);
     if (d < .08) return true;
     const step = Math.min(d, speed * dt); a.position.x += dx / d * step; a.position.z += dz / d * step;
+    [a.position.x, a.position.z] = limit(a.position.x, a.position.z);
     let dy = Math.atan2(dx, dz) - a.rotation.y; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); a.rotation.y += dy * Math.min(1, dt * 8);
-    // a bouncy plush waddle
-    p.phase += dt * 11;
-    a.position.y = groundAt(a.position.x, a.position.z) + HALF + Math.abs(Math.sin(p.phase)) * .16;
-    a.rotation.z = Math.sin(p.phase) * .12; a.rotation.x = .12;
+    // a bouncy plush waddle, arms swinging against the legs
+    p.phase += dt * (6 + speed * 2.2);
+    a.position.y = groundAt(a.position.x, a.position.z) + HALF + Math.abs(Math.sin(p.phase)) * .14;
+    a.rotation.z = Math.sin(p.phase) * .1; a.rotation.x = .1 + speed * .03;
+    const sw = Math.sin(p.phase);
+    p.limbs = { armL: arm(-1, .25, sw * .55), armR: arm(1, .25, -sw * .55), legL: leg(-1, Math.max(0, sw)), legR: leg(1, Math.max(0, -sw)) };
     return false;
   }
   const stand = p => { const a = p.anchor; a.position.y = groundAt(a.position.x, a.position.z) + HALF; a.rotation.x = 0; a.rotation.z = 0; };
   const face = (p, yaw, dt) => { let dy = yaw - p.anchor.rotation.y; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); p.anchor.rotation.y += dy * Math.min(1, dt * 6); };
-  function playTennis(p, dt) {
-    const a = p.anchor; p.t += dt;
-    if (p.mode === 'idle') { stand(p); face(p, Math.PI, dt); if (p.t > p.wait) { p.mode = 'run'; p.t = 0; p.target.set(-3 + Math.random() * 6, .9 + Math.random() * 3.6); } }
-    else if (p.mode === 'run') { if (walkTo(p, dt, 2.6)) { p.mode = 'swing'; p.t = 0; } }
-    else if (p.mode === 'swing') {
-      // forehand: wind up, a fast full turn with a little hop, follow through facing the net
-      const k = Math.min(1, p.t / .55);
-      a.rotation.y = Math.PI + (k < .25 ? -k * 2.4 : -.6 + (k - .25) / .75 * (Math.PI * 2 + .6));
-      a.position.y = groundAt(a.position.x, a.position.z) + HALF + Math.sin(k * Math.PI) * .35;
-      a.rotation.z = Math.sin(k * Math.PI) * -.25; a.rotation.x = 0;
-      if (k >= 1) { a.rotation.y = Math.PI; p.mode = Math.random() < .3 ? 'cheer' : 'idle'; p.t = 0; p.wait = .5 + Math.random() * 1.2; }
-    } else if (p.mode === 'cheer') {
-      // a happy jump after a good shot
-      const k = Math.min(1, p.t / .7); a.position.y = groundAt(a.position.x, a.position.z) + HALF + Math.sin(k * Math.PI) * 1.1; a.rotation.x = -Math.sin(k * Math.PI) * .3;
-      if (k >= 1) { stand(p); p.mode = 'idle'; p.t = 0; p.wait = .6; }
-    }
+
+  // ---- tennis: racket in the right paw, a rally ball ----
+  const tennisBear = plushBears.find(p => p.play === 'tennis');
+  let racket = null, rally = null;
+  if (tennisBear) {
+    racket = new THREE.Group(); racket.name = 'BearRacket'; root.add(racket);
+    const frameMat = new THREE.MeshStandardMaterial({ color: 0xf4f1e6, roughness: .35, metalness: .1 });
+    const gripMat = new THREE.MeshStandardMaterial({ color: 0x3d5036, roughness: .8 });
+    const handle = new THREE.Mesh(new THREE.CylinderGeometry(.032, .036, .3, 12), gripMat); handle.position.y = .1; racket.add(handle);
+    for (const s of [-1, 1]) { const th = new THREE.Mesh(new THREE.CylinderGeometry(.016, .016, .2, 8), frameMat); th.position.set(s * .05, .33, 0); th.rotation.z = -s * .32; racket.add(th); }
+    const head = new THREE.Mesh(new THREE.TorusGeometry(.2, .022, 10, 40), frameMat); head.scale.set(1, 1.28, 1); head.position.y = .63; racket.add(head);
+    const sc = document.createElement('canvas'); sc.width = sc.height = 64; const sg = sc.getContext('2d'); sg.strokeStyle = 'rgba(255,255,255,.95)'; sg.lineWidth = 1.4;
+    for (let i = 4; i < 64; i += 7) { sg.beginPath(); sg.moveTo(i, 0); sg.lineTo(i, 64); sg.moveTo(0, i); sg.lineTo(64, i); sg.stroke(); }
+    const strings = new THREE.Mesh(new THREE.CircleGeometry(.195, 32), new THREE.MeshBasicMaterial({ color: 0xf2f0e4, alphaMap: new THREE.CanvasTexture(sc), transparent: true, side: THREE.DoubleSide, depthWrite: false }));
+    strings.scale.set(1, 1.28, 1); strings.position.y = .63; racket.add(strings);
+    racket.traverse(o => { if (o.isMesh) o.castShadow = true; });
+    racket.scale.setScalar(1.3);
+    const ballMesh = new THREE.Mesh(new THREE.SphereGeometry(.11, 20, 14), new THREE.MeshStandardMaterial({ color: 0xd8ef4f, roughness: .9 }));
+    ballMesh.castShadow = true; ballMesh.visible = false; root.add(ballMesh);
+    rally = { ball: ballMesh, p: new THREE.Vector3(), v: new THREE.Vector3(), state: 'wait', t: .8, bounced: 0, hit: null, swingAt: 0, side: 1 };
   }
-  const WALL_Z = -1.55;   // just in front of the bouldering wall's face
+  const COURT_Y = .17, G = 13, BALL_R = .11;
+  // aim a ball from p0 to land at (x, z) after time T
+  function launch(p0, x, z, T) {
+    rally.p.copy(p0); rally.v.set((x - p0.x) / T, (COURT_Y + BALL_R - p0.y + .5 * G * T * T) / T, (z - p0.z) / T); rally.bounced = 0;
+  }
+  // where the ball will be at a good hitting height after its bounce on the bear's side
+  function predictHit() {
+    const p = rally.p.clone(), v = rally.v.clone(); let bounced = 0, t = 0, apex = false;
+    for (let i = 0; i < 400; i++) {
+      t += .01; v.y -= G * .01; p.addScaledVector(v, .01);
+      if (p.y < COURT_Y + BALL_R && v.y < 0) { p.y = COURT_Y + BALL_R; v.y *= -.6; v.x *= .8; v.z *= .8; bounced++; }
+      // take it at the top of its bounce (or as soon as it would run off the back of the court)
+      if (bounced === 1 && (v.y < 0 || p.z > 4.3)) return { p, t };
+    }
+    return { p, t };
+  }
+  function racketPose(p, dt) {
+    // hand at the tip of the right arm lobe, racket pointing on along the arm
+    const a = p.anchor, d = new THREE.Vector3(...(p.limbs?.armR ?? arm(1, .2, .1))).normalize();
+    const hand = d.clone().multiplyScalar(1.18 * K);
+    a.updateMatrixWorld();
+    racket.position.copy(a.localToWorld(hand.clone())); root.worldToLocal(racket.position);
+    const qa = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.clone().lerp(new THREE.Vector3(0, 1, 0), .35).normalize());
+    // the face of the racket looks the way the bear faces (forward is +z in its frame)
+    const roll = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), p.racketRoll ?? 0);
+    racket.quaternion.copy(a.getWorldQuaternion(new THREE.Quaternion())).multiply(qa).multiply(roll);
+    racket.visible = true;
+  }
+  function playTennis(p, dt) {
+    const a = p.anchor, R = rally; p.t += dt; R.t -= dt;
+    // the ball
+    if (R.state === 'wait') {
+      R.ball.visible = false;
+      if (R.t <= 0) {   // a ball comes over the net from the far side
+        R.ball.visible = true; R.state = 'incoming';
+        launch(new THREE.Vector3(-1.8 + Math.random() * 3.6, 1.1, -4.6), -2 + Math.random() * 4, .9 + Math.random() * 1.6, 1.2 + Math.random() * .3);
+        R.hit = predictHit(); R.timeToHit = R.hit.t;
+        // forehand when the ball is on the racket side, backhand otherwise
+        R.side = R.hit.p.x <= a.position.x ? 1 : -1;
+        p.mode = 'chase'; p.t = 0;
+      }
+    } else {
+      R.v.y -= G * dt; R.p.addScaledVector(R.v, dt);
+      if (R.p.y < COURT_Y + BALL_R && R.v.y < 0) {
+        R.p.y = COURT_Y + BALL_R; R.v.y *= -.6; R.v.x *= .8; R.v.z *= .8; R.bounced++;
+        if (Math.abs(R.v.y) < .6 || (R.state === 'out' && R.bounced > 3)) { R.state = 'wait'; R.t = .9 + Math.random() * .8; }
+      }
+      if (Math.abs(R.p.x) > 6.5 || Math.abs(R.p.z) > 6.4) { R.state = 'wait'; R.t = 1; }
+      R.ball.position.copy(R.p); R.ball.rotation.x += dt * 9;
+      if (R.state === 'incoming') R.timeToHit -= dt;
+    }
+    // the bear
+    if (p.mode === 'idle') {
+      stand(p); face(p, Math.PI, dt);
+      // ready position: knees bent a little, racket up in front
+      const b = Math.sin(p.t * 4) * .04;
+      p.limbs = { armL: arm(-1, .35, .55), armR: arm(1, .45 + b, .6), legL: leg(-1, .15, .7), legR: leg(1, .15, .7) };
+      a.position.y += Math.abs(Math.sin(p.t * 5)) * .05;   // light on its feet
+      p.racketRoll = 0;
+    } else if (p.mode === 'chase') {
+      // stand beside the ball's hitting point, racket side toward it (the bear faces -z)
+      const off = .95 * R.side;
+      p.target.set(R.hit.p.x + off, Math.min(5.2, R.hit.p.z + .25));
+      const arrived = walkTo(p, dt, 3.4);
+      if (arrived) { stand(p); face(p, Math.PI, dt); p.limbs = { armL: arm(-1, .3, .3), armR: arm(1, .35, R.side > 0 ? -.9 : 1.6), legL: leg(-1, .25, .75), legR: leg(1, .25, .75) }; }
+      p.racketRoll = 0;
+      if (R.timeToHit < .3) { p.mode = 'swing'; p.t = 0; R.reached = Math.hypot(a.position.x - (R.hit.p.x + off), a.position.z - (R.hit.p.z + .25)) < .7; }
+    } else if (p.mode === 'swing') {
+      // turn the shoulders, racket back, then through the ball and across the body
+      const k = Math.min(1, p.t / .6), side = R.side;
+      face(p, Math.PI, dt);
+      const turn = side * (k < .5 ? .7 - k * 1.6 : -.1 - (k - .5) * 1.4);
+      a.rotation.y = Math.PI + turn;
+      a.position.y = groundAt(a.position.x, a.position.z) + HALF + Math.sin(k * Math.PI) * .1;
+      a.rotation.z = -side * .12 * Math.sin(k * Math.PI); a.rotation.x = .08;
+      const sweep = side > 0 ? -1.3 + k * 2.9 : 1.9 - k * 2.6;        // forward swing angle of the right arm
+      p.limbs = { armL: arm(-1, .35 + .3 * k, .4 - k * .4), armR: arm(1, .15 + .55 * Math.sin(k * Math.PI), sweep), legL: leg(-1, .2, .75), legR: leg(1, .2 + .2 * k, .75) };
+      p.racketRoll = side > 0 ? 0 : Math.PI;
+      // contact
+      if (R.state === 'incoming' && p.t > .28) {
+        if (R.reached) { R.state = 'return'; launch(R.p.clone(), -2.2 + Math.random() * 4.4, -1.6 - Math.random() * 2.6, .95 + Math.random() * .25); }
+        else R.state = 'out';   // missed it!
+      }
+      if (k >= 1) { a.rotation.y = Math.PI; p.mode = R.state === 'out' ? 'miss' : 'idle'; p.t = 0; }
+    } else if (p.mode === 'miss') {
+      // shrug, then back to the middle
+      stand(p); face(p, 0, dt * .6);
+      p.limbs = { armL: arm(-1, .9, .2), armR: arm(1, .9, .2), legL: leg(-1), legR: leg(1) };
+      if (p.t > 1) { p.mode = 'recover'; p.target.set(0, 3.3); }
+    } else if (p.mode === 'recover') { if (walkTo(p, dt, 2.2)) { p.mode = 'idle'; p.t = 0; } }
+    if (R.state === 'return' && p.mode === 'idle' && p.t > .2 && Math.random() < dt * .7) { p.target.set(-.6 + Math.random() * 1.2, 3.2 + Math.random() * .6); p.mode = 'recover'; }
+    racketPose(p, dt);
+  }
+
+  // ---- climbing ----
+  const WALL_Z = -1.45;   // the bear's middle when pressed to the bouldering wall's face
   function playWall(p, dt) {
     const a = p.anchor; p.t += dt;
-    if (p.mode === 'idle') { stand(p); face(p, .3, dt); if (p.t > p.wait) { p.mode = 'go'; p.target.set(-2.8 + Math.random() * 5.6, WALL_Z + .25); } }
-    else if (p.mode === 'go') { if (walkTo(p, dt)) { p.mode = 'climb'; p.t = 0; p.climbTop = 1.4 + Math.random() * 1.9; p.base = a.position.y; } }
+    if (p.mode === 'idle') {
+      stand(p); face(p, .3, dt);
+      // chalk up: rub the paws together in front
+      const r = Math.sin(p.t * 9) * .15;
+      p.limbs = { armL: arm(-1, .2, 1.1 + r), armR: arm(1, .2, 1.1 - r), legL: leg(-1), legR: leg(1) };
+      if (p.t > p.wait) { p.mode = 'go'; p.target.set(-2.6 + Math.random() * 5.2, WALL_Z + .35); }
+    } else if (p.mode === 'go') { if (walkTo(p, dt)) { p.mode = 'climb'; p.t = 0; p.moves = 3 + Math.floor(Math.random() * 3); p.base = a.position.y; p.move = 0; } }
     else if (p.mode === 'climb') {
-      // back to us, pulling up hold by hold, swaying side to side
-      face(p, Math.PI, dt * 2); const k = Math.min(1, p.t / (1.1 + p.climbTop * .7));
-      const reach = Math.floor(p.t * 2.6), sway = Math.sin(p.t * 2.6 * Math.PI);
-      a.position.set(a.position.x + Math.sin(p.t * 1.3) * .004, p.base + k * p.climbTop + Math.abs(sway) * .06, WALL_Z + .02);
-      a.rotation.z = sway * .16; a.rotation.x = -.12;
-      if (k >= 1) { p.mode = 'hang'; p.t = 0; }
+      // facing the wall. Each move: reach up with one paw (and step up the opposite foot),
+      // then pull the body up to it.
+      face(p, Math.PI, dt * 3);
+      const MOVE = .75, m = Math.floor(p.t / MOVE), f = (p.t % MOVE) / MOVE, side = m % 2 ? 1 : -1;
+      const reach = Math.min(1, f / .45), pull = Math.max(0, (f - .45) / .55), ease = pull * pull * (3 - 2 * pull);
+      const rise = .42;
+      a.position.set(a.position.x + side * Math.sin(f * Math.PI) * .004, p.base + (Math.min(m, p.moves) + (m < p.moves ? ease : 0)) * rise, WALL_Z);
+      a.rotation.z = side * .12 * Math.sin(f * Math.PI); a.rotation.x = -.18;
+      const high = 1.25, low = .55;
+      const up = side < 0 ? 'armL' : 'armR', down = side < 0 ? 'armR' : 'armL';
+      p.limbs = {};
+      p.limbs[up] = arm(side, low + (high - low) * reach - .25 * ease, .35);
+      p.limbs[down] = arm(-side, high - (high - low) * ease * .8, .35);
+      p.limbs[side < 0 ? 'legR' : 'legL'] = leg(-side, .9 * Math.sin(Math.min(1, f * 1.3) * Math.PI), .5);
+      p.limbs[side < 0 ? 'legL' : 'legR'] = leg(side, .25, .5);
+      if (m >= p.moves) { p.mode = 'hang'; p.t = 0; }
     } else if (p.mode === 'hang') {
+      // at the top: both paws on the holds, a happy swing of the legs, a look back at us
       a.rotation.z = Math.sin(p.t * 3) * .08;
-      if (p.t > .8) { p.mode = 'jump'; p.t = 0; p.vy = 3.5; p.vz = 2.6; p.y0 = a.position.y; }
+      a.rotation.y = Math.PI + Math.sin(Math.min(1, p.t / 1.2) * Math.PI) * .7;
+      const kick = Math.sin(p.t * 6) * .4;
+      p.limbs = { armL: arm(-1, 1.3, .3), armR: arm(1, 1.3, .3), legL: leg(-1, Math.max(0, kick)), legR: leg(1, Math.max(0, -kick)) };
+      if (p.t > 1.4) { p.mode = 'jump'; p.t = 0; p.vy = 3.6; p.vz = 2.6; }
     } else if (p.mode === 'jump') {
-      // push off the wall, a back flip on the way down, land on the mat
+      // push off, tuck into a back flip, land on the mat
       p.vy -= 26 * dt; a.position.y += p.vy * dt; a.position.z += p.vz * dt;
       const fall = Math.min(1, p.t / .9); a.rotation.x = -fall * Math.PI * 2; a.rotation.z = 0;
+      const tuck = Math.sin(fall * Math.PI);
+      p.limbs = { armL: arm(-1, .6 + tuck * .4, 1.2 * tuck), armR: arm(1, .6 + tuck * .4, 1.2 * tuck), legL: leg(-1, tuck * 1.1, .45), legR: leg(1, tuck * 1.1, .45) };
       const floor = groundAt(a.position.x, a.position.z) + HALF;
-      if (a.position.y <= floor && p.vy < 0) { a.position.y = floor; a.rotation.set(0, Math.PI, 0, 'YXZ'); p.mode = 'idle'; p.t = 0; p.wait = .8 + Math.random() * 1.5; }
+      if (a.position.y <= floor && p.vy < 0) { a.position.y = floor; a.rotation.set(0, Math.PI, 0, 'YXZ'); p.mode = 'cheer'; p.t = 0; }
+    } else if (p.mode === 'cheer') {
+      stand(p); p.limbs = { armL: arm(-1, 1.35, .1), armR: arm(1, 1.35, .1), legL: leg(-1), legR: leg(1) };
+      face(p, 0, dt * 2);
+      if (p.t > .9) { p.mode = 'idle'; p.t = 0; p.wait = 1 + Math.random() * 1.5; }
     }
   }
   const STEPS = [[-2, .4, .5], [0, .4, .75], [2, .4, 1]];
   function playSteps(p, dt) {
     const a = p.anchor; p.t += dt;
-    if (p.mode === 'idle') { stand(p); face(p, -.3, dt); if (p.t > p.wait) { p.mode = 'toStep'; p.step = 0; p.target.set(STEPS[0][0] - 1.1, STEPS[0][1] + .9); } }
-    else if (p.mode === 'toStep') { if (walkTo(p, dt)) { p.mode = 'hop'; p.t = 0; p.from = a.position.clone(); } }
+    if (p.mode === 'idle') {
+      stand(p); face(p, -.3, dt);
+      // stretching: arms up, side to side
+      const s = Math.sin(p.t * 2.4);
+      p.limbs = { armL: arm(-1, 1.1 + s * .25, 0), armR: arm(1, 1.1 - s * .25, 0), legL: leg(-1), legR: leg(1) }; a.rotation.z = s * .12;
+      if (p.t > p.wait) { p.mode = 'toStep'; p.step = 0; p.target.set(STEPS[0][0] - 1.1, STEPS[0][1] + .9); }
+    } else if (p.mode === 'toStep') { if (walkTo(p, dt)) { p.mode = 'hop'; p.t = 0; p.from = a.position.clone(); } }
     else if (p.mode === 'hop') {
-      // hop from step to step, getting higher, then a big jump down
+      // hop from step to step, getting higher, arms swinging up on each jump
       const [sx, sz, top] = STEPS[p.step], k = Math.min(1, p.t / .5), to = new THREE.Vector3(sx, top + HALF, sz);
       a.position.lerpVectors(p.from, to, k); a.position.y += Math.sin(k * Math.PI) * .7;
-      face(p, Math.atan2(to.x - p.from.x, to.z - p.from.z), dt * 2); a.rotation.x = Math.sin(k * Math.PI) * -.2;
+      face(p, Math.atan2(to.x - p.from.x, to.z - p.from.z), dt * 2); a.rotation.x = Math.sin(k * Math.PI) * -.2; a.rotation.z = 0;
+      const air = Math.sin(k * Math.PI);
+      p.limbs = { armL: arm(-1, .2 + air * 1.1, .3), armR: arm(1, .2 + air * 1.1, .3), legL: leg(-1, air * .6), legR: leg(1, air * .6) };
       if (k >= 1) { p.step++; p.t = 0; p.from = a.position.clone(); if (p.step >= STEPS.length) { p.mode = 'leap'; p.vy = 6; p.vx = 1.6; p.vz = 1.4; } }
     } else if (p.mode === 'leap') {
       // star jump with a spin off the top step
       p.vy -= 26 * dt; a.position.x += p.vx * dt; a.position.z += p.vz * dt; a.position.y += p.vy * dt; a.rotation.y += dt * 9; a.rotation.x = 0;
+      p.limbs = { armL: arm(-1, 1.2, 0), armR: arm(1, 1.2, 0), legL: leg(-1, 0, 1), legR: leg(1, 0, 1) };
       const floor = groundAt(a.position.x, a.position.z) + HALF;
       if (a.position.y <= floor && p.vy < 0) { a.position.y = floor; p.mode = 'idle'; p.t = 0; p.wait = 1 + Math.random() * 1.5; }
     }
@@ -216,10 +357,13 @@ export function createWorld(scene, island) {
       for (const p of plushBears) {
         const dt = Math.min(.05, Math.max(0, time - p.last)); p.last = time;
         if (p.toss.busy()) {
-          // thrown: after landing it picks up its game again from wherever it ended up
-          if (p.toss.update(dt) === 'landed') { p.mode = 'idle'; p.t = 0; p.wait = .6; }
+          // thrown: arms and legs flung out; after landing it picks up its game again
+          const st = p.toss.update(dt);
+          p.limbs = st === 'held' || st === 'fall' ? { armL: arm(-1, 1.2, .2), armR: arm(1, 1.2, .2), legL: leg(-1, .3, .9), legR: leg(1, .3, .9) } : null;
+          if (st === 'landed') { p.mode = 'idle'; p.t = 0; p.wait = .6; }
+          if (p.play === 'tennis') { racketPose(p, dt); if (rally) { rally.state = 'wait'; rally.t = 1.5; rally.ball.visible = false; } }
         } else if (!reducedMotion) PLAY[p.play](p, dt);
-        p.bear.update(p.anchor, { ground: groundAt(p.anchor.position.x, p.anchor.position.z) });
+        p.bear.update(p.anchor, { ground: groundAt(p.anchor.position.x, p.anchor.position.z), limbs: p.limbs });
       }
     },
     heightAt: worldHeight,
