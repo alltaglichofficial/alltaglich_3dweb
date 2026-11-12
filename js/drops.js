@@ -137,7 +137,7 @@ export function createDropletIsland(scene, island, opts = {}) {
   // it can be picked up and thrown; it always comes down somewhere on the sheet
   const sheetAt = (x, z) => onLid(x, z) ? TOP : GROUND;
   // on its own island it always comes down on the lid; beside the pool it can be thrown off it
-  const toss = createThrowable(body, { bottom: footOffset, groundAt: sheetAt, limit: embedded ? (x, z) => [x, z] : (x, z) => [THREE.MathUtils.clamp(x, -W / 2 + .7, W / 2 - .7), THREE.MathUtils.clamp(z, -D / 2 + .7, D / 2 - .7)] });
+  const toss = createThrowable(body, { bottom: footOffset, groundAt: sheetAt, limit: (x, z) => [THREE.MathUtils.clamp(x, -W / 2 + .7, W / 2 - .7), THREE.MathUtils.clamp(z, -D / 2 + .7, D / 2 - .7)] });
   let active = !embedded, incoming = false;
   const walker = { x: 0, z: 2, vx: 0, vz: 0, yaw: 0, phase: 0, target: new THREE.Vector2(0, 2), flinch: 0, act: null, cool: 0, lastAct: '' };
   body.rotation.order = 'YXZ';   // yaw first, then pitch/roll in the bear's own frame (for flips)
@@ -211,6 +211,8 @@ export function createDropletIsland(scene, island, opts = {}) {
       toss.launch(new THREE.Vector3((to.x - from.x) / T, (to.y - from.y + .5 * 30 * T * T) / T, (to.z - from.z) / T), 5);
     },
     bearTarget: bearTarget(plush, toss),
+    // the pool takes the bear back
+    letGo() { active = false; toss.cancel(); walker.act = null; },
     update(time, reducedMotion) {
       if (fx.visible && (start === null || pendingReset)) { pendingReset = false; reset(time); }
       const dt = last === null ? 0 : Math.min(.05, Math.max(0, time - last)); last = time;
