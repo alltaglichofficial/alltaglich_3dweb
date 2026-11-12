@@ -176,16 +176,14 @@ async function start() {
     // the droplet island is part of the swimming island: reached from its own tab there
     const main = island.partOf ?? island.id;
     document.querySelectorAll('[data-island]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.island === main)));
-    document.querySelectorAll('.pool-sub').forEach(el => { el.hidden = main !== 'pool'; });
-    document.querySelector('#drops-tab')?.setAttribute('aria-pressed', String(island.id === 'drops'));
+    // swimming island sub-tabs: Aquable (lane print) · Prussian Blue · Water Drop
+    const poolWorld = worlds.find(w => w.setPrint);
+    const sub = island.id === 'drops' ? 'drops' : poolWorld?.print === 'photo' ? 'prussian' : 'aquable';
+    document.querySelectorAll('.pool-sub').forEach(el => { el.hidden = main !== 'pool'; if (el.dataset.sub) el.setAttribute('aria-pressed', String(main === 'pool' && el.dataset.sub === sub)); });
     document.querySelector('#island-title').innerHTML = island.title;
     document.querySelector('#island-description').innerHTML = island.description;
     // The print tab only belongs to the pool island; it shows that island's current print.
-    const printTab = document.querySelector('#print-tab');
     const here = worlds[islandIndex];
-    document.querySelectorAll('.print-tab').forEach(el => { el.hidden = !here?.setPrint; });
-    document.querySelector('#print-tab')?.toggleAttribute('hidden', !here?.setPrint);
-    if (printTab && here?.setPrint) printTab.setAttribute('aria-pressed', String(here.print === 'photo'));
     document.querySelector('#island-eyebrow').textContent = island.english;
     document.querySelector('#island-name').textContent = island.label;
     document.querySelector('#island-number').textContent = island.number;
@@ -228,15 +226,16 @@ async function start() {
   }
   viewOffset(); resetCamera(true); updateIslandUI();
   controls.addEventListener('start', () => { transition = false; });
-  document.querySelector('#print-tab')?.addEventListener('click', event => {
-    const pool = worlds.find(w => w.setPrint); if (!pool) return;
-    const next = pool.print === 'photo' ? 'lane' : 'photo';
-    pool.setPrint(next); event.currentTarget.setAttribute('aria-pressed', String(next === 'photo'));
-    document.querySelector('#status').textContent = next === 'photo' ? '수영장 바닥을 Prussian Blue 타일로 바꿨어요.' : '수영장 바닥을 레인 타일로 되돌렸어요.';
-  });
-  document.querySelector('#drops-tab')?.addEventListener('click', () => {
-    if (ISLANDS[islandIndex].id === 'drops') selectIsland('pool', false, -1); else selectIsland('drops', false, 1);
-  });
+
+  document.querySelectorAll('[data-sub]').forEach(button => button.addEventListener('click', () => {
+    const pool = worlds.find(w => w.setPrint), sub = button.dataset.sub;
+    if (sub === 'drops') { selectIsland('drops', false, 1); return; }
+    const print = sub === 'prussian' ? 'photo' : 'lane';
+    if (pool && pool.print !== print) pool.setPrint(print);
+    if (ISLANDS[islandIndex].id !== 'pool') selectIsland('pool', false, -1); else updateIslandUI();
+    document.querySelector('#status').textContent = print === 'photo' ? '수영장 바닥을 Prussian Blue 타일로 바꿨어요.' : 'Aquable 레인 수영장이에요.';
+  }));
+
   document.querySelectorAll('[data-island]').forEach(button => button.addEventListener('click', () => selectIsland(button.dataset.island, false, ISLANDS.findIndex(i => i.id === button.dataset.island) > islandIndex ? 1 : -1)));
   document.querySelector('#prevIsland').addEventListener('click', () => nextIsland(-1));
   document.querySelector('#nextIsland').addEventListener('click', () => nextIsland(1));
