@@ -12,7 +12,7 @@ export const ISLANDS = [
   {
     id: 'pool', label: '수영 섬', english: 'THE SWIMMING ISLAND', number: '02', accent: '#86bdc4',
     title: '푸른 물결 곁에서,<br>잠깐의 여유.',
-    description: '파란 타일과 투명하게 일렁이는 물결.<br>수영곰을 잡아 던져 보고, 키링 고리도 끌어 보세요.',
+    description: '파란 타일과 투명하게 일렁이는 물결.<br>수영곰을 수영장에도, 물방울 떨어지는 노트북에도 던져 보세요.',
     noDog: true,
     playLabel: '수영해',
     spawn: { x: 0, z: 11.6 },
@@ -26,14 +26,5 @@ export const ISLANDS = [
     playLabel: '폴짝!',
     spawn: { x: 0, z: 4.9 },
     stops: [{ x: 0, z: 4.9 }, { x: 2.7, z: 2.5 }, { x: -2.7, z: 2.5 }, { x: -4.9, z: -2.5 }, { x: 4.9, z: -2.5 }, { x: 0, z: -4.4 }],
-  },
-  {
-    id: 'drops', label: '물방울 섬', english: 'THE DROPLET ISLAND', number: '02', partOf: 'pool', accent: '#9fc6d3',
-    title: '똑, 똑, 떨어지는<br>투명한 물방울.',
-    description: '덮어 둔 노트북 위로 물방울이 하나씩 떨어져요.<br>수영곰이 요리조리 피해 다녀요.',
-    noDog: true,
-    playLabel: '피해!',
-    spawn: { x: 0, z: 6 },
-    stops: [{ x: 0, z: 6 }, { x: -3, z: 3 }, { x: 3, z: -3 }],
   },
 ];

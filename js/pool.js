@@ -8,6 +8,7 @@ import { createDogHouse, createFetchToy } from './house.js';
 import { createSwimBear } from './bear.js';
 import { createKeyringHardware } from './keyring.js';
 import { replaceWithPlush } from './plush.js';
+import { createDropletIsland } from './drops.js';
 
 // Normalised keyring units (body width 1): footprint half-sizes and corner
 // radius of the GLB outline, top of the tile floor, acrylic slab and dome rise.
@@ -61,6 +62,21 @@ export function createPoolIsland(scene, island) {
   });
   // shown as the Alltäglich swim bear plush (bears/swim.html); the three.js bear drives it
   const plush = replaceWithPlush(poolGroup, bear.object, 'swim');
+  // The water-drop scene sits beside the pool: a closed laptop where drops fall. It is
+  // the same swim bear in both places — thrown (or sent by the Water Drop tab) onto the
+  // laptop it dodges the drops; thrown off it (or sent back) it dives into the pool.
+  const LAP = { x: 18.5, z: -1.5 };
+  const dropsScene = createDropletIsland(null, { id: 'drops', spawn: { x: 0, z: 6 } }, {
+    parent: poolGroup, x: LAP.x, z: LAP.z, plush,
+    onLeave(position, velocity) { bear.launch(poolGroup.worldToLocal(position), velocity); },
+  });
+  const [LAP_W, LAP_D] = dropsScene.size;
+  const overLaptop = (x, z) => Math.abs(x - LAP.x) <= LAP_W / 2 && Math.abs(z - LAP.z) <= LAP_D / 2;
+  const toLaptop = (velocity, flying) => { dropsScene.receive(poolGroup.localToWorld(bear.object.position.clone()), velocity, flying); bear.park(); };
+  let focus = 'pool', grabbed = null;
+  const POOL_VIEW = { center: { x: 0, z: -7.6 }, min: [-8.9, -1.75, -32.5], max: [8.9, 3.9, 16.1] };
+  const DROPS_VIEW = { center: { x: LAP.x, z: LAP.z }, min: [LAP.x - LAP_W / 2 - .2, DECK_Y, LAP.z - LAP_D / 2 - .2], max: [LAP.x + LAP_W / 2 + .2, 2.6, LAP.z + LAP_D / 2 + .2] };
+  const DROPS_DIR = new THREE.Vector3(29, 23, -15).normalize();
   bear.object.userData.noGrab = true;
   // Nothing is drawn under the block, but a shadow-only ground keeps things grounded.
   const ground = new THREE.Mesh(new THREE.PlaneGeometry(90, 110), new THREE.ShadowMaterial({ opacity: .18 }));
@@ -76,31 +92,49 @@ export function createPoolIsland(scene, island) {
     // the rim, down into the water, swims the lane corridor and loops around the
     // playing bear, then climbs back out onto the deck the same way.
     activity: { type: 'swim', entry: { x: 0, z: 10 }, ladderTop: { x: 0, z: WALL_Z - .15, y: 1 }, waterEntry: { x: 0, z: 7 }, corridorStart: { x: 0, z: 2.8 }, route: [{ x: 0, z: 2.8 }, { x: -1.65, z: 2.35 }, { x: -1.65, z: -2.6 }, { x: 1.6, z: -2.6 }, { x: 1.6, z: 2.35 }, { x: 0, z: 2.8 }] },
-    bear, droplets, hardware,
+    bear, droplets, hardware, dropsScene,
     // 'lane' (lane-mark tiles) or 'photo' (Prussian blue tiles in a black grid); switched from the bottom tab.
     print: 'lane',
     setPrint(kind) { world.print = kind === 'photo' ? 'photo' : 'lane'; setPrintTexture(world.print); },
     // Things the visitor can pick up (see main.js): the bear, anywhere over the
     // island, and the keyring chain (physics, added by keyring.js).
+    // which part of the island the camera shows: 'pool' or 'drops' (the laptop)
+    get focus() { return focus; },
+    setFocus(next) {
+      focus = next === 'drops' ? 'drops' : 'pool';
+      if (focus === 'drops') {
+        dropsScene.onEnter();   // the drops start over
+        if (!dropsScene.active && bear.state !== 'held') {
+          // the bear leaps out of the pool onto the laptop
+          const from = bear.object.position, T = 1.15, ty = dropsScene.top + dropsScene.bearBottom;
+          toLaptop(new THREE.Vector3((LAP.x - 3 - from.x) / T, (ty - from.y + .5 * 30 * T * T) / T, (LAP.z + 1 - from.z) / T), true);
+          splash(from.x, from.z, .8);
+        }
+      } else if (dropsScene.active) dropsScene.leapTo(poolGroup.localToWorld(new THREE.Vector3(0, 1.4, -.5)));
+    },
+    get view() { return focus === 'drops' ? DROPS_VIEW : POOL_VIEW; },
+    get viewDirection() { return focus === 'drops' ? DROPS_DIR : undefined; },
     grabTargets: [{
-      object: bear.object,
+      object: plush.proxy,
       // Carry on a camera-facing plane: anywhere on screen, and up as high as you like.
       grab(point, camera) {
+        if (dropsScene.active) { grabbed = dropsScene.bearTarget; grabbed.grab(point, camera); return; }
+        grabbed = null;
         bear.grab();
         const start = bear.object.getWorldPosition(new THREE.Vector3());
         bearPlane.setFromNormalAndCoplanarPoint(camera.getWorldDirection(new THREE.Vector3()).negate(), start);
       },
-      drag(ray) {
+      drag(ray, camera) {
+        if (grabbed) return grabbed.drag(ray, camera);
         if (!ray.intersectPlane(bearPlane, bearHit)) return;
         const p = poolGroup.worldToLocal(bearHit.clone());
         p.y = Math.max(DECK_Y + .7, Math.min(60, p.y));
         bear.drag(p);
       },
-      release() { bear.release(); },
+      release() { if (grabbed) { grabbed.release(); grabbed = null; } else bear.release(); },
       tap() { plush.open(); },
     }, ...hardware.grabTargets],
     // Default view frames the block, the front deck and the hardware behind it.
-    view: { center: { x: 0, z: -7.6 }, min: [-8.9, -1.75, -32.5], max: [8.9, 3.9, 16.1] },
     getSurfaceHeight: surfaceHeight,
     heightAt(x, z) {
       if (Math.abs(x - house.object.position.x) < 1.4 && Math.abs(z - house.object.position.z) < 1.3) return house.object.position.y + .02;
@@ -122,7 +156,13 @@ export function createPoolIsland(scene, island) {
       if (swimmer && time - lastPaddle > 1.05) { splash(swimmer.x, swimmer.z, .35); lastPaddle = time; }
       // The bear leaves a gentle wake as it bobs and paddles; each hop landing rings out.
       const b = bear.update(time, reducedMotion, surfaceHeight);
-      plush.update(plush.anchor, { swim: bear.state === 'swim', ground: inPool(bear.object.position.x, bear.object.position.z) ? null : DECK_Y });
+      // thrown onto the laptop: from here on the water-drop scene moves the bear
+      if (!dropsScene.active && bear.state === 'falling') {
+        const bp = bear.object.position, v = bear.velocity;
+        if (overLaptop(bp.x, bp.z) && v.y < 0 && bp.y <= dropsScene.top + dropsScene.bearBottom + .15) toLaptop(new THREE.Vector3(v.x * .5, v.y, v.z * .5), false);
+      }
+      dropsScene.update(time, reducedMotion);
+      if (!dropsScene.active) plush.update(plush.anchor, { swim: bear.state === 'swim', ground: inPool(bear.object.position.x, bear.object.position.z) ? null : DECK_Y });
       motion?.setMover(1, b.x / SCALE, b.z / SCALE, reducedMotion ? 0 : .55);
       if (b.landed) splash(b.x, b.z, .9);
       if (b.splash >= .8 && !reducedMotion) spray.burst(b.x, surfaceHeight(b.x, b.z), b.z, b.splash);
@@ -131,7 +171,7 @@ export function createPoolIsland(scene, island) {
       {
         const st = bear.state, bp = bear.object.position, inWater = st === 'sink' || st === 'swim';
         if (inWater) wet = 1; else wet = Math.max(0, wet - sdt / 30);
-        if (wet > .04 && !inWater && !reducedMotion) {
+        if (wet > .04 && !inWater && !reducedMotion && !dropsScene.active) {
           // drips, quicker while it is still soaked
           dripIn -= sdt;
           if (dripIn <= 0) { spray.drip(bp.x + (Math.random() - .5) * .7, bp.y - .2 - Math.random() * .3, bp.z + (Math.random() - .5) * .7, st === 'ground' ? .5 : 1); dripIn = (.05 + Math.random() * .2) / (.15 + wet); }
@@ -156,7 +196,9 @@ export function createPoolIsland(scene, island) {
       for (const m of [world.water?.material, world.acrylic?.material, droplets.material, ...hardware.materials]) if (m?.userData.envBase !== undefined) m.envMapIntensity = m.userData.envBase * reflections;
       world.floor?.traverse(object => { if (object.isMesh && object.material.emissiveMap) object.material.emissive.setHex(mood === 'dark' ? 0x5a7f99 : 0); });
     },
-    setupEnvironment(renderer) { const environment = new RoomEnvironment(); const pmrem = new THREE.PMREMGenerator(renderer); const texture = pmrem.fromScene(environment, .04).texture; environment.dispose(); pmrem.dispose(); for (const m of [world.water.material, world.acrylic.material, droplets.material, ...hardware.materials]) { m.envMap = texture; m.userData.envBase = m === world.water.material ? WATER_REFLECTION : hardware.materials.includes(m) ? (m.userData.envDefault ?? 1) : 1.15; m.envMapIntensity = m.userData.envBase; m.needsUpdate = true; } },
+    // the laptop's drops are compiled up front too, though they stay hidden until first shown
+    precompile(renderer, scene, camera) { const was = root.visible; root.visible = true; dropsScene.precompile(renderer, scene, camera); root.visible = was; },
+    setupEnvironment(renderer) { dropsScene.setupEnvironment(renderer); const environment = new RoomEnvironment(); const pmrem = new THREE.PMREMGenerator(renderer); const texture = pmrem.fromScene(environment, .04).texture; environment.dispose(); pmrem.dispose(); for (const m of [world.water.material, world.acrylic.material, droplets.material, ...hardware.materials]) { m.envMap = texture; m.userData.envBase = m === world.water.material ? WATER_REFLECTION : hardware.materials.includes(m) ? (m.userData.envDefault ?? 1) : 1.15; m.envMapIntensity = m.userData.envBase; m.needsUpdate = true; } },
   };
   world.ready = loadSwimmingPoolKeyring().then(({ model, floor, water }) => {
     model.scale.setScalar(SCALE); model.position.y = BASE; poolGroup.add(model);

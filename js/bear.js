@@ -100,6 +100,11 @@ export function createSwimBear(root, home, pool = null) {
   return {
     object: bear,
     get state() { return state; },
+    // out of the pool's hands (the bear is on the laptop next door)
+    park() { state = 'parked'; rings.forEach(r => { r.visible = false; }); },
+    // dropped back in from anywhere, with a velocity
+    launch(position, velocity) { bear.position.copy(position); vel.set(velocity.x, 0, velocity.z); vy = velocity.y; state = 'falling'; rings.forEach(r => { r.visible = false; }); },
+    get velocity() { return { x: vel.x, y: vy, z: vel.z }; },
     grab() { state = 'held'; heldAt.copy(bear.position); swing = 0; track.length = 0; rings.forEach(r => { r.visible = false; }); },
     drag(point) { heldAt.copy(point); track.push({ t: performance.now() / 1000, p: point.clone() }); while (track.length > 6) track.shift(); },
     release() {
@@ -113,6 +118,7 @@ export function createSwimBear(root, home, pool = null) {
     update(time, reducedMotion, surfaceHeight) {
       const dt = last === null ? 0 : Math.min(.05, Math.max(0, time - last)); last = time;
       const t = reducedMotion ? 0 : time;
+      if (state === 'parked') return { x: bear.position.x, z: bear.position.z, landed: false, splash: 0 };
       if (state === 'held') {
         // follow the pointer with a little lag and a dangling swing
         const prev = bear.position.clone();

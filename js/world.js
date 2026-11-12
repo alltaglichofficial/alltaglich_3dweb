@@ -7,7 +7,6 @@ import { createDogHouse, createFetchToy } from './house.js';
 
 export function createWorld(scene, island) {
   if (island.id === 'pool') return createPoolIsland(scene, island);
-  if (island.id === 'drops') return createDropletIsland(scene, island);
   const root = new THREE.Group(); root.name = `island-${island.id}`;
   const staticRoot = new THREE.Group(); root.add(staticRoot); scene.add(root);
   let group = staticRoot;

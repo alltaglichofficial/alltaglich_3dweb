@@ -130,14 +130,14 @@ whenLoaded(() => setTimeout(function warm() {
   next.warming = true; idle(() => next.load());
   const check = setInterval(() => {
     const S = next.iframe.contentWindow?.__bear?.S;
-    if (S && S.t > .2) { clearInterval(check); next.warming = false; if (performance.now() - next.lastUsed > 1500) next.iframe.contentWindow.__paused = true; setTimeout(warm, 600); }
+    if (S && S.t > .2) { clearInterval(check); next.warming = false; if (performance.now() - next.lastUsed > 5000) next.iframe.contentWindow.__paused = true; setTimeout(warm, 250); }
   }, 200);
-}, 3500));
+}, 1200));
 
 // Bears on islands that aren't shown stop rendering (their iframe is hidden).
 setInterval(() => {
   const now = performance.now();
-  for (const b of all) if (!b.warming && now - b.lastUsed > 1500 && b.iframe.contentWindow && !b.iframe.contentWindow.__paused) { b.iframe.contentWindow.__paused = true; b.sprite.visible = false; b.shadow.visible = false; }
+  for (const b of all) if (!b.warming && now - b.lastUsed > 5000 && b.iframe.contentWindow && !b.iframe.contentWindow.__paused) { b.iframe.contentWindow.__paused = true; b.sprite.visible = false; b.shadow.visible = false; }
 }, 300);
 
 // Large viewer: the stand-alone bear page over a soft backdrop.
@@ -168,6 +168,10 @@ export function createThrowable(object, { bottom, groundAt, limit = (x, z) => [x
   const T = { state: null, spin: new THREE.Vector3(), settle: 0, upright: new THREE.Quaternion(), from: new THREE.Quaternion() };
   const local = p => object.parent.worldToLocal(p);
   T.busy = () => T.state !== null;
+  T.velocity = v;
+  // sent flying by code (a jump between the pool and the laptop)
+  T.launch = (vel, spin = 4) => { v.copy(vel); T.spin.set(spin, 0, 0); T.state = 'fall'; };
+  T.cancel = () => { T.state = null; };
   T.grab = (point, camera) => {
     camera.getWorldDirection(normal); plane.setFromNormalAndCoplanarPoint(normal, point);
     object.getWorldPosition(offset).sub(point); track.length = 0; T.state = 'held'; v.set(0, 0, 0);
@@ -237,13 +241,18 @@ export function hideMeshes(object, keep = []) {
 
 // Put a plush bear in place of a three.js bear object: hides its meshes (still pickable),
 // adds an anchor at its middle and returns the plush, sized to match.
-export function replaceWithPlush(parent, object, kind) {
-  const saved = object.quaternion.clone(); object.quaternion.identity(); object.updateMatrixWorld(true);
+// An anchor at the middle of a three.js bear object (whose meshes are hidden), for a plush to follow.
+export function plushAnchor(object) {
+  const saved = object.quaternion.clone(); object.quaternion.identity(); object.updateWorldMatrix(true, true);   // parents too, or an offset parent skews the middle
   const box = new THREE.Box3().setFromObject(object), size = box.getSize(new THREE.Vector3()), mid = box.getCenter(new THREE.Vector3());
   const anchor = new THREE.Object3D(); anchor.name = 'PlushAnchor'; object.add(anchor);
   anchor.position.copy(object.worldToLocal(mid));
   object.quaternion.copy(saved);
   hideMeshes(object);
+  return { anchor, height: size.y };
+}
+export function replaceWithPlush(parent, object, kind) {
+  const { anchor, height } = plushAnchor(object), size = { y: height };
   const plush = createPlushBear(parent, kind, { height: size.y });
   plush.anchor = anchor;
   return plush;

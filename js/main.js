@@ -38,6 +38,9 @@ async function start() {
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = .98;
+  // the pool's clear resin and water refract a copy of the scene; a smaller copy is much
+  // cheaper and looks the same through moving water
+  renderer.transmissionResolutionScale = .6;
   renderer.domElement.setAttribute('aria-label', '회전과 확대가 가능한 3D 스포츠 섬');
   mount.appendChild(renderer.domElement);
 
@@ -185,7 +188,7 @@ async function start() {
     document.querySelectorAll('[data-island]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.island === main)));
     // swimming island sub-tabs: Aquable (lane print) · Prussian Blue · Water Drop
     const poolWorld = worlds.find(w => w.setPrint);
-    const sub = island.id === 'drops' ? 'drops' : poolWorld?.print === 'photo' ? 'prussian' : 'aquable';
+    const sub = poolWorld?.focus === 'drops' ? 'drops' : poolWorld?.print === 'photo' ? 'prussian' : 'aquable';
     document.querySelectorAll('.pool-sub').forEach(el => { el.hidden = main !== 'pool'; if (el.dataset.sub) el.setAttribute('aria-pressed', String(main === 'pool' && el.dataset.sub === sub)); });
     document.querySelector('#island-title').innerHTML = island.title;
     document.querySelector('#island-description').innerHTML = island.description;
@@ -224,7 +227,7 @@ async function start() {
       islandTransition = { outgoing, incoming: world, right, step, time: 0 };
       world.root.position.copy(right).multiplyScalar(step * 25);
     }
-    resetCamera(immediate); updateIslandUI();
+    resetCamera(immediate); updateIslandUI(); applyResolution();
   }
   function nextIsland(step) {
     // prev / next walk the main islands only (the droplet island counts as the pool)
@@ -236,10 +239,14 @@ async function start() {
 
   document.querySelectorAll('[data-sub]').forEach(button => button.addEventListener('click', () => {
     const pool = worlds.find(w => w.setPrint), sub = button.dataset.sub;
-    if (sub === 'drops') { selectIsland('drops', false, 1); return; }
+    if (!pool) return;
+    if (ISLANDS[islandIndex].id !== 'pool') selectIsland('pool', true);
+    // Water Drop looks at the laptop beside the pool (same island, same bear)
+    if (sub === 'drops') { pool.setFocus('drops'); resetCamera(); updateIslandUI(); document.querySelector('#status').textContent = '노트북 위로 물방울이 떨어져요. 수영곰이 건너가서 피해 다녀요.'; return; }
     const print = sub === 'prussian' ? 'photo' : 'lane';
-    if (pool && pool.print !== print) pool.setPrint(print);
-    if (ISLANDS[islandIndex].id !== 'pool') selectIsland('pool', false, -1); else updateIslandUI();
+    if (pool.print !== print) pool.setPrint(print);
+    if (pool.focus !== 'pool') { pool.setFocus('pool'); resetCamera(); }
+    updateIslandUI();
     document.querySelector('#status').textContent = print === 'photo' ? '수영장 바닥을 Prussian Blue 타일로 바꿨어요.' : 'Aquable 레인 수영장이에요.';
   }));
 
@@ -335,11 +342,33 @@ async function start() {
   bond = createBondInteractions({ puppy, canvas, camera, controls, getWorld: () => world, focusDog, resetView: () => resetCamera(), stopCamera: () => { transition = false; press = null; activePointers.clear(); }, notify: message => { document.querySelector('#dog-message').textContent = message; document.querySelector('#status').textContent = message; } });
   bond.onIslandChange();
 
+  // Keeps things smooth on slower graphics: each island remembers how sharp it can be
+  // drawn. If frames stay slow there (the swimming island's refracting water is the
+  // heavy one), the picture is rendered a step less sharp until it runs smoothly.
+  const maxRatio = () => Math.min(devicePixelRatio, coarse ? 1.5 : 1.8);
+  const sharpness = new Map();   // island id -> scale of maxRatio
+  let slowFrames = 0, settle = 0;
+  const applyResolution = () => {
+    const want = Math.max(.6, maxRatio() * (sharpness.get(world.island.id) ?? 1));
+    if (Math.abs(renderer.getPixelRatio() - want) > .01) { renderer.setPixelRatio(want); renderer.setSize(innerWidth, innerHeight); }
+    slowFrames = 0; settle = 45;   // ignore the frames right after a change or an island switch
+  };
+  function tuneResolution(rawDt) {
+    if (settle > 0) { settle--; return; }
+    if (rawDt > 1 || document.hidden) return;   // a tab switch, not a slow frame
+    slowFrames = rawDt > 1 / 42 ? slowFrames + 1 : Math.max(0, slowFrames - 2);
+    if (slowFrames < 24) return;
+    const now = sharpness.get(world.island.id) ?? 1;
+    if (maxRatio() * now <= .62) { slowFrames = 0; return; }
+    sharpness.set(world.island.id, now * .82); applyResolution();
+  }
   let frame = 0, previous = null, elapsed = 0, paused = false, lastCommand = '', lastMessage = '', lastTrick = null;
   function render(now) {
     if (paused) return;
-    const dt = previous === null ? 0 : Math.min((now - previous) / 1000, .05);
+    const rawDt = previous === null ? 0 : (now - previous) / 1000;
+    const dt = Math.min(rawDt, .05);
     previous = now; elapsed += dt;
+    tuneResolution(rawDt);
     puppy.update(dt, elapsed, reducedMotion); world.update(elapsed, reducedMotion); lighting.update(elapsed, reducedMotion, camera);
     const dog = puppy.snapshot();
     if (dog.trick.kind && dog.trick.kind !== lastTrick) focusDog();
@@ -377,7 +406,7 @@ async function start() {
   canvas.addEventListener('webglcontextrestored', () => location.reload());
   addEventListener('resize', () => {
     camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
-    renderer.setPixelRatio(Math.min(devicePixelRatio, coarse ? 1.5 : 1.8));
+    renderer.setPixelRatio(Math.max(.6, maxRatio() * (sharpness.get(world.island.id) ?? 1)));
     renderer.setSize(innerWidth, innerHeight); viewOffset(); if (dogView) focusDog(); else resetCamera(true);
   });
   resume();

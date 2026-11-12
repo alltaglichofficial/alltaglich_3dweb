@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { RoomEnvironment } from '../product/vendor/environments/RoomEnvironment.js';
 import { createSwimBear } from './bear.js';
-import { replaceWithPlush, createThrowable, bearTarget } from './plush.js';
+import { replaceWithPlush, plushAnchor, createThrowable, bearTarget } from './plush.js';
 import { createDogHouse, createFetchToy } from './house.js';
 
 // Droplet island: a thin clear acrylic sheet. Water drops fall on it one by one
@@ -22,8 +22,12 @@ const FALL_H = 11, GRAVITY = 30, INTERVAL = .42, START_DELAY = .35;
 // Epoxy tint per puddle, read from the guide (물방울에폭시시안, low opacity): [colour, strength].
 const TINTS = [["#8dc5d4",0.052],["#a2d9d0",0.152],["#8dc5d4",0.052],["#8dc5d4",0.088],["#83cdd9",0.104],["#83cdd9",0.104],["#a2d9d0",0.152],["#8dc5d4",0.149],["#8dc5d4",0.138],["#8dc5d4",0.104],["#8dc5d4",0.149],["#8dc5d4",0.104],["#8dc5d4",0.052],["#8dc5d4",0.149],["#8dc5d4",0.052],["#8dc5d4",0.052],["#83cdd9",0.104],["#83cdd9",0.104],["#83cdd9",0.057],["#a2d9d0",0.152],["#8dc5d4",0.104],["#8dc5d4",0.052],["#8dc5d4",0.052],["#83cdd9",0.104],["#8dc5d4",0.104],["#b4d4d3",0.215],["#a2d9d0",0.152],["#83cdd9",0.057],["#b4d4d3",0.215],["#b4d4d3",0.126],["#83cdd9",0.126],["#8dc5d4",0.052],["#8dc5d4",0.052],["#8dc5d4",0.143],["#8dc5d4",0.104],["#a2d9d0",0.1],["#a2d9d0",0.1],["#83cdd9",0.104],["#71a4c5",0.099],["#8dc5d4",0.052],["#a2d9d0",0.1]];
 
-export function createDropletIsland(scene, island) {
-  const root = new THREE.Group(); root.name = 'island-drops'; scene.add(root);
+// As its own island, or (opts.parent) set down inside another island — the swimming
+// island puts it beside the pool and shares its swim bear: opts.plush is that bear's
+// plush, and opts.onLeave(position, velocity) takes the bear back when it leaves the laptop.
+export function createDropletIsland(scene, island, opts = {}) {
+  const embedded = !!opts.parent;
+  const root = new THREE.Group(); root.name = 'island-drops'; (opts.parent ?? scene).add(root); root.position.set(opts.x ?? 0, 0, opts.z ?? 0);
   const obstacles = [];
 
   // Thin clear acrylic sheet with softly rounded corners.
@@ -82,6 +86,9 @@ export function createDropletIsland(scene, island) {
   const shadowMat = new THREE.MeshBasicMaterial({ color: 0x1d2a30, transparent: true, opacity: 0, depthWrite: false });
   const ball = new THREE.SphereGeometry(1, 20, 14), disc = new THREE.CircleGeometry(1, 28); disc.rotateX(-Math.PI / 2);
 
+  // every drop mesh lives in one group, so the whole effect can stay switched off (and
+  // cost nothing) until the scene is first looked at
+  const fx = new THREE.Group(); fx.name = 'WaterDrops'; root.add(fx); fx.visible = !embedded;
   const drops = SHAPES.map((points, index) => {
     const [tintHex, tintStrength] = TINTS[index] ?? ['#8dc5d4', .08];
     const tinted = waterMaterial(tintHex, tintStrength), fallMat = waterMaterial(tintHex, Math.max(.16, tintStrength * 1.6));
@@ -97,17 +104,17 @@ export function createDropletIsland(scene, island) {
     const pos = geo.attributes.position;
     for (let i = 0; i < pos.count; i++) { const y = pos.getY(i); pos.setY(i, y < 0 ? y * .04 : y); }
     geo.translate(-cx, 0, -cz); geo.computeVertexNormals();
-    const puddle = new THREE.Mesh(geo, tinted); puddle.position.set(cx, TOP + .004, cz); puddle.castShadow = true; puddle.renderOrder = 2; root.add(puddle);
+    const puddle = new THREE.Mesh(geo, tinted); puddle.position.set(cx, TOP + .004, cz); puddle.renderOrder = 2; fx.add(puddle);
     const r = THREE.MathUtils.clamp(size * .3, .1, .6);
-    const falling = new THREE.Mesh(ball, fallMat); falling.castShadow = true; falling.renderOrder = 3; root.add(falling);
-    const blob = new THREE.Mesh(ball, tinted); blob.castShadow = true; blob.renderOrder = 2; root.add(blob);
-    const mark = new THREE.Mesh(disc, shadowMat.clone()); mark.position.set(cx, TOP + .006, cz); mark.scale.setScalar(Math.max(r, reach * .5)); mark.visible = false; root.add(mark);
+    const falling = new THREE.Mesh(ball, fallMat); falling.renderOrder = 3; fx.add(falling);
+    const blob = new THREE.Mesh(ball, tinted); blob.renderOrder = 2; fx.add(blob);
+    const mark = new THREE.Mesh(disc, shadowMat.clone()); mark.position.set(cx, TOP + .006, cz); mark.scale.setScalar(Math.max(r, reach * .5)); mark.visible = false; fx.add(mark);
     return { cx, cz, reach, r, puddle, falling, blob, mark, t0: 0, state: 'wait' };
   });
 
   // Splash: a few tiny droplets flung out on impact.
   const sprayGeo = new THREE.SphereGeometry(1, 10, 8), spray = [];
-  for (let i = 0; i < 40; i++) { const m = new THREE.Mesh(sprayGeo, water); m.scale.setScalar(1e-4); root.add(m); spray.push({ m, v: new THREE.Vector3(), life: 0 }); }
+  for (let i = 0; i < 40; i++) { const m = new THREE.Mesh(sprayGeo, water); m.scale.setScalar(1e-4); fx.add(m); spray.push({ m, v: new THREE.Vector3(), life: 0 }); }
   let sprayNext = 0;
   const splash = (x, z, r) => {
     for (let i = 0; i < 6; i++) {
@@ -124,10 +131,14 @@ export function createDropletIsland(scene, island) {
   const bearBox = new THREE.Box3().setFromObject(body), footOffset = body.position.y - bearBox.min.y;
   const bearMid = (bearBox.max.y + bearBox.min.y) / 2 - body.position.y;   // centre height above the origin
   // shown as the Alltäglich swim bear plush; the walker / stunt code below moves it
-  const plush = replaceWithPlush(root, body, 'swim');
+  const plush = opts.plush ?? replaceWithPlush(root, body, 'swim');
+  const anchor = opts.plush ? plushAnchor(body).anchor : plush.anchor;
+  const onLid = (x, z, m = 0) => Math.abs(x) <= LAPTOP_W / 2 + m && Math.abs(z) <= LAPTOP_D / 2 + m;
   // it can be picked up and thrown; it always comes down somewhere on the sheet
-  const sheetAt = (x, z) => Math.abs(x) <= W / 2 && Math.abs(z) <= D / 2 ? TOP : GROUND;
-  const toss = createThrowable(body, { bottom: footOffset, groundAt: sheetAt, limit: (x, z) => [THREE.MathUtils.clamp(x, -W / 2 + .7, W / 2 - .7), THREE.MathUtils.clamp(z, -D / 2 + .7, D / 2 - .7)] });
+  const sheetAt = (x, z) => onLid(x, z) ? TOP : GROUND;
+  // on its own island it always comes down on the lid; beside the pool it can be thrown off it
+  const toss = createThrowable(body, { bottom: footOffset, groundAt: sheetAt, limit: embedded ? (x, z) => [x, z] : (x, z) => [THREE.MathUtils.clamp(x, -W / 2 + .7, W / 2 - .7), THREE.MathUtils.clamp(z, -D / 2 + .7, D / 2 - .7)] });
+  let active = !embedded, incoming = false;
   const walker = { x: 0, z: 2, vx: 0, vz: 0, yaw: 0, phase: 0, target: new THREE.Vector2(0, 2), flinch: 0, act: null, cool: 0, lastAct: '' };
   body.rotation.order = 'YXZ';   // yaw first, then pitch/roll in the bear's own frame (for flips)
   const LIMIT_X = W / 2 - .9, LIMIT_Z = D / 2 - .9;
@@ -148,7 +159,8 @@ export function createDropletIsland(scene, island) {
   const reset = time => {
     start = time; order = drops.map((_, i) => i).sort(() => Math.random() - .5);
     order.forEach((i, k) => { const d = drops[i]; d.t0 = START_DELAY + k * INTERVAL; d.state = 'wait'; hide(d.puddle); hide(d.falling); hide(d.blob); d.mark.visible = false; });
-    walker.x = 0; walker.z = 2; walker.vx = walker.vz = 0; walker.act = null; walker.cool = 0; newTarget();
+    if (!embedded) { walker.x = 0; walker.z = 2; }
+    walker.vx = walker.vz = 0; walker.act = null; walker.cool = 0; newTarget();
   };
 
   const house = createDogHouse(root, obstacles, { x: 0, z: D / 2 + 3, y: GROUND });
@@ -158,12 +170,13 @@ export function createDropletIsland(scene, island) {
   let pendingReset = false;
   const world = {
     // replay from the start every time the island is opened
-    onEnter() { pendingReset = true; },
+    onEnter() { pendingReset = true; fx.visible = true; },
     // compile every shader up front so the first drops never wait on the GPU
     precompile(renderer, scene, camera) {
-      const was = root.visible; root.visible = true;
-      try { const job = renderer.compileAsync(root, camera, scene); root.visible = was; return job.catch(() => {}); }
-      catch { root.visible = was; return Promise.resolve(); }
+      const was = root.visible, wasFx = fx.visible; root.visible = true; fx.visible = true;
+      const back = () => { root.visible = was; fx.visible = wasFx || pendingReset; };
+      try { const job = renderer.compileAsync(root, camera, scene); back(); return job.catch(() => {}); }
+      catch { back(); return Promise.resolve(); }
     },
     root, island, obstacles, house, fetchActivity: toy, bear, drops,
     // opens looking across the laptop's long side (landscape diagonal)
@@ -175,17 +188,34 @@ export function createDropletIsland(scene, island) {
     },
     navigationOptions: { bounds: { minX: -W / 2 + .5, maxX: W / 2 - .5, minZ: -D / 2 + .5, maxZ: D / 2 - .5 }, clearance: .6, min: -11, size: 60 },
     activity: { type: 'none' },
-    grabTargets: [bearTarget(plush, toss)],
+    grabTargets: embedded ? [] : [bearTarget(plush, toss)],
     view: { center: { x: 0, z: 0 }, min: [-LAPTOP_W / 2 - .2, GROUND, -LAPTOP_D / 2 - .2], max: [LAPTOP_W / 2 + .2, 2.6, LAPTOP_D / 2 + .2] },
     ready: Promise.resolve(),
     heightAt(x, z) { return Math.abs(x) <= W / 2 && Math.abs(z) <= D / 2 ? TOP : GROUND; },
     get finished() { return drops.every(d => d.state === 'landed'); },
     get stunt() { return walker.act?.type ?? null; },
+    get active() { return active; },
+    get held() { return toss.state === 'held'; },
+    top: TOP, size: [LAPTOP_W, LAPTOP_D], bearBottom: footOffset,
+    // the bear arrives (world position), flying with `velocity`; settles on the lid
+    receive(worldPosition, velocity, flying = false) {
+      root.worldToLocal(body.position.copy(worldPosition)); body.rotation.set(0, body.rotation.y, 0, 'YXZ');
+      active = true; incoming = flying; toss.launch(velocity, flying ? 5 : 2);
+      if (!fx.visible) { fx.visible = true; pendingReset = true; }   // a bear on the lid sets the drops going
+    },
+    // jump off toward a world position (the pool)
+    leapTo(worldTarget, T = 1.05) {
+      if (!active || toss.state === 'held') return;
+      const to = root.worldToLocal(worldTarget.clone()), from = body.position;
+      walker.act = null; incoming = false;
+      toss.launch(new THREE.Vector3((to.x - from.x) / T, (to.y - from.y + .5 * 30 * T * T) / T, (to.z - from.z) / T), 5);
+    },
+    bearTarget: bearTarget(plush, toss),
     update(time, reducedMotion) {
-      if (start === null || pendingReset) { pendingReset = false; reset(time); }
+      if (fx.visible && (start === null || pendingReset)) { pendingReset = false; reset(time); }
       const dt = last === null ? 0 : Math.min(.05, Math.max(0, time - last)); last = time;
       const t = time - start;
-      for (const d of drops) {
+      if (fx.visible) for (const d of drops) {
         if (d.state === 'wait' && t >= d.t0) { d.state = 'falling'; d.mark.visible = true; }
         if (d.state === 'falling') {
           // an oval drop, stretched along its fall
@@ -215,10 +245,19 @@ export function createDropletIsland(scene, island) {
         if (s.m.position.y < TOP + .02) { s.m.position.y = TOP + .02; s.v.set(0, 0, 0); }
         if (s.life <= 0) s.m.scale.setScalar(1e-4);
       }
+      if (!active) return;
       if (toss.busy()) {
-        if (toss.update(dt) === 'landed') { walker.x = body.position.x; walker.z = body.position.z; walker.vx = walker.vz = 0; walker.yaw = body.rotation.y; walker.act = null; walker.cool = .6; newTarget(); }
+        const st = toss.update(dt);
+        if (embedded && st === 'fall') {
+          // arriving from the pool: wait until it is over the lid. Otherwise, once it is
+          // clear of the laptop it belongs to the pool island again.
+          const over = onLid(body.position.x, body.position.z);
+          if (incoming) { if (over) incoming = false; }
+          else if (!over) { active = false; toss.cancel(); opts.onLeave?.(body.getWorldPosition(new THREE.Vector3()), toss.velocity.clone()); return; }
+        }
+        if (st === 'landed') { walker.x = body.position.x; walker.z = body.position.z; walker.vx = walker.vz = 0; walker.yaw = body.rotation.y; walker.act = null; walker.cool = .6; newTarget(); }
       } else updateBear(time, dt, t, reducedMotion);
-      plush.update(plush.anchor, { ground: TOP });
+      plush.update(anchor, { ground: sheetAt(body.position.x, body.position.z) });
     },
     setMood() {},
   };
