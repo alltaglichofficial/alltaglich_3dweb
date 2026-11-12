@@ -28,10 +28,10 @@
     <p id="error-message">3D 화면을 열지 못했어요. 브라우저의 하드웨어 가속을 확인해 주세요.</p>
     <button id="reload" type="button">다시 열기</button>
   </div>
-  <div class="scene-caption" aria-hidden="true">FOUR ISLANDS. LITTLE EVERYDAY ESCAPES.</div>
+  <div class="scene-caption" aria-hidden="true">THREE ISLANDS. LITTLE EVERYDAY ESCAPES.</div>
   <button type="button" id="prevIsland" class="island-arrow previous" aria-label="클라이밍 섬으로 이동"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 6-6 6 6 6"/></svg><span>PREV</span></button>
   <button type="button" id="nextIsland" class="island-arrow next" aria-label="수영 섬으로 이동"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m10 6 6 6-6 6"/></svg><span>NEXT</span></button>
-  <div class="island-indicator"><span class="island-count"><b id="island-number">01</b> / 04</span><span id="island-name">테니스 섬</span><button type="button" id="resetView" aria-label="현재 섬 전체 보기" title="현재 섬 전체 보기">↺</button><button type="button" id="lightMenu" class="light-menu" popovertarget="light-panel" aria-expanded="false" aria-label="조명 34가지 고르기" title="조명 34가지 고르기"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.6 10.8c.7.6 1.1 1.3 1.1 2.2h5c0-.9.4-1.6 1.1-2.2A6 6 0 0 0 12 3Z"/></svg></button><button type="button" id="moodToggle" class="mood-toggle" aria-pressed="false" aria-label="어두운 방 분위기로 바꾸기" title="어두운 방 분위기로 바꾸기"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5Z"/></svg></button></div>
+  <div class="island-indicator"><span class="island-count"><b id="island-number">01</b> / 03</span><span id="island-name">테니스 섬</span><button type="button" id="resetView" aria-label="현재 섬 전체 보기" title="현재 섬 전체 보기">↺</button><button type="button" id="lightMenu" class="light-menu" popovertarget="light-panel" aria-expanded="false" aria-label="조명 34가지 고르기" title="조명 34가지 고르기"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.6 10.8c.7.6 1.1 1.3 1.1 2.2h5c0-.9.4-1.6 1.1-2.2A6 6 0 0 0 12 3Z"/></svg></button><button type="button" id="moodToggle" class="mood-toggle" aria-pressed="false" aria-label="어두운 방 분위기로 바꾸기" title="어두운 방 분위기로 바꾸기"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5Z"/></svg></button></div>
   <section id="light-panel" class="light-panel" popover aria-label="조명 고르기">
     <header><span class="light-eyebrow">LIGHTING · 34 SET-UPS</span><strong id="light-name">기본 조명</strong>
       <span class="light-steps"><button type="button" data-light-step="-1" aria-label="이전 조명">‹</button><button type="button" data-light-step="1" aria-label="다음 조명">›</button><button type="button" popovertarget="light-panel" popovertargetaction="hide" aria-label="조명 목록 닫기">×</button></span></header>
@@ -76,9 +76,9 @@
       <button type="button" data-island="tennis" aria-pressed="true"><span class="nav-dot tennis"></span><span>테니스 섬</span></button>
       <button type="button" data-island="pool" aria-pressed="false"><span class="nav-dot pool"></span><span>수영 섬</span></button>
       <button type="button" data-island="climb" aria-pressed="false"><span class="nav-dot climb"></span><span>클라이밍 섬</span></button>
-      <button type="button" data-island="drops" aria-pressed="false"><span class="nav-dot drops"></span><span>물방울 섬</span></button>
-      <span class="nav-divider print-tab" aria-hidden="true" hidden></span>
+      <span class="nav-divider pool-sub" aria-hidden="true" hidden></span>
       <button type="button" class="print-tab" id="print-tab" aria-pressed="false" hidden title="수영장 바닥 프린트를 검정 격자의 프러시안 블루 타일로 바꿔요"><span class="nav-dot print"></span><span>Prussian Blue</span></button>
+      <button type="button" class="pool-sub" id="drops-tab" aria-pressed="false" hidden title="수영섬 옆, 물방울이 떨어지는 노트북 위로 가요"><span class="nav-dot drops"></span><span>물방울</span></button>
     </nav>
   </footer>
   <div id="care-feedback" class="care-feedback" aria-hidden="true"></div>

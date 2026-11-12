@@ -16,7 +16,8 @@ const SHAPES = [[[0.7404,0.9111],[0.7357,0.9051],[0.7281,0.9002],[0.7178,0.8978]
 const W = 12, D = W / .6427;                     // sheet keeps the guide frame's proportions
 // The sheet lies on a closed laptop (lid up, with the brand's ä logo) on the table.
 const GROUND = -1.6, LAPTOP_T = .62, LAPTOP_W = 13.6, LAPTOP_D = LAPTOP_W * 1.43;
-const SHEET_T = .22, SHEET_Y = GROUND + LAPTOP_T, TOP = SHEET_Y + SHEET_T;
+// (no acrylic any more: the drops sit right on the laptop lid)
+const SHEET_T = 0, SHEET_Y = GROUND + LAPTOP_T, TOP = SHEET_Y + SHEET_T;
 const FALL_H = 11, GRAVITY = 30, INTERVAL = .42, START_DELAY = .35;
 // Epoxy tint per puddle, read from the guide (물방울에폭시시안, low opacity): [colour, strength].
 const TINTS = [["#8dc5d4",0.052],["#a2d9d0",0.152],["#8dc5d4",0.052],["#8dc5d4",0.088],["#83cdd9",0.104],["#83cdd9",0.104],["#a2d9d0",0.152],["#8dc5d4",0.149],["#8dc5d4",0.138],["#8dc5d4",0.104],["#8dc5d4",0.149],["#8dc5d4",0.104],["#8dc5d4",0.052],["#8dc5d4",0.149],["#8dc5d4",0.052],["#8dc5d4",0.052],["#83cdd9",0.104],["#83cdd9",0.104],["#83cdd9",0.057],["#a2d9d0",0.152],["#8dc5d4",0.104],["#8dc5d4",0.052],["#8dc5d4",0.052],["#83cdd9",0.104],["#8dc5d4",0.104],["#b4d4d3",0.215],["#a2d9d0",0.152],["#83cdd9",0.057],["#b4d4d3",0.215],["#b4d4d3",0.126],["#83cdd9",0.126],["#8dc5d4",0.052],["#8dc5d4",0.052],["#8dc5d4",0.143],["#8dc5d4",0.104],["#a2d9d0",0.1],["#a2d9d0",0.1],["#83cdd9",0.104],["#71a4c5",0.099],["#8dc5d4",0.052],["#a2d9d0",0.1]];
@@ -46,7 +47,6 @@ export function createDropletIsland(scene, island) {
       col = mix(col, vec3(1.), fres * .5) + sp;
       gl_FragColor = vec4(col, saturate(.03 + side * .78 + fres * .38 + min(sp, 1.) * .7));`);
   };
-  const sheet = new THREE.Mesh(sheetGeo, acrylic); sheet.renderOrder = 1; root.add(sheet);
   const laptop = createLaptop(root);
 
   // Water: clear epoxy-like lenses with the guide's faint cyan/mint tint. Every drop gets

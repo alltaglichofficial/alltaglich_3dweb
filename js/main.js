@@ -173,20 +173,26 @@ async function start() {
   }
   function updateIslandUI() {
     const island = ISLANDS[islandIndex];
-    document.querySelectorAll('[data-island]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.island === island.id)));
+    // the droplet island is part of the swimming island: reached from its own tab there
+    const main = island.partOf ?? island.id;
+    document.querySelectorAll('[data-island]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.island === main)));
+    document.querySelectorAll('.pool-sub').forEach(el => { el.hidden = main !== 'pool'; });
+    document.querySelector('#drops-tab')?.setAttribute('aria-pressed', String(island.id === 'drops'));
     document.querySelector('#island-title').innerHTML = island.title;
     document.querySelector('#island-description').innerHTML = island.description;
     // The print tab only belongs to the pool island; it shows that island's current print.
     const printTab = document.querySelector('#print-tab');
     const here = worlds[islandIndex];
     document.querySelectorAll('.print-tab').forEach(el => { el.hidden = !here?.setPrint; });
+    document.querySelector('#print-tab')?.toggleAttribute('hidden', !here?.setPrint);
     if (printTab && here?.setPrint) printTab.setAttribute('aria-pressed', String(here.print === 'photo'));
     document.querySelector('#island-eyebrow').textContent = island.english;
     document.querySelector('#island-name').textContent = island.label;
     document.querySelector('#island-number').textContent = island.number;
     document.querySelector('[data-command=play]').textContent = island.playLabel;
-    document.querySelector('#prevIsland').setAttribute('aria-label', `${ISLANDS[(islandIndex + 2) % 3].label}으로 이동`);
-    document.querySelector('#nextIsland').setAttribute('aria-label', `${ISLANDS[(islandIndex + 1) % 3].label}으로 이동`);
+    const mains = ISLANDS.filter(i => !i.partOf), at = mains.findIndex(i => i.id === main);
+    document.querySelector('#prevIsland').setAttribute('aria-label', `${mains[(at + 2) % 3].label}으로 이동`);
+    document.querySelector('#nextIsland').setAttribute('aria-label', `${mains[(at + 1) % 3].label}으로 이동`);
     document.documentElement.style.setProperty('--island-accent', island.accent);
     // Islands without the puppy (the pool): hide the dog and its care/command UI.
     const noDog = !!island.noDog;
@@ -215,7 +221,11 @@ async function start() {
     }
     resetCamera(immediate); updateIslandUI();
   }
-  function nextIsland(step) { selectIsland(ISLANDS[(islandIndex + step + ISLANDS.length) % ISLANDS.length].id, false, step); }
+  function nextIsland(step) {
+    // prev / next walk the main islands only (the droplet island counts as the pool)
+    const mains = ISLANDS.filter(i => !i.partOf), here = ISLANDS[islandIndex], at = mains.findIndex(i => i.id === (here.partOf ?? here.id));
+    selectIsland(mains[(at + step + mains.length) % mains.length].id, false, step);
+  }
   viewOffset(); resetCamera(true); updateIslandUI();
   controls.addEventListener('start', () => { transition = false; });
   document.querySelector('#print-tab')?.addEventListener('click', event => {
@@ -223,6 +233,9 @@ async function start() {
     const next = pool.print === 'photo' ? 'lane' : 'photo';
     pool.setPrint(next); event.currentTarget.setAttribute('aria-pressed', String(next === 'photo'));
     document.querySelector('#status').textContent = next === 'photo' ? '수영장 바닥을 Prussian Blue 타일로 바꿨어요.' : '수영장 바닥을 레인 타일로 되돌렸어요.';
+  });
+  document.querySelector('#drops-tab')?.addEventListener('click', () => {
+    if (ISLANDS[islandIndex].id === 'drops') selectIsland('pool', false, -1); else selectIsland('drops', false, 1);
   });
   document.querySelectorAll('[data-island]').forEach(button => button.addEventListener('click', () => selectIsland(button.dataset.island, false, ISLANDS.findIndex(i => i.id === button.dataset.island) > islandIndex ? 1 : -1)));
   document.querySelector('#prevIsland').addEventListener('click', () => nextIsland(-1));
