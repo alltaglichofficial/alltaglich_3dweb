@@ -19,7 +19,7 @@ export function setPlushCamera(camera) { sceneCamera = camera; }
 
 // the viewers' own camera: 30° field of view, 9.8 away, looking slightly down
 const FRAME = 2 * 9.8 * Math.tan(15 * Math.PI / 180);          // frame height in the viewer's units
-const BEAR_SPAN = 3.15;                                         // the bear's height in the viewer's units
+const BEAR_SPAN = 2.51;                                         // the bear's height in the viewer's units (measured)
 const TILT = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.atan2(1.2, 9.8));
 const all = [];
 
@@ -58,16 +58,25 @@ export function createPlushBear(parent, kind, { height = 1.4 } = {}) {
   // an invisible box to tap / pick it up by
   const proxy = new THREE.Mesh(new THREE.BoxGeometry(height * .72, height, height * .72), new THREE.MeshBasicMaterial({ visible: false }));
   parent.add(proxy);
+  // soft contact shadow on whatever it stands on (the viewer's own floor shadow is off in the scene)
+  const shadow = new THREE.Mesh(new THREE.CircleGeometry(.5, 40), new THREE.MeshBasicMaterial({ color: 0x2c2a22, map: blobTexture(), transparent: true, opacity: .32, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3 }));
+  shadow.rotation.x = -Math.PI / 2; shadow.renderOrder = 2; shadow.visible = false; parent.add(shadow);
 
   const qWorld = new THREE.Quaternion(), qCam = new THREE.Quaternion(), pos = new THREE.Vector3(), q = new THREE.Quaternion();
-  const bear = { info, sprite, proxy, iframe, lastUsed: 0, ready: false };
+  const bear = { info, sprite, proxy, shadow, iframe, height, lastUsed: 0, ready: false };
   iframe.addEventListener('load', () => { bear.ready = true; });
-  bear.update = (follow, { swim = false, goggles = swim } = {}) => {
+  bear.update = (follow, { swim = false, goggles = swim, ground = null } = {}) => {
     bear.lastUsed = performance.now();
     if (iframe.style.display === 'none') iframe.style.display = '';
     follow.updateWorldMatrix(true, false);
     follow.getWorldPosition(pos); follow.getWorldQuaternion(qWorld);
     parent.worldToLocal(sprite.position.copy(pos)); proxy.position.copy(sprite.position); proxy.quaternion.copy(qWorld);
+    if (ground === null || ground === undefined) shadow.visible = false;
+    else {
+      const above = Math.max(0, sprite.position.y - height * .5 - ground), k = 1 / (1 + above * .7);
+      shadow.visible = sprite.visible; shadow.position.set(sprite.position.x, ground + .012, sprite.position.z);
+      shadow.scale.setScalar(height * (.95 + above * .15)); shadow.material.opacity = .34 * k;
+    }
     const B = bear.ready && iframe.contentWindow?.__bear;
     if (!B || !sceneCamera) return;
     // the pose as the scene camera sees it, handed to the viewer (which adds its own slight tilt)
@@ -84,10 +93,20 @@ export function createPlushBear(parent, kind, { height = 1.4 } = {}) {
   return bear;
 }
 
+let blob = null;
+function blobTexture() {
+  if (blob) return blob;
+  const c = document.createElement('canvas'); c.width = c.height = 64;
+  const g = c.getContext('2d'), grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  grad.addColorStop(0, 'rgba(255,255,255,1)'); grad.addColorStop(.55, 'rgba(255,255,255,.6)'); grad.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = grad; g.fillRect(0, 0, 64, 64);
+  return (blob = new THREE.CanvasTexture(c));
+}
+
 // Bears on islands that aren't shown stop rendering (their iframe is hidden).
 setInterval(() => {
   const now = performance.now();
-  for (const b of all) if (now - b.lastUsed > 1500 && b.iframe.style.display !== 'none') { b.iframe.style.display = 'none'; b.sprite.visible = false; }
+  for (const b of all) if (now - b.lastUsed > 1500 && b.iframe.style.display !== 'none') { b.iframe.style.display = 'none'; b.sprite.visible = false; b.shadow.visible = false; }
 }, 300);
 
 // Large viewer: the stand-alone bear page over a soft backdrop.
@@ -110,9 +129,74 @@ export function openPlushViewer(kind) {
   frame.addEventListener('load', () => frame.contentDocument?.getElementById('gl')?.focus(), { once: true });
 }
 
-// A grab target (see main.js) that only reacts to a tap: opens the large viewer.
-export function tapTarget(bear) {
-  return { object: bear.proxy, grab() {}, drag() {}, release() {}, tap() { bear.open(); } };
+// Pick-up-and-throw for a bear object (its origin `bottom` above its feet).
+// grab / drag / release follow main.js's grab protocol; update(dt) runs the flight.
+export function createThrowable(object, { bottom, groundAt, limit = (x, z) => [x, z] }) {
+  const plane = new THREE.Plane(), hit = new THREE.Vector3(), offset = new THREE.Vector3(), normal = new THREE.Vector3();
+  const v = new THREE.Vector3(), w = new THREE.Vector3(), track = [];
+  const T = { state: null, spin: new THREE.Vector3(), settle: 0, upright: new THREE.Quaternion(), from: new THREE.Quaternion() };
+  const local = p => object.parent.worldToLocal(p);
+  T.busy = () => T.state !== null;
+  T.grab = (point, camera) => {
+    camera.getWorldDirection(normal); plane.setFromNormalAndCoplanarPoint(normal, point);
+    object.getWorldPosition(offset).sub(point); track.length = 0; T.state = 'held'; v.set(0, 0, 0);
+  };
+  T.drag = ray => {
+    if (!ray.intersectPlane(plane, hit)) return;
+    w.copy(hit).add(offset); local(w);
+    const [x, z] = limit(w.x, w.z); w.x = x; w.z = z;
+    w.y = Math.max(w.y, groundAt(w.x, w.z) + bottom + .05);
+    const now = performance.now() / 1000;
+    // a lifted bear swings a little toward where it is being pulled
+    const dx = w.x - object.position.x;
+    object.position.copy(w); object.rotation.set(0, object.rotation.y, THREE.MathUtils.clamp(-dx * 2, -.5, .5), 'YXZ');
+    track.push({ t: now, p: w.clone() }); while (track.length > 2 && now - track[0].t > .12) track.shift();
+  };
+  T.release = () => {
+    if (T.state !== 'held') return;
+    if (track.length >= 2) { const a = track[0], b = track[track.length - 1], dt = Math.max(.016, b.t - a.t); v.copy(b.p).sub(a.p).divideScalar(dt); }
+    if (v.length() > 24) v.setLength(24);
+    T.spin.set((Math.random() - .5) * 2, (Math.random() - .5) * 3, (Math.random() - .5) * 2).multiplyScalar(.6 + v.length() * .35);
+    T.state = 'fall';
+  };
+  T.update = dt => {
+    if (T.state === 'fall') {
+      v.y -= 30 * dt; object.position.addScaledVector(v, dt);
+      const [x, z] = limit(object.position.x, object.position.z);
+      if (x !== object.position.x) v.x *= -.4; if (z !== object.position.z) v.z *= -.4;
+      object.position.x = x; object.position.z = z;
+      object.rotation.x += T.spin.x * dt; object.rotation.y += T.spin.y * dt; object.rotation.z += T.spin.z * dt;
+      const floor = groundAt(x, z) + bottom;
+      if (object.position.y <= floor && v.y < 0) {
+        object.position.y = floor;
+        if (v.y < -4) { v.y *= -.38; v.x *= .6; v.z *= .6; T.spin.multiplyScalar(.5); return 'bounce'; }
+        T.state = 'settle'; T.settle = 0; T.from.copy(object.quaternion);
+        T.upright.setFromAxisAngle(new THREE.Vector3(0, 1, 0), object.rotation.y);
+      }
+      return 'fall';
+    }
+    if (T.state === 'settle') {
+      // rolls back onto its feet
+      T.settle = Math.min(1, T.settle + dt / .45);
+      object.quaternion.slerpQuaternions(T.from, T.upright, 1 - Math.pow(1 - T.settle, 3));
+      object.position.y = groundAt(object.position.x, object.position.z) + bottom + Math.sin(T.settle * Math.PI) * .25;
+      if (T.settle >= 1) { T.state = null; object.rotation.set(0, object.rotation.y, 0, 'YXZ'); return 'landed'; }
+      return 'settle';
+    }
+    return T.state;
+  };
+  return T;
+}
+
+// A grab target (see main.js): drag to carry and throw, quick tap to open large.
+export function bearTarget(bear, throwable) {
+  return {
+    object: bear.proxy,
+    grab: (point, camera) => throwable.grab(point, camera),
+    drag: (ray) => throwable.drag(ray),
+    release: () => throwable.release(),
+    tap: () => { bear.open(); },
+  };
 }
 
 // hide a three.js stand-in while keeping it pickable (raycasts ignore visibility)

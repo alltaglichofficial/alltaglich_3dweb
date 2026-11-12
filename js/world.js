@@ -1,4 +1,4 @@
-import { createPlushBear, tapTarget } from './plush.js';
+import { createPlushBear, createThrowable, bearTarget } from './plush.js';
 import * as THREE from 'three';
 import { box, sphere, ico, cylinder, tube, flatPath, roundedPad, mesh, batchStatic } from './geometry.js';
 import { createDropletIsland } from './drops.js';
@@ -122,32 +122,114 @@ export function createWorld(scene, island) {
   const house = createDogHouse(root, obstacles, island.id === 'tennis' ? { x: 5.3, z: -2, color: 0x8fa980 } : { x: -5.05, z: -.5, color: 0xd0a285 });
   const fetchActivity = activity.type === 'fetch' ? activity : createFetchToy(root, { x: 1.4, y: .3, z: 3 }, island.spawn);
 
-  // The island's Alltäglich plush bears, standing at the front and turning a little.
-  const PLUSH_SPOTS = { tennis: [['tennis', 2.3, .16, 3.4, -.35]], climb: [['climbBrown', -1.25, .25, 1.15, .25], ['climbOrange', 1.25, .25, 1.15, -.25]] }[island.id] || [];
-  const plushBears = PLUSH_SPOTS.map(([kind, x, y, z, yaw], i) => {
-    const anchor = new THREE.Object3D(); anchor.position.set(x, y + .75, z); root.add(anchor);
-    const bear = createPlushBear(root, kind, { height: 1.5 });
-    obstacles.push({ type: 'circle', x, z, r: .55 });
-    return { bear, anchor, yaw, i };
+  // The island's Alltäglich plush bears. They play on their own (tennis bear: runs
+  // about its half of the court and swings at rallies; climbing bears: climb the
+  // wall and jump down, or hop up the steps), and can be picked up and thrown.
+  const PLUSH_SPOTS = { tennis: [['tennis', 1.8, 2.6, 'tennis']], climb: [['climbBrown', -1.4, 1.1, 'wall'], ['climbOrange', 1.6, 1.2, 'steps']] }[island.id] || [];
+  const BEAR_H = 1.5, HALF = BEAR_H / 2;
+  const groundAt = (x, z) => worldHeight(x, z);
+  const limit = (x, z) => { const k = Math.hypot(x / 7.4, z / 6.3); return k > 1 ? [x / k, z / k] : [x, z]; };
+  const plushBears = PLUSH_SPOTS.map(([kind, x, z, play], i) => {
+    const anchor = new THREE.Object3D(); anchor.rotation.order = 'YXZ'; anchor.position.set(x, groundAt(x, z) + HALF, z); root.add(anchor);
+    const bear = createPlushBear(root, kind, { height: BEAR_H });
+    const toss = createThrowable(anchor, { bottom: HALF, groundAt, limit });
+    return { bear, anchor, toss, play, i, mode: 'idle', t: 0, wait: 1 + i * 1.3, target: new THREE.Vector2(x, z), phase: 0, climbTop: 0, last: 0 };
   });
+  function walkTo(p, dt, speed = 1.7) {
+    const a = p.anchor, dx = p.target.x - a.position.x, dz = p.target.y - a.position.z, d = Math.hypot(dx, dz);
+    if (d < .08) return true;
+    const step = Math.min(d, speed * dt); a.position.x += dx / d * step; a.position.z += dz / d * step;
+    let dy = Math.atan2(dx, dz) - a.rotation.y; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); a.rotation.y += dy * Math.min(1, dt * 8);
+    // a bouncy plush waddle
+    p.phase += dt * 11;
+    a.position.y = groundAt(a.position.x, a.position.z) + HALF + Math.abs(Math.sin(p.phase)) * .16;
+    a.rotation.z = Math.sin(p.phase) * .12; a.rotation.x = .12;
+    return false;
+  }
+  const stand = p => { const a = p.anchor; a.position.y = groundAt(a.position.x, a.position.z) + HALF; a.rotation.x = 0; a.rotation.z = 0; };
+  const face = (p, yaw, dt) => { let dy = yaw - p.anchor.rotation.y; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); p.anchor.rotation.y += dy * Math.min(1, dt * 6); };
+  function playTennis(p, dt) {
+    const a = p.anchor; p.t += dt;
+    if (p.mode === 'idle') { stand(p); face(p, Math.PI, dt); if (p.t > p.wait) { p.mode = 'run'; p.t = 0; p.target.set(-3 + Math.random() * 6, .9 + Math.random() * 3.6); } }
+    else if (p.mode === 'run') { if (walkTo(p, dt, 2.6)) { p.mode = 'swing'; p.t = 0; } }
+    else if (p.mode === 'swing') {
+      // forehand: wind up, a fast full turn with a little hop, follow through facing the net
+      const k = Math.min(1, p.t / .55);
+      a.rotation.y = Math.PI + (k < .25 ? -k * 2.4 : -.6 + (k - .25) / .75 * (Math.PI * 2 + .6));
+      a.position.y = groundAt(a.position.x, a.position.z) + HALF + Math.sin(k * Math.PI) * .35;
+      a.rotation.z = Math.sin(k * Math.PI) * -.25; a.rotation.x = 0;
+      if (k >= 1) { a.rotation.y = Math.PI; p.mode = Math.random() < .3 ? 'cheer' : 'idle'; p.t = 0; p.wait = .5 + Math.random() * 1.2; }
+    } else if (p.mode === 'cheer') {
+      // a happy jump after a good shot
+      const k = Math.min(1, p.t / .7); a.position.y = groundAt(a.position.x, a.position.z) + HALF + Math.sin(k * Math.PI) * 1.1; a.rotation.x = -Math.sin(k * Math.PI) * .3;
+      if (k >= 1) { stand(p); p.mode = 'idle'; p.t = 0; p.wait = .6; }
+    }
+  }
+  const WALL_Z = -1.55;   // just in front of the bouldering wall's face
+  function playWall(p, dt) {
+    const a = p.anchor; p.t += dt;
+    if (p.mode === 'idle') { stand(p); face(p, .3, dt); if (p.t > p.wait) { p.mode = 'go'; p.target.set(-2.8 + Math.random() * 5.6, WALL_Z + .25); } }
+    else if (p.mode === 'go') { if (walkTo(p, dt)) { p.mode = 'climb'; p.t = 0; p.climbTop = 1.4 + Math.random() * 1.9; p.base = a.position.y; } }
+    else if (p.mode === 'climb') {
+      // back to us, pulling up hold by hold, swaying side to side
+      face(p, Math.PI, dt * 2); const k = Math.min(1, p.t / (1.1 + p.climbTop * .7));
+      const reach = Math.floor(p.t * 2.6), sway = Math.sin(p.t * 2.6 * Math.PI);
+      a.position.set(a.position.x + Math.sin(p.t * 1.3) * .004, p.base + k * p.climbTop + Math.abs(sway) * .06, WALL_Z + .02);
+      a.rotation.z = sway * .16; a.rotation.x = -.12;
+      if (k >= 1) { p.mode = 'hang'; p.t = 0; }
+    } else if (p.mode === 'hang') {
+      a.rotation.z = Math.sin(p.t * 3) * .08;
+      if (p.t > .8) { p.mode = 'jump'; p.t = 0; p.vy = 3.5; p.vz = 2.6; p.y0 = a.position.y; }
+    } else if (p.mode === 'jump') {
+      // push off the wall, a back flip on the way down, land on the mat
+      p.vy -= 26 * dt; a.position.y += p.vy * dt; a.position.z += p.vz * dt;
+      const fall = Math.min(1, p.t / .9); a.rotation.x = -fall * Math.PI * 2; a.rotation.z = 0;
+      const floor = groundAt(a.position.x, a.position.z) + HALF;
+      if (a.position.y <= floor && p.vy < 0) { a.position.y = floor; a.rotation.set(0, Math.PI, 0, 'YXZ'); p.mode = 'idle'; p.t = 0; p.wait = .8 + Math.random() * 1.5; }
+    }
+  }
+  const STEPS = [[-2, .4, .5], [0, .4, .75], [2, .4, 1]];
+  function playSteps(p, dt) {
+    const a = p.anchor; p.t += dt;
+    if (p.mode === 'idle') { stand(p); face(p, -.3, dt); if (p.t > p.wait) { p.mode = 'toStep'; p.step = 0; p.target.set(STEPS[0][0] - 1.1, STEPS[0][1] + .9); } }
+    else if (p.mode === 'toStep') { if (walkTo(p, dt)) { p.mode = 'hop'; p.t = 0; p.from = a.position.clone(); } }
+    else if (p.mode === 'hop') {
+      // hop from step to step, getting higher, then a big jump down
+      const [sx, sz, top] = STEPS[p.step], k = Math.min(1, p.t / .5), to = new THREE.Vector3(sx, top + HALF, sz);
+      a.position.lerpVectors(p.from, to, k); a.position.y += Math.sin(k * Math.PI) * .7;
+      face(p, Math.atan2(to.x - p.from.x, to.z - p.from.z), dt * 2); a.rotation.x = Math.sin(k * Math.PI) * -.2;
+      if (k >= 1) { p.step++; p.t = 0; p.from = a.position.clone(); if (p.step >= STEPS.length) { p.mode = 'leap'; p.vy = 6; p.vx = 1.6; p.vz = 1.4; } }
+    } else if (p.mode === 'leap') {
+      // star jump with a spin off the top step
+      p.vy -= 26 * dt; a.position.x += p.vx * dt; a.position.z += p.vz * dt; a.position.y += p.vy * dt; a.rotation.y += dt * 9; a.rotation.x = 0;
+      const floor = groundAt(a.position.x, a.position.z) + HALF;
+      if (a.position.y <= floor && p.vy < 0) { a.position.y = floor; p.mode = 'idle'; p.t = 0; p.wait = 1 + Math.random() * 1.5; }
+    }
+  }
+  const PLAY = { tennis: playTennis, wall: playWall, steps: playSteps };
 
   return {
     root, island, obstacles, activity, house, fetchActivity,
     navigationOptions: { radiusX: 8.2, radiusZ: 7.05, clearance: .75 },
-    grabTargets: plushBears.map(p => tapTarget(p.bear)),
+    grabTargets: plushBears.map(p => bearTarget(p.bear, p.toss)),
     update(time = 0, reducedMotion = false) {
       for (const p of plushBears) {
-        p.anchor.rotation.y = p.yaw + (reducedMotion ? 0 : Math.sin(time * .55 + p.i * 2.1) * .35);
-        p.bear.update(p.anchor);
+        const dt = Math.min(.05, Math.max(0, time - p.last)); p.last = time;
+        if (p.toss.busy()) {
+          // thrown: after landing it picks up its game again from wherever it ended up
+          if (p.toss.update(dt) === 'landed') { p.mode = 'idle'; p.t = 0; p.wait = .6; }
+        } else if (!reducedMotion) PLAY[p.play](p, dt);
+        p.bear.update(p.anchor, { ground: groundAt(p.anchor.position.x, p.anchor.position.z) });
       }
     },
-    heightAt(x, z) {
+    heightAt: worldHeight,
+  };
+  function worldHeight(x, z) {
       if (island.id === 'tennis' && Math.abs(x) < 3.95 && Math.abs(z) < 5.05) return .16;
       if (island.id === 'pool' && Math.abs(x) < 4.05 && Math.abs(z) < 3.25) return .14;
       if (island.id === 'climb' && Math.abs(x) < 3.95 && Math.abs(z) < 2.575) return z > -.9 && z < 1.9 && Math.abs(x) < 3.7 ? .25 : .12;
       return .08;
-    },
-  };
+  }
 
   function tree(x, z, s) {
     cylinder(group, .1 * s, .15 * s, 1.15 * s, x, .61 * s, z, 0x9d8760, 7);

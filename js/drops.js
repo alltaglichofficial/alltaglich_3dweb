@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { RoomEnvironment } from '../product/vendor/environments/RoomEnvironment.js';
 import { createSwimBear } from './bear.js';
-import { replaceWithPlush } from './plush.js';
+import { replaceWithPlush, createThrowable, bearTarget } from './plush.js';
 import { createDogHouse, createFetchToy } from './house.js';
 
 // Droplet island: a thin clear acrylic sheet. Water drops fall on it one by one
@@ -125,6 +125,9 @@ export function createDropletIsland(scene, island) {
   const bearMid = (bearBox.max.y + bearBox.min.y) / 2 - body.position.y;   // centre height above the origin
   // shown as the Alltäglich swim bear plush; the walker / stunt code below moves it
   const plush = replaceWithPlush(root, body, 'swim');
+  // it can be picked up and thrown; it always comes down somewhere on the sheet
+  const sheetAt = (x, z) => Math.abs(x) <= W / 2 && Math.abs(z) <= D / 2 ? TOP : GROUND;
+  const toss = createThrowable(body, { bottom: footOffset, groundAt: sheetAt, limit: (x, z) => [THREE.MathUtils.clamp(x, -W / 2 + .7, W / 2 - .7), THREE.MathUtils.clamp(z, -D / 2 + .7, D / 2 - .7)] });
   const walker = { x: 0, z: 2, vx: 0, vz: 0, yaw: 0, phase: 0, target: new THREE.Vector2(0, 2), flinch: 0, act: null, cool: 0, lastAct: '' };
   body.rotation.order = 'YXZ';   // yaw first, then pitch/roll in the bear's own frame (for flips)
   const LIMIT_X = W / 2 - .9, LIMIT_Z = D / 2 - .9;
@@ -172,7 +175,7 @@ export function createDropletIsland(scene, island) {
     },
     navigationOptions: { bounds: { minX: -W / 2 + .5, maxX: W / 2 - .5, minZ: -D / 2 + .5, maxZ: D / 2 - .5 }, clearance: .6, min: -11, size: 60 },
     activity: { type: 'none' },
-    grabTargets: [{ object: body, grab() {}, drag() {}, release() {}, tap() { plush.open(); } }],
+    grabTargets: [bearTarget(plush, toss)],
     view: { center: { x: 0, z: 0 }, min: [-LAPTOP_W / 2 - .2, GROUND, -LAPTOP_D / 2 - .2], max: [LAPTOP_W / 2 + .2, 2.6, LAPTOP_D / 2 + .2] },
     ready: Promise.resolve(),
     heightAt(x, z) { return Math.abs(x) <= W / 2 && Math.abs(z) <= D / 2 ? TOP : GROUND; },
@@ -212,8 +215,10 @@ export function createDropletIsland(scene, island) {
         if (s.m.position.y < TOP + .02) { s.m.position.y = TOP + .02; s.v.set(0, 0, 0); }
         if (s.life <= 0) s.m.scale.setScalar(1e-4);
       }
-      updateBear(time, dt, t, reducedMotion);
-      plush.update(plush.anchor);
+      if (toss.busy()) {
+        if (toss.update(dt) === 'landed') { walker.x = body.position.x; walker.z = body.position.z; walker.vx = walker.vz = 0; walker.yaw = body.rotation.y; walker.act = null; walker.cool = .6; newTarget(); }
+      } else updateBear(time, dt, t, reducedMotion);
+      plush.update(plush.anchor, { ground: TOP });
     },
     setMood() {},
   };

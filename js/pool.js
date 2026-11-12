@@ -122,7 +122,7 @@ export function createPoolIsland(scene, island) {
       if (swimmer && time - lastPaddle > 1.05) { splash(swimmer.x, swimmer.z, .35); lastPaddle = time; }
       // The bear leaves a gentle wake as it bobs and paddles; each hop landing rings out.
       const b = bear.update(time, reducedMotion, surfaceHeight);
-      plush.update(plush.anchor, { swim: bear.state === 'swim' });
+      plush.update(plush.anchor, { swim: bear.state === 'swim', ground: inPool(bear.object.position.x, bear.object.position.z) ? null : DECK_Y });
       motion?.setMover(1, b.x / SCALE, b.z / SCALE, reducedMotion ? 0 : .55);
       if (b.landed) splash(b.x, b.z, .9);
       if (b.splash >= .8 && !reducedMotion) spray.burst(b.x, surfaceHeight(b.x, b.z), b.z, b.splash);
