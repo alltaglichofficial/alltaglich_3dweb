@@ -38,9 +38,6 @@ async function start() {
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = .98;
-  // the pool's clear resin and water refract a copy of the scene; a smaller copy is much
-  // cheaper and looks the same through moving water
-  renderer.transmissionResolutionScale = .6;
   renderer.domElement.setAttribute('aria-label', '회전과 확대가 가능한 3D 스포츠 섬');
   mount.appendChild(renderer.domElement);
 

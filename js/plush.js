@@ -53,14 +53,16 @@ export function createPlushBear(parent, kind, { height = 1.4 } = {}) {
   const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true, alphaTest: .04, depthWrite: true }));
   const size = height / BEAR_SPAN * FRAME;
   sprite.scale.set(size, size, 1);
-  sprite.center.set(.5, .5 - .1 / FRAME);   // the viewer looks at (0, -.1, 0); the bear's centre is its origin
+  // the bear's middle sits a little above the middle of the viewer's picture (measured: 12 of
+  // 375 px); pin that point to the anchor so its feet stand exactly on the ground
+  sprite.center.set(.5, .5 + 12 / 375);
   sprite.name = 'Plush:' + kind; sprite.renderOrder = 3; sprite.visible = false;
   parent.add(sprite);
   // an invisible box to tap / pick it up by
   const proxy = new THREE.Mesh(new THREE.BoxGeometry(height * .72, height, height * .72), new THREE.MeshBasicMaterial({ visible: false }));
   parent.add(proxy);
   // soft contact shadow on whatever it stands on (the viewer's own floor shadow is off in the scene)
-  const shadow = new THREE.Mesh(new THREE.CircleGeometry(.5, 40), new THREE.MeshBasicMaterial({ color: 0x2c2a22, map: blobTexture(), transparent: true, opacity: .32, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3 }));
+  const shadow = new THREE.Mesh(new THREE.CircleGeometry(.5, 40), new THREE.MeshBasicMaterial({ color: 0x2c2a22, map: blobTexture(), transparent: true, opacity: .5, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3 }));
   shadow.rotation.x = -Math.PI / 2; shadow.renderOrder = 2; shadow.visible = false; parent.add(shadow);
 
   const camPos = new THREE.Vector3(), qWorld = new THREE.Quaternion(), qCam = new THREE.Quaternion(), pos = new THREE.Vector3(), q = new THREE.Quaternion();
@@ -85,7 +87,7 @@ export function createPlushBear(parent, kind, { height = 1.4 } = {}) {
     else {
       const above = Math.max(0, proxy.position.y - height * .5 - ground), k = 1 / (1 + above * .7);
       shadow.visible = sprite.visible; shadow.position.set(proxy.position.x, ground + .012, proxy.position.z);
-      shadow.scale.setScalar(height * (.95 + above * .15)); shadow.material.opacity = .42 * k;
+      shadow.scale.setScalar(height * (.8 + above * .2)); shadow.material.opacity = .5 * k;
     }
     const B = bear.ready && iframe.contentWindow?.__bear;
     if (!B || !sceneCamera) return;
@@ -109,7 +111,7 @@ function blobTexture() {
   if (blob) return blob;
   const c = document.createElement('canvas'); c.width = c.height = 64;
   const g = c.getContext('2d'), grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
-  grad.addColorStop(0, 'rgba(255,255,255,1)'); grad.addColorStop(.55, 'rgba(255,255,255,.6)'); grad.addColorStop(1, 'rgba(255,255,255,0)');
+  grad.addColorStop(0, 'rgba(255,255,255,1)'); grad.addColorStop(.4, 'rgba(255,255,255,.85)'); grad.addColorStop(.7, 'rgba(255,255,255,.3)'); grad.addColorStop(1, 'rgba(255,255,255,0)');
   g.fillStyle = grad; g.fillRect(0, 0, 64, 64);
   return (blob = new THREE.CanvasTexture(c));
 }
