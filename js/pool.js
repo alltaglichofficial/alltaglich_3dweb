@@ -7,7 +7,8 @@ import { RoomEnvironment } from '../product/vendor/environments/RoomEnvironment.
 import { createDogHouse, createFetchToy } from './house.js';
 import { createSwimBear } from './bear.js';
 import { createKeyringHardware } from './keyring.js';
-import { replaceWithPlush } from './plush.js';
+import { replaceWithPlush, plushCamera } from './plush.js';
+import { createPoolGear } from './gear.js';
 import { createDropletIsland } from './drops.js';
 
 // Normalised keyring units (body width 1): footprint half-sizes and corner
@@ -75,7 +76,16 @@ export function createPoolIsland(scene, island) {
   const [LAP_W, LAP_D] = dropsScene.size;
   const overLaptop = (x, z) => Math.abs(x - LAP.x) <= LAP_W / 2 && Math.abs(z - LAP.z) <= LAP_D / 2;
   const toLaptop = (velocity, flying) => { dropsScene.receive(poolGroup.localToWorld(bear.object.position.clone()), velocity, flying); bear.park(); };
-  let focus = 'pool', grabbed = null, poolParts = null, pop = 1;
+  // Pool toys (the 물놀이 button): a swim ring and fins the bear can be given.
+  const anchorPos = new THREE.Vector3(), anchorQuat = new THREE.Quaternion();
+  const toys = createPoolGear(poolGroup, {
+    bearCentre: () => poolGroup.worldToLocal(plush.anchor.getWorldPosition(anchorPos)),
+    bearQuat: () => plush.anchor.getWorldQuaternion(anchorQuat),
+    bearHeight: plush.height, surfaceAt: (x, z) => surfaceHeight(x, z), inPool: (x, z) => inPool(x, z), groundY: DECK_Y,
+    home: { x: 0, z: 0 },
+    onChange: g => { bear.gear.tube = g.tube; bear.gear.fins = g.fins; if (g.tube || g.fins) splash(bear.object.position.x, bear.object.position.z, .5); },
+  });
+  let focus = 'pool', grabbed = null, poolParts = null, pop = 1, toyLast = null;
   dropsScene.root.visible = false;
   const POOL_VIEW = { center: { x: 0, z: -7.6 }, min: [-8.9, -1.75, -32.5], max: [8.9, 3.9, 16.1] };
   const DROPS_VIEW = { center: { x: LAP.x, z: LAP.z }, min: [LAP.x - LAP_W / 2 - .2, DECK_Y, LAP.z - LAP_D / 2 - .2], max: [LAP.x + LAP_W / 2 + .2, 2.6, LAP.z + LAP_D / 2 + .2] };
@@ -135,7 +145,10 @@ export function createPoolIsland(scene, island) {
     },
     get view() { return focus === 'drops' ? DROPS_VIEW : POOL_VIEW; },
     get viewDirection() { return focus === 'drops' ? DROPS_DIR : undefined; },
-    get grabTargets() { return focus === 'drops' ? world.grabTargets_ : [...world.grabTargets_, ...hardware.grabTargets]; },
+    get grabTargets() { return focus === 'drops' ? world.grabTargets_ : [...toys.grabTargets, ...world.grabTargets_, ...hardware.grabTargets]; },
+    // the 물놀이 button: bring the swim ring and fins out, or put them away
+    get toysOut() { return toys.out; },
+    toggleToys() { return toys.toggle(); },
     grabTargets_: [{
       object: plush.proxy,
       // Carry on a camera-facing plane: anywhere on screen, and up as high as you like.
@@ -186,7 +199,8 @@ export function createPoolIsland(scene, island) {
       if (focus === 'drops') dropsScene.update(time, reducedMotion);
       // whichever of the two just came out pops up into place
       if (pop < 1) { pop = Math.min(1, pop + 1 / 18); const k = 1 - Math.pow(1 - pop, 3), sc = .86 + .14 * k; (focus === 'drops' ? dropsScene.root : poolParts)?.scale.setScalar(sc); }
-      if (!dropsScene.active) plush.update(plush.anchor, { swim: bear.state === 'swim', ground: inPool(bear.object.position.x, bear.object.position.z) ? null : DECK_Y });
+      { const tdt = Math.min(.05, Math.max(0, time - (toyLast ?? time))); toyLast = time; toys.update(time, tdt, plushCamera(), bear.state === 'swim'); }
+      if (!dropsScene.active) plush.update(plush.anchor, { swim: bear.state === 'swim' && !bear.gear.tube, goggles: bear.state === 'swim', ground: inPool(bear.object.position.x, bear.object.position.z) ? null : DECK_Y });
       motion?.setMover(1, b.x / SCALE, b.z / SCALE, reducedMotion ? 0 : .55);
       if (b.landed) splash(b.x, b.z, .9);
       if (b.splash >= .8 && !reducedMotion) spray.burst(b.x, surfaceHeight(b.x, b.z), b.z, b.splash);

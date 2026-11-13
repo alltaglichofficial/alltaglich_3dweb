@@ -16,6 +16,7 @@ export const PLUSH = {
 
 let sceneCamera = null;
 export function setPlushCamera(camera) { sceneCamera = camera; }
+export function plushCamera() { return sceneCamera; }
 
 // the viewers' own camera: 30° field of view, 9.8 away, looking slightly down
 const FRAME = 2 * 9.8 * Math.tan(15 * Math.PI / 180);          // frame height in the viewer's units

@@ -87,6 +87,8 @@ export function createSwimBear(root, home, pool = null) {
   const vel = new THREE.Vector3(), track = [], hopFrom = new THREE.Vector3(), hopTo = new THREE.Vector3();
   let groundT = 0, hopT = 0;
   const lap = { x: home.x, dir: 1, turn: 0, stroke: 'free', phase: 0, entry: 0 };
+  // pool toys it has been given: a swim ring (sits up and drifts) and fins (much faster)
+  const gear = { tube: false, fins: false };
   const qYaw = new THREE.Quaternion(), qPitch = new THREE.Quaternion(), qRoll = new THREE.Quaternion();
   const AX = new THREE.Vector3(1, 0, 0), AY = new THREE.Vector3(0, 1, 0);
   const pose = (t, flail) => {
@@ -181,9 +183,10 @@ export function createSwimBear(root, home, pool = null) {
           if (lap.turn <= 0) { lap.dir *= -1; pickStroke(); }
         } else {
           const st = STROKES[lap.stroke];
-          lap.phase += dt * st.rate;
-          const surge = st.pulse ? .35 + 1.1 * Math.max(0, Math.sin(lap.phase * Math.PI * 2)) : 1;
-          bear.position.z += lap.dir * st.speed * surge * dt;
+          lap.phase += dt * st.rate * (gear.fins ? 1.25 : 1);
+          const surge = gear.tube ? 1 : st.pulse ? .35 + 1.1 * Math.max(0, Math.sin(lap.phase * Math.PI * 2)) : 1;
+          const boost = (gear.fins ? 1.8 : 1) * (gear.tube ? (gear.fins ? .55 : .3) : 1);
+          bear.position.z += lap.dir * st.speed * surge * boost * dt;
           bear.position.x += (lap.x - bear.position.x) * Math.min(1, dt * 2);
           if (lap.dir * bear.position.z >= end) { bear.position.z = lap.dir * end; lap.turn = .9; splash = .6; }
           const entry = Math.floor(lap.phase * 2); if (entry !== lap.entry) { lap.entry = entry; splash = Math.max(splash, .28); }
@@ -195,6 +198,7 @@ export function createSwimBear(root, home, pool = null) {
       return { x: bear.position.x, z: bear.position.z, landed: false, splash, stroke: lap.turn > 0 ? 'turn' : lap.stroke };
     },
     get stroke() { return lap.stroke; },
+    gear,
     // limbs for other islands that animate the bear themselves (the droplet island)
     parts: { arms, legs, head, rings },
   };
@@ -218,7 +222,10 @@ export function createSwimBear(root, home, pool = null) {
     const k = turning ? Math.sin(Math.min(1, (0.9 - lap.turn) / .9) * Math.PI) : 0; // 0→1→0 through the turn
     const yaw = (lap.dir > 0 ? 0 : Math.PI) + (turning ? (lap.dir > 0 ? 1 : -1) * Math.PI * (1 - lap.turn / .9) : 0);
     let pitch = 1.25 * (1 - k), roll = 0, bob = 0;
-    if (!turning) {
+    if (gear.tube) {
+      // sitting up in the swim ring, rocking gently
+      pitch = .22 + Math.sin(time * 1.4) * .06; roll = Math.sin(time * 1.1) * .12; bob = .34;
+    } else if (!turning) {
       if (lap.stroke === 'free') roll = Math.sin(ph) * .4;
       if (lap.stroke === 'back') roll = Math.PI + Math.sin(ph) * .35;
       if (lap.stroke === 'breast') { pitch = 1.05 + Math.sin(ph) * .2; bob = Math.max(0, Math.sin(ph)) * .14; }

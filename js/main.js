@@ -187,6 +187,8 @@ async function start() {
     const poolWorld = worlds.find(w => w.setPrint);
     const sub = poolWorld?.focus === 'drops' ? 'drops' : poolWorld?.print === 'photo' ? 'prussian' : 'aquable';
     document.querySelectorAll('.pool-sub').forEach(el => { el.hidden = main !== 'pool'; if (el.dataset.sub) el.setAttribute('aria-pressed', String(main === 'pool' && el.dataset.sub === sub)); });
+    const toysTab = document.querySelector('#toys-tab');
+    if (toysTab) { toysTab.setAttribute('aria-pressed', String(!!poolWorld?.toysOut)); toysTab.hidden = main !== 'pool' || poolWorld?.focus === 'drops'; }
     document.querySelector('#island-title').innerHTML = island.title;
     document.querySelector('#island-description').innerHTML = island.description;
     // The print tab only belongs to the pool island; it shows that island's current print.
@@ -234,6 +236,11 @@ async function start() {
   viewOffset(); resetCamera(true); updateIslandUI();
   controls.addEventListener('start', () => { transition = false; });
 
+  document.querySelector('#toys-tab')?.addEventListener('click', () => {
+    const pool = worlds.find(w => w.toggleToys); if (!pool) return;
+    const out = pool.toggleToys(); updateIslandUI();
+    document.querySelector('#status').textContent = out ? '튜브와 오리발이 나왔어요. 수영곰에게 끌어다 주거나 톡 눌러 보세요.' : '튜브와 오리발을 치웠어요.';
+  });
   document.querySelectorAll('[data-sub]').forEach(button => button.addEventListener('click', () => {
     const pool = worlds.find(w => w.setPrint), sub = button.dataset.sub;
     if (!pool) return;
