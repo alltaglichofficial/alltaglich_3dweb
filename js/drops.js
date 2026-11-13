@@ -57,9 +57,11 @@ export function createDropletIsland(scene, island, opts = {}) {
   // its own material (same shader source, so they share one compiled program) carrying
   // its tint as uniforms: tinted in the middle, a deeper rim where the surface curves
   // away, and bright glints.
+  // one shared value fades every drop out together before the next round
+  const fade = { value: 1 };
   const waterShader = (tint, strength) => shader => {
-    shader.uniforms.uTint = { value: tint }; shader.uniforms.uStrength = { value: strength };
-    shader.fragmentShader = 'uniform vec3 uTint;\nuniform float uStrength;\n' + shader.fragmentShader.replace('#include <opaque_fragment>', `#include <opaque_fragment>
+    shader.uniforms.uTint = { value: tint }; shader.uniforms.uStrength = { value: strength }; shader.uniforms.uFade = fade;
+    shader.fragmentShader = 'uniform vec3 uTint;\nuniform float uStrength;\nuniform float uFade;\n' + shader.fragmentShader.replace('#include <opaque_fragment>', `#include <opaque_fragment>
       vec3 V = normalize(vViewPosition);
       vec3 up = normalize((viewMatrix * vec4(0., 1., 0., 0.)).xyz);
       // two fixed sparkle lights: the overhead lamp and a soft one from the front right
@@ -75,7 +77,7 @@ export function createDropletIsland(scene, island, opts = {}) {
       vec3 col = mix(uTint, uTint * vec3(.36, .46, .5), edge);
       col = mix(col, vec3(1.15, 1.15, 1.12), caustic * .75);
       col = mix(col, vec3(.95, .98, 1.), fres * .55) + sp;
-      gl_FragColor = vec4(col, saturate(uStrength * 2.0 + edge * .7 + caustic * .45 + fres * .3 + min(sp, 1.) * .9));`);
+      gl_FragColor = vec4(col, saturate(uStrength * 2.0 + edge * .7 + caustic * .45 + fres * .3 + min(sp, 1.) * .9) * uFade);`);
   };
   const waterMaterial = (hex, strength) => {
     const m = new THREE.MeshPhysicalMaterial({ color: 0xffffff, transparent: true, opacity: 1, depthWrite: false, roughness: .03, ior: 1.33, specularIntensity: 1, clearcoat: 1, clearcoatRoughness: .02, envMapIntensity: 1.8 });
@@ -138,7 +140,8 @@ export function createDropletIsland(scene, island, opts = {}) {
   const sheetAt = (x, z) => onLid(x, z) ? TOP : GROUND;
   // on its own island it always comes down on the lid; beside the pool it can be thrown off it
   const toss = createThrowable(body, { bottom: footOffset, groundAt: sheetAt, limit: (x, z) => [THREE.MathUtils.clamp(x, -W / 2 + .7, W / 2 - .7), THREE.MathUtils.clamp(z, -D / 2 + .7, D / 2 - .7)] });
-  let active = !embedded, incoming = false, trap = null;
+  let active = !embedded, incoming = false, trap = null, doneAt = null;
+  const HOLD = 5, FADE = 2.6;   // the finished picture stays, then dries away slowly, then it rains again
   // the drop that holds a caught bear
   const BUBBLE_R = (opts.plush?.height ?? plush.height ?? 1.9) * .68;
   const bubble = new THREE.Mesh(ball, waterMaterial('#8dc5d4', .07)); bubble.renderOrder = 5; bubble.visible = false; root.add(bubble);
@@ -160,7 +163,7 @@ export function createDropletIsland(scene, island, opts = {}) {
   const HIDE = 1e-4, hide = m => m.scale.setScalar(HIDE);
   let start = null, last = null, order = [];
   const reset = time => {
-    trap = null; bubble.visible = false; toss.locked = false;
+    trap = null; bubble.visible = false; toss.locked = false; fade.value = 1; doneAt = null;
     start = time; order = drops.map((_, i) => i).sort(() => Math.random() - .5);
     order.forEach((i, k) => { const d = drops[i]; d.t0 = START_DELAY + k * INTERVAL; d.state = 'wait'; hide(d.puddle); hide(d.falling); hide(d.blob); d.mark.visible = false; });
     if (!embedded) { walker.x = 0; walker.z = 2; }
@@ -257,6 +260,15 @@ export function createDropletIsland(scene, island, opts = {}) {
           const spread = Math.max(HIDE, .25 + .75 * ease + wobble);
           d.puddle.scale.set(spread, Math.max(HIDE, b > 0 ? .6 + .4 * ease : HIDE), spread);
           if (s > .95 || reducedMotion) { d.state = 'landed'; d.puddle.scale.set(1, 1, 1); hide(d.blob); }
+        }
+      }
+      // all down: hold the picture, let it fade slowly, and start over
+      if (fx.visible && start !== null && !reducedMotion) {
+        if (doneAt === null) { if (drops.every(d => d.state === 'landed')) doneAt = t; }
+        else if (t > doneAt + HOLD) {
+          const k = Math.min(1, (t - doneAt - HOLD) / FADE);
+          fade.value = 1 - k * k * (3 - 2 * k);
+          if (k >= 1) pendingReset = true;
         }
       }
       for (const s of spray) if (s.life > 0) {

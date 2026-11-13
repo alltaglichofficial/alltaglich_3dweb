@@ -195,6 +195,8 @@ function assemble(product, blockTop, FLOOR_Z){
 // so the whole keyring can be lifted by its chain or by the block itself.
 export function createKeyringHardware(root, { wallZ, deckY, wallX = 5.6, blockTop = 1.8, body = null }) {
   const group = new THREE.Group(); group.name = 'KeyringHardware'; root.add(group);
+  // once the physics is running, each part moves freely in here (so the whole chain can be hidden together)
+  const loose = new THREE.Group(); loose.name = 'KeyringLoose'; root.add(loose);
   // mm → world: the back wall (23.18 mm from the block centre) lands on wallZ.
   const s = wallZ / BLOCK_HALF_LENGTH;
   // Local frame: x across, y away from the block along the chain, z up from the deck.
@@ -236,7 +238,7 @@ export function createKeyringHardware(root, { wallZ, deckY, wallX = 5.6, blockTo
     const make = (name, obj, mass, add) => {
       obj.updateMatrixWorld(true);
       const p = new THREE.Vector3(), q = new THREE.Quaternion(), sc = new THREE.Vector3();
-      obj.matrixWorld.decompose(p, q, sc); root.attach(obj);
+      obj.matrixWorld.decompose(p, q, sc); loose.attach(obj);
       const b = new CANNON.Body({ mass, linearDamping: .25, angularDamping: .5, sleepSpeedLimit: .05, collisionFilterGroup: PART, collisionFilterMask: GROUND | BLOCK });
       add(b); b.position.set(p.x, p.y, p.z); b.quaternion.set(q.x, q.y, q.z, q.w);
       world.addBody(b); bodies[name] = b; pairs.push({ obj, b }); obj.userData.body = b;

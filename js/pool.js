@@ -117,7 +117,7 @@ export function createPoolIsland(scene, island) {
       }
       const drops = focus === 'drops';
       poolParts.visible = !drops; dropsScene.root.visible = drops;
-      for (const name of ['KeyringHardware', 'PuppyPoolLadder']) { const o = root.getObjectByName(name); if (o) o.visible = !drops; }
+      for (const name of ['KeyringHardware', 'KeyringLoose', 'PuppyPoolLadder']) { const o = root.getObjectByName(name); if (o) o.visible = !drops; }
       pop = 0;
       if (bear.state === 'held') bear.release();
       if (drops) {
