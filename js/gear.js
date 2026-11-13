@@ -66,7 +66,8 @@ export function createPoolGear(parent, { bearCentre, bearQuat, bearHeight: H, su
   return {
     gear, group,
     // put a toy on the bear or take it off
-    set(key, on) { if (!(key in gear) || gear[key] === !!on) return; gear[key] = !!on; pop[key] = 0; show(); onChange({ ...gear }); },
+    // (one toy at a time: a new one takes the place of whatever it had)
+    set(key, on) { if (!(key in gear) || gear[key] === !!on) return; if (on) for (const k in gear) gear[k] = false; gear[key] = !!on; pop[key] = 0; show(); onChange({ ...gear }); },
     clear() { let any = false; for (const k in gear) { any ||= gear[k]; gear[k] = false; } show(); if (any) onChange({ ...gear }); },
     update(time, dt, camera, swimming) {
       if (!gear.tube && !gear.fins && !gear.board) return;
