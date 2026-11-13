@@ -1,19 +1,19 @@
 import * as THREE from 'three';
 
-// Pool toys for the swim bear: a striped swim ring, a pair of fins and hand paddles.
+// Pool toys for the swim bear: a striped swim ring, a pair of fins and a kickboard.
 // They are kept in the 물놀이 tray (an inventory above the button, see main.js) and put
 // on by dragging them from the tray onto the bear. With the ring the bear sits up and
-// drifts lazily; fins make it much faster; paddles give a stronger pull.
+// drifts lazily; fins make it much faster; with the kickboard it holds the board out and just kicks.
 //   parent      – group the toys live in (pool coordinates)
 //   bearCentre  – () => Vector3, the bear's middle in parent coordinates
 //   bearQuat    – () => Quaternion, the bear's orientation
 //   bearHeight  – the bear's height
 //   surfaceAt   – (x, z) => water height, inPool(x, z), groundY
 //   onChange    – (gear) => void, called when something is put on or taken away
-export function createPoolGear(parent, { bearCentre, bearQuat, bearHeight: H, onChange }) {
+export function createPoolGear(parent, { bearCentre, bearQuat, bearHeight: H, surfaceAt, onChange }) {
   const group = new THREE.Group(); group.name = 'PoolGear'; parent.add(group);
-  const gear = { tube: false, fins: false, paddles: false };
-  const pop = { tube: 1, fins: 1, paddles: 1 };
+  const gear = { tube: false, fins: false, board: false };
+  const pop = { tube: 1, fins: 1, board: 1 };
 
   // ---- swim ring: two half rings, so the half toward the camera can be drawn over the
   // (flat) bear picture and the far half behind it
@@ -50,22 +50,17 @@ export function createPoolGear(parent, { bearCentre, bearQuat, bearHeight: H, on
     f.userData.side = side; group.add(f); return f;
   });
 
-  // ---- hand paddles: rounded plates with finger straps
-  const padShape = new THREE.Shape();
-  padShape.moveTo(-.1, -.14); padShape.quadraticCurveTo(-.15, 0, -.11, .13); padShape.quadraticCurveTo(0, .2, .11, .13); padShape.quadraticCurveTo(.15, 0, .1, -.14); padShape.quadraticCurveTo(0, -.18, -.1, -.14);
-  const padGeo = new THREE.ExtrudeGeometry(padShape, { depth: .018, bevelEnabled: true, bevelThickness: .008, bevelSize: .008, bevelSegments: 2, curveSegments: 14 });
-  padGeo.translate(0, 0, -.009); padGeo.scale(H * 1.7, H * 1.7, H * 1.7);
-  const padMat = new THREE.MeshPhysicalMaterial({ color: 0xe8f06a, roughness: .3, clearcoat: .6, transparent: true, opacity: .92 });
-  const strapMat = new THREE.MeshStandardMaterial({ color: 0x2b2f33, roughness: .8 });
-  const paddles = [-1, 1].map(side => {
-    const p = new THREE.Group(); p.name = 'Paddle';
-    const plate = new THREE.Mesh(padGeo, padMat); plate.castShadow = true; plate.renderOrder = 6; p.add(plate);
-    for (const y of [-.06, .08]) { const strap = new THREE.Mesh(new THREE.TorusGeometry(H * .07, H * .012, 6, 16, Math.PI), strapMat); strap.rotation.y = Math.PI / 2; strap.rotation.z = Math.PI / 2; strap.position.set(0, y * H, H * .012); strap.renderOrder = 6; p.add(strap); }
-    p.userData.side = side; group.add(p); return p;
-  });
+  // ---- kickboard: the foam board beginners hold out in front while they kick
+  const boardShape = new THREE.Shape();
+  boardShape.moveTo(-.2, -.26); boardShape.lineTo(-.2, .08); boardShape.bezierCurveTo(-.2, .3, .2, .3, .2, .08); boardShape.lineTo(.2, -.26); boardShape.quadraticCurveTo(0, -.2, -.2, -.26);
+  const boardGeo = new THREE.ExtrudeGeometry(boardShape, { depth: .05, bevelEnabled: true, bevelThickness: .02, bevelSize: .02, bevelSegments: 3, curveSegments: 20 });
+  boardGeo.translate(0, 0, -.025); boardGeo.scale(H * 1.5, H * 1.5, H * 1.5); boardGeo.rotateX(-Math.PI / 2);   // lies flat, rounded nose toward -z
+  const board = new THREE.Mesh(boardGeo, new THREE.MeshPhysicalMaterial({ color: 0xf2d24b, roughness: .7, clearcoat: .15 }));
+  board.name = 'Kickboard'; board.castShadow = true; group.add(board);
+  const band = new THREE.Mesh(new THREE.BoxGeometry(H * .62, H * .012, H * .1), new THREE.MeshStandardMaterial({ color: 0x5fa8b8, roughness: .7 })); band.position.set(0, H * .07, H * .12); board.add(band);
 
-  const tmp = new THREE.Vector3(), qk = new THREE.Quaternion(), AX = new THREE.Vector3(1, 0, 0), AZ = new THREE.Vector3(0, 0, 1);
-  const show = () => { tube.visible = gear.tube; fins.forEach(f => { f.visible = gear.fins; }); paddles.forEach(p => { p.visible = gear.paddles; }); };
+  const tmp = new THREE.Vector3(), fwd = new THREE.Vector3(), qk = new THREE.Quaternion(), AX = new THREE.Vector3(1, 0, 0), AY = new THREE.Vector3(0, 1, 0);
+  const show = () => { tube.visible = gear.tube; fins.forEach(f => { f.visible = gear.fins; }); board.visible = gear.board; };
   show();
 
   return {
@@ -74,7 +69,7 @@ export function createPoolGear(parent, { bearCentre, bearQuat, bearHeight: H, on
     set(key, on) { if (!(key in gear) || gear[key] === !!on) return; gear[key] = !!on; pop[key] = 0; show(); onChange({ ...gear }); },
     clear() { let any = false; for (const k in gear) { any ||= gear[k]; gear[k] = false; } show(); if (any) onChange({ ...gear }); },
     update(time, dt, camera, swimming) {
-      if (!gear.tube && !gear.fins && !gear.paddles) return;
+      if (!gear.tube && !gear.fins && !gear.board) return;
       const c = bearCentre(), bq = bearQuat();
       for (const k in pop) pop[k] = Math.min(1, pop[k] + dt * 4);
       const scale = k => { const p = pop[k]; return .4 + .6 * p + Math.sin(p * Math.PI) * .22; };   // pops on
@@ -90,14 +85,20 @@ export function createPoolGear(parent, { bearCentre, bearQuat, bearHeight: H, on
         const kick = swimming ? Math.sin(time * 13 + i * Math.PI) * .55 : Math.sin(time * 3 + i * Math.PI) * .08;
         qk.setFromAxisAngle(AX, Math.PI + kick + .25); f.quaternion.copy(bq).multiply(qk); f.scale.setScalar(scale('fins'));
       });
-      if (gear.paddles) paddles.forEach((p, i) => {
-        // on the paws: out at the sides, sweeping round in turn with each stroke
-        const side = p.userData.side, ph = time * 6.2 + i * Math.PI, stroke = swimming && !gear.tube;
-        tmp.set(side * H * (.36 + (stroke ? .03 * Math.cos(ph) : 0)), H * (.08 + (stroke ? .2 * Math.sin(ph) : .02 * Math.sin(time * 2 + i))), H * (.1 + (stroke ? .14 * Math.cos(ph) : 0))).applyQuaternion(bq);
-        p.position.copy(c).add(tmp);
-        qk.setFromAxisAngle(AZ, -side * .35).multiply(new THREE.Quaternion().setFromAxisAngle(AX, stroke ? Math.cos(ph) * .5 : .15));
-        p.quaternion.copy(bq).multiply(qk); p.scale.setScalar(scale('paddles'));
-      });
+      if (gear.board) {
+        const sc = scale('board');
+        if (swimming && !gear.tube) {
+          // held out in front on the water, nose first, bobbing with the kick
+          fwd.set(0, 1, 0).applyQuaternion(bq); fwd.y = 0; fwd.normalize();
+          board.position.set(c.x + fwd.x * H * .62, surfaceAt(c.x + fwd.x * H * .62, c.z + fwd.z * H * .62) + H * .03 + Math.sin(time * 9) * H * .01, c.z + fwd.z * H * .62);
+          board.quaternion.setFromAxisAngle(AY, Math.atan2(-fwd.x, -fwd.z)).multiply(qk.setFromAxisAngle(AX, .1 + Math.sin(time * 9) * .04));
+        } else {
+          // out of the water (or in the ring): hugged to its tummy
+          tmp.set(0, -H * .02, H * .34).applyQuaternion(bq); board.position.copy(c).add(tmp);
+          board.quaternion.copy(bq).multiply(qk.setFromAxisAngle(AX, Math.PI / 2 - .15));
+        }
+        board.scale.setScalar(sc);
+      }
     },
   };
 }

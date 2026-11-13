@@ -243,10 +243,10 @@ async function start() {
   // the bear (it puts them on); dragging a worn toy away, or tapping it, takes it off.
   document.querySelector('#toys-tab')?.addEventListener('click', () => {
     const tray = document.querySelector('#toy-tray'); tray.hidden = !tray.hidden; updateIslandUI();
-    document.querySelector('#status').textContent = tray.hidden ? '물놀이 용품을 넣어 두었어요.' : '튜브, 오리발, 패들이에요. 끌어서 수영곰에게 주세요.';
+    document.querySelector('#status').textContent = tray.hidden ? '물놀이 용품을 넣어 두었어요.' : '튜브, 오리발, 킥판이에요. 끌어서 수영곰에게 주세요.';
   });
   {
-    const NAMES = { tube: '튜브를', fins: '오리발을', paddles: '패들을' }, point = new THREE.Vector3();
+    const NAMES = { tube: '튜브를', fins: '오리발을', board: '킥판을' }, point = new THREE.Vector3();
     // is the pointer on (or near) the bear on screen?
     const overBear = (pool, x, y) => {
       pool.bearPoint(point); const reach = camera.position.distanceTo(point); point.project(camera);

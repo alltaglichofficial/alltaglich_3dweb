@@ -81,7 +81,7 @@ export function createPoolIsland(scene, island) {
   const toys = createPoolGear(poolGroup, {
     bearCentre: () => poolGroup.worldToLocal(plush.anchor.getWorldPosition(anchorPos)),
     bearQuat: () => plush.anchor.getWorldQuaternion(anchorQuat),
-    bearHeight: plush.height,
+    bearHeight: plush.height, surfaceAt: (x, z) => surfaceHeight(x, z),
     onChange: g => { Object.assign(bear.gear, g); if (bear.state === 'swim') splash(bear.object.position.x, bear.object.position.z, .5); },
   });
   let focus = 'pool', grabbed = null, poolParts = null, pop = 1, toyLast = null;
