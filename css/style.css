@@ -59,6 +59,8 @@
 .zone-nav .nav-dot.print{background:#245e8a}
 .zone-nav [hidden]{display:none!important}
 .zone-nav .nav-dot.drops{background:#9fc6d3}
+.zone-nav .nav-dot.grip{background:#5fb9e6}
+.zone-nav .nav-dot.magnet{background:#b9bec3}
 
 /* Lighting picker: the bulb button opens a sheet with the 34 lighting set-ups */
 .island-indicator .light-menu{display:grid;place-items:center;padding:0}

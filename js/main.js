@@ -160,7 +160,7 @@ async function start() {
     }
     return high;
   }
-  function viewCenter() { const c = world.view?.center; return new THREE.Vector3(c?.x || 0, .3, c?.z || 0); }
+  function viewCenter() { const c = world.view?.center; return new THREE.Vector3(c?.x || 0, c?.y ?? .3, c?.z || 0); }
   function resetCamera(immediate = false) {
     dogView = false; controls.minDistance = 12;
     goalTarget.copy(viewCenter());
@@ -185,10 +185,10 @@ async function start() {
     document.querySelectorAll('[data-island]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.island === main)));
     // swimming island sub-tabs: Aquable (lane print) · Prussian Blue · Water Drop
     const poolWorld = worlds.find(w => w.setPrint);
-    const sub = poolWorld?.focus === 'drops' ? 'drops' : poolWorld?.print === 'photo' ? 'prussian' : 'aquable';
+    const sub = poolWorld && poolWorld.focus !== 'pool' ? poolWorld.focus : poolWorld?.print === 'photo' ? 'prussian' : 'aquable';
     document.querySelectorAll('.pool-sub').forEach(el => { el.hidden = main !== 'pool'; if (el.dataset.sub) el.setAttribute('aria-pressed', String(main === 'pool' && el.dataset.sub === sub)); });
     const toysTab = document.querySelector('#toys-tab');
-    const tray = document.querySelector('#toy-tray'), toysHere = main === 'pool' && poolWorld?.focus !== 'drops';
+    const tray = document.querySelector('#toy-tray'), toysHere = main === 'pool' && poolWorld?.focus === 'pool';
     if (toysTab) { toysTab.hidden = !toysHere; if (!toysHere && tray) tray.hidden = true; toysTab.setAttribute('aria-pressed', String(!!tray && !tray.hidden)); }
     const worn = poolWorld?.toys ?? {};
     document.querySelectorAll('[data-toy]').forEach(el => el.setAttribute('aria-pressed', String(!!worn[el.dataset.toy])));
@@ -289,6 +289,7 @@ async function start() {
     if (ISLANDS[islandIndex].id !== 'pool') selectIsland('pool', true);
     // Water Drop looks at the laptop beside the pool (same island, same bear)
     if (sub === 'drops') { pool.setFocus('drops'); resetCamera(); updateIslandUI(); document.querySelector('#status').textContent = '노트북 위로 물방울이 떨어져요. 수영곰이 건너가서 피해 다녀요.'; return; }
+    if (sub === 'grip' || sub === 'magnet') { pool.setFocus(sub); resetCamera(); updateIslandUI(); document.querySelector('#status').textContent = sub === 'grip' ? '맥세이프 그립톡이에요. 그립을 누르면 접혔다 펴져요.' : '스테인리스 스탠드에 붙인 수영장 자석들이에요. 끌어서 옮겨 보세요.'; return; }
     const print = sub === 'prussian' ? 'photo' : 'lane';
     if (pool.print !== print) pool.setPrint(print);
     if (pool.focus !== 'pool') { pool.setFocus('pool'); resetCamera(); }

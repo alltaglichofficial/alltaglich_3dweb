@@ -8,6 +8,7 @@ import { createDogHouse, createFetchToy } from './house.js';
 import { createSwimBear } from './bear.js';
 import { createKeyringHardware } from './keyring.js';
 import { replaceWithPlush, plushCamera } from './plush.js';
+import { createGoodsScenes } from './goods.js';
 import { createPoolGear } from './gear.js';
 import { createDropletIsland } from './drops.js';
 
@@ -84,6 +85,9 @@ export function createPoolIsland(scene, island) {
     bearHeight: plush.height, surfaceAt: (x, z) => surfaceHeight(x, z),
     onChange: g => { Object.assign(bear.gear, g); if (bear.state === 'swim') splash(bear.object.position.x, bear.object.position.z, .5); },
   });
+  // two more goods, each on its own screen: the grip on a phone and the magnets on a stand
+  const goods = createGoodsScenes(poolGroup, { groundY: DECK_Y });
+  const product = () => goods.scenes[focus];
   let focus = 'pool', grabbed = null, poolParts = null, pop = 1, toyLast = null;
   dropsScene.root.visible = false;
   const POOL_VIEW = { center: { x: 0, z: -7.6 }, min: [-8.9, -1.75, -32.5], max: [8.9, 3.9, 16.1] };
@@ -113,23 +117,27 @@ export function createPoolIsland(scene, island) {
     // which part of the island the camera shows: 'pool' or 'drops' (the laptop)
     get focus() { return focus; },
     setFocus(next) {
-      const to = next === 'drops' ? 'drops' : 'pool';
+      const to = next === 'drops' || goods.scenes[next] ? next : 'pool';
       if (to === focus) { if (to === 'drops') dropsScene.onEnter(); return; }
       focus = to;
       // everything that belongs to the pool (block, water, chain, splashes, wet marks) goes
       // into one group the first time, so it can be put away in one go
       if (!poolParts) {
         poolParts = new THREE.Group(); poolParts.name = 'PoolParts';
-        const keep = new Set([dropsScene.root, plush.sprite, plush.proxy, plush.shadow, bear.object]);
+        const keep = new Set([dropsScene.root, plush.sprite, plush.proxy, plush.shadow, bear.object, ...Object.values(goods.scenes).map(s => s.root)]);
         for (const child of [...poolGroup.children]) if (!keep.has(child)) poolParts.add(child);
         poolGroup.add(poolParts);
       }
-      const drops = focus === 'drops';
-      poolParts.visible = !drops; dropsScene.root.visible = drops;
-      for (const name of ['KeyringHardware', 'KeyringLoose', 'PuppyPoolLadder']) { const o = root.getObjectByName(name); if (o) o.visible = !drops; }
+      const drops = focus === 'drops', pool = focus === 'pool';
+      poolParts.visible = pool; dropsScene.root.visible = drops;
+      for (const key in goods.scenes) goods.scenes[key].root.visible = key === focus;
+      for (const name of ['KeyringHardware', 'KeyringLoose', 'PuppyPoolLadder']) { const o = root.getObjectByName(name); if (o) o.visible = pool; }
       pop = 0;
       if (bear.state === 'held') bear.release();
-      if (drops) {
+      if (product()) {
+        // product screens: the bear waits out of sight
+        dropsScene.letGo(); bear.park(); plush.sprite.visible = false; plush.shadow.visible = false;
+      } else if (drops) {
         dropsScene.onEnter();   // the drops start over
         // the bear drops onto the lid from where it was
         const at = bear.object.position;
@@ -142,9 +150,9 @@ export function createPoolIsland(scene, island) {
         dropsScene.letGo(); bear.launch(at, { x: 0, y: 0, z: 0 });
       }
     },
-    get view() { return focus === 'drops' ? DROPS_VIEW : POOL_VIEW; },
-    get viewDirection() { return focus === 'drops' ? DROPS_DIR : undefined; },
-    get grabTargets() { return focus === 'drops' ? world.grabTargets_ : [...world.grabTargets_, ...hardware.grabTargets]; },
+    get view() { return product()?.view ?? (focus === 'drops' ? DROPS_VIEW : POOL_VIEW); },
+    get viewDirection() { return product()?.viewDirection ?? (focus === 'drops' ? DROPS_DIR : undefined); },
+    get grabTargets() { return product()?.grabTargets ?? (focus === 'drops' ? world.grabTargets_ : [...world.grabTargets_, ...hardware.grabTargets]); },
     // the 물놀이 tray: which toys the bear has on, giving / taking one, and where the bear is
     get toys() { return { ...toys.gear }; },
     giveToy(key, on) { toys.set(key, on); },
@@ -198,9 +206,9 @@ export function createPoolIsland(scene, island) {
       }
       if (focus === 'drops') dropsScene.update(time, reducedMotion);
       // whichever of the two just came out pops up into place
-      if (pop < 1) { pop = Math.min(1, pop + 1 / 18); const k = 1 - Math.pow(1 - pop, 3), sc = .86 + .14 * k; (focus === 'drops' ? dropsScene.root : poolParts)?.scale.setScalar(sc); }
-      { const tdt = Math.min(.05, Math.max(0, time - (toyLast ?? time))); toyLast = time; toys.update(time, tdt, plushCamera(), bear.state === 'swim'); }
-      if (!dropsScene.active) plush.update(plush.anchor, { swim: bear.state === 'swim' && !bear.gear.tube, goggles: bear.state === 'swim', ground: inPool(bear.object.position.x, bear.object.position.z) ? null : DECK_Y });
+      if (pop < 1) { pop = Math.min(1, pop + 1 / 18); const k = 1 - Math.pow(1 - pop, 3), sc = .86 + .14 * k; (product()?.root ?? (focus === 'drops' ? dropsScene.root : poolParts))?.scale.setScalar(sc); }
+      { const tdt = Math.min(.05, Math.max(0, time - (toyLast ?? time))); toyLast = time; goods.update(tdt); toys.update(time, tdt, plushCamera(), bear.state === 'swim'); }
+      if (!dropsScene.active && !product()) plush.update(plush.anchor, { swim: bear.state === 'swim' && !bear.gear.tube, goggles: bear.state === 'swim', ground: inPool(bear.object.position.x, bear.object.position.z) ? null : DECK_Y });
       motion?.setMover(1, b.x / SCALE, b.z / SCALE, reducedMotion ? 0 : .55);
       if (b.landed) splash(b.x, b.z, .9);
       if (b.splash >= .8 && !reducedMotion) spray.burst(b.x, surfaceHeight(b.x, b.z), b.z, b.splash);
@@ -209,7 +217,7 @@ export function createPoolIsland(scene, island) {
       {
         const st = bear.state, bp = bear.object.position, inWater = st === 'sink' || st === 'swim';
         if (inWater) wet = 1; else wet = Math.max(0, wet - sdt / 30);
-        if (wet > .04 && !inWater && !reducedMotion && !dropsScene.active) {
+        if (wet > .04 && !inWater && !reducedMotion && !dropsScene.active && !product()) {
           // drips, quicker while it is still soaked
           dripIn -= sdt;
           if (dripIn <= 0) { spray.drip(bp.x + (Math.random() - .5) * .7, bp.y - .2 - Math.random() * .3, bp.z + (Math.random() - .5) * .7, st === 'ground' ? .5 : 1); dripIn = (.05 + Math.random() * .2) / (.15 + wet); }
@@ -232,11 +240,12 @@ export function createPoolIsland(scene, island) {
     // an emissive map (black in the lamp mood), so switching never recompiles.
     setMood(mood, { reflections }) {
       for (const m of [world.water?.material, world.acrylic?.material, droplets.material, ...hardware.materials]) if (m?.userData.envBase !== undefined) m.envMapIntensity = m.userData.envBase * reflections;
+      goods.setMood(reflections);
       world.floor?.traverse(object => { if (object.isMesh && object.material.emissiveMap) object.material.emissive.setHex(mood === 'dark' ? 0x5a7f99 : 0); });
     },
     // the laptop's drops are compiled up front too, though they stay hidden until first shown
     precompile(renderer, scene, camera) { const was = root.visible; root.visible = true; dropsScene.precompile(renderer, scene, camera); root.visible = was; },
-    setupEnvironment(renderer) { dropsScene.setupEnvironment(renderer); const environment = new RoomEnvironment(); const pmrem = new THREE.PMREMGenerator(renderer); const texture = pmrem.fromScene(environment, .04).texture; environment.dispose(); pmrem.dispose(); for (const m of [world.water.material, world.acrylic.material, droplets.material, ...hardware.materials]) { m.envMap = texture; m.userData.envBase = m === world.water.material ? WATER_REFLECTION : hardware.materials.includes(m) ? (m.userData.envDefault ?? 1) : 1.15; m.envMapIntensity = m.userData.envBase; m.needsUpdate = true; } },
+    setupEnvironment(renderer) { dropsScene.setupEnvironment(renderer); const environment = new RoomEnvironment(); const pmrem = new THREE.PMREMGenerator(renderer); const texture = pmrem.fromScene(environment, .04).texture; environment.dispose(); pmrem.dispose(); goods.setEnvironment(texture); for (const m of [world.water.material, world.acrylic.material, droplets.material, ...hardware.materials]) { m.envMap = texture; m.userData.envBase = m === world.water.material ? WATER_REFLECTION : hardware.materials.includes(m) ? (m.userData.envDefault ?? 1) : 1.15; m.envMapIntensity = m.userData.envBase; m.needsUpdate = true; } },
   };
   world.ready = loadSwimmingPoolKeyring().then(({ model, floor, water }) => {
     model.scale.setScalar(SCALE); model.position.y = BASE; poolGroup.add(model);
