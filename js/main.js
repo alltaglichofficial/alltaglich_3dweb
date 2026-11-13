@@ -188,7 +188,10 @@ async function start() {
     const sub = poolWorld?.focus === 'drops' ? 'drops' : poolWorld?.print === 'photo' ? 'prussian' : 'aquable';
     document.querySelectorAll('.pool-sub').forEach(el => { el.hidden = main !== 'pool'; if (el.dataset.sub) el.setAttribute('aria-pressed', String(main === 'pool' && el.dataset.sub === sub)); });
     const toysTab = document.querySelector('#toys-tab');
-    if (toysTab) { toysTab.setAttribute('aria-pressed', String(!!poolWorld?.toysOut)); toysTab.hidden = main !== 'pool' || poolWorld?.focus === 'drops'; }
+    const tray = document.querySelector('#toy-tray'), toysHere = main === 'pool' && poolWorld?.focus !== 'drops';
+    if (toysTab) { toysTab.hidden = !toysHere; if (!toysHere && tray) tray.hidden = true; toysTab.setAttribute('aria-pressed', String(!!tray && !tray.hidden)); }
+    const worn = poolWorld?.toys ?? {};
+    document.querySelectorAll('[data-toy]').forEach(el => el.setAttribute('aria-pressed', String(!!worn[el.dataset.toy])));
     document.querySelector('#island-title').innerHTML = island.title;
     document.querySelector('#island-description').innerHTML = island.description;
     // The print tab only belongs to the pool island; it shows that island's current print.
@@ -236,11 +239,50 @@ async function start() {
   viewOffset(); resetCamera(true); updateIslandUI();
   controls.addEventListener('start', () => { transition = false; });
 
+  // 물놀이: the button opens a small inventory above it. Toys are dragged from there onto
+  // the bear (it puts them on); dragging a worn toy away, or tapping it, takes it off.
   document.querySelector('#toys-tab')?.addEventListener('click', () => {
-    const pool = worlds.find(w => w.toggleToys); if (!pool) return;
-    const out = pool.toggleToys(); updateIslandUI();
-    document.querySelector('#status').textContent = out ? '튜브와 오리발이 나왔어요. 수영곰에게 끌어다 주거나 톡 눌러 보세요.' : '튜브와 오리발을 치웠어요.';
+    const tray = document.querySelector('#toy-tray'); tray.hidden = !tray.hidden; updateIslandUI();
+    document.querySelector('#status').textContent = tray.hidden ? '물놀이 용품을 넣어 두었어요.' : '튜브, 오리발, 패들이에요. 끌어서 수영곰에게 주세요.';
   });
+  {
+    const NAMES = { tube: '튜브를', fins: '오리발을', paddles: '패들을' }, point = new THREE.Vector3();
+    // is the pointer on (or near) the bear on screen?
+    const overBear = (pool, x, y) => {
+      pool.bearPoint(point); const reach = camera.position.distanceTo(point); point.project(camera);
+      const bx = (point.x + 1) / 2 * innerWidth, by = (1 - point.y) / 2 * innerHeight;
+      const radius = Math.max(46, innerHeight / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * reach) * 1.5);
+      return Math.hypot(x - bx, y - by) < radius;
+    };
+    document.querySelectorAll('[data-toy]').forEach(slot => {
+      let drag = null;
+      slot.addEventListener('pointerdown', event => {
+        const pool = worlds.find(w => w.giveToy); if (!pool) return;
+        slot.setPointerCapture(event.pointerId);
+        drag = { id: event.pointerId, x: event.clientX, y: event.clientY, ghost: null, pool };
+      });
+      slot.addEventListener('pointermove', event => {
+        if (!drag || event.pointerId !== drag.id) return;
+        if (!drag.ghost && Math.hypot(event.clientX - drag.x, event.clientY - drag.y) > 8) {
+          drag.ghost = slot.querySelector('svg').cloneNode(true); drag.ghost.setAttribute('class', 'toy-ghost'); document.body.appendChild(drag.ghost); slot.classList.add('dragging');
+        }
+        if (drag.ghost) { drag.ghost.style.left = `${event.clientX}px`; drag.ghost.style.top = `${event.clientY}px`; drag.ghost.classList.toggle('over', overBear(drag.pool, event.clientX, event.clientY)); }
+      });
+      const end = event => {
+        if (!drag || event.pointerId !== drag.id) return;
+        const { pool, ghost } = drag, key = slot.dataset.toy, had = !!pool.toys[key]; drag = null;
+        slot.classList.remove('dragging'); ghost?.remove();
+        if (event.type !== 'pointerup') return;
+        let status;
+        if (!ghost) status = had ? (pool.giveToy(key, false), `${NAMES[key]} 벗겼어요.`) : `${NAMES[key]} 끌어서 수영곰에게 주세요.`;   // a tap takes a worn toy off
+        else if (overBear(pool, event.clientX, event.clientY)) { pool.giveToy(key, true); status = `수영곰이 ${NAMES[key]} 받았어요!`; }
+        else if (had) { pool.giveToy(key, false); status = `${NAMES[key]} 벗겼어요.`; }
+        else status = '수영곰 위에 놓아 주세요.';
+        updateIslandUI(); document.querySelector('#status').textContent = status;
+      };
+      slot.addEventListener('pointerup', end); slot.addEventListener('pointercancel', end);
+    });
+  }
   document.querySelectorAll('[data-sub]').forEach(button => button.addEventListener('click', () => {
     const pool = worlds.find(w => w.setPrint), sub = button.dataset.sub;
     if (!pool) return;

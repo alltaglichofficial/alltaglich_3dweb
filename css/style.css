@@ -121,3 +121,19 @@
 }
 
 .zone-nav .nav-dot.toys{background:#f0a04b}
+
+/* 물놀이 tray: an inventory just above the button; toys are dragged from it onto the bear */
+.zone-nav{position:relative}
+.toy-tray{position:absolute;right:6px;bottom:calc(100% + 10px);display:flex;gap:8px;align-items:flex-start;padding:10px 12px 22px;border:1px solid #e6e4da;border-radius:18px;background:#fffdf6f2;box-shadow:0 10px 30px #2a2a2014;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+.toy-tray[hidden]{display:none}
+.zone-nav .toy-tray .toy{display:flex;flex-direction:column;align-items:center;gap:3px;width:62px;min-height:0;padding:7px 4px 6px;border:1px solid #e6e4da;border-radius:13px;white-space:nowrap;background:#f6f3ea;color:#4b5547;font-size:11px;cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none}
+.zone-nav .toy-tray .toy svg{width:38px;height:38px;pointer-events:none}
+.zone-nav .toy-tray .toy:hover{border-color:#c9cdbb}
+.zone-nav .toy-tray .toy[aria-pressed=true]{border-color:#3d5036;background:#e9eedd;color:#364532;box-shadow:inset 0 0 0 1px #3d5036}
+.zone-nav .toy-tray .toy[aria-pressed=true] span::after{content:" ✓"}
+.zone-nav .toy-tray .toy.dragging{opacity:.35}
+.toy-hint{position:absolute;left:0;right:0;bottom:5px;margin:0;text-align:center;font-size:10px;color:#8a917f;pointer-events:none}
+.toy-ghost{position:fixed;z-index:60;width:58px;height:58px;margin:-29px 0 0 -29px;pointer-events:none;filter:drop-shadow(0 8px 10px #0003);transition:transform .12s}
+.toy-ghost.over{transform:scale(1.25)}
+[data-mood=dark] .toy-tray{background:#1b1d21f2;border-color:#33363c}
+[data-mood=dark] .zone-nav .toy-tray .toy{background:#24272c;border-color:#33363c;color:#d9dccf}

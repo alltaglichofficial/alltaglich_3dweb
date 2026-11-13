@@ -88,7 +88,7 @@ export function createSwimBear(root, home, pool = null) {
   let groundT = 0, hopT = 0;
   const lap = { x: home.x, dir: 1, turn: 0, stroke: 'free', phase: 0, entry: 0 };
   // pool toys it has been given: a swim ring (sits up and drifts) and fins (much faster)
-  const gear = { tube: false, fins: false };
+  const gear = { tube: false, fins: false, paddles: false };
   const qYaw = new THREE.Quaternion(), qPitch = new THREE.Quaternion(), qRoll = new THREE.Quaternion();
   const AX = new THREE.Vector3(1, 0, 0), AY = new THREE.Vector3(0, 1, 0);
   const pose = (t, flail) => {
@@ -185,7 +185,7 @@ export function createSwimBear(root, home, pool = null) {
           const st = STROKES[lap.stroke];
           lap.phase += dt * st.rate * (gear.fins ? 1.25 : 1);
           const surge = gear.tube ? 1 : st.pulse ? .35 + 1.1 * Math.max(0, Math.sin(lap.phase * Math.PI * 2)) : 1;
-          const boost = (gear.fins ? 1.8 : 1) * (gear.tube ? (gear.fins ? .55 : .3) : 1);
+          const boost = (gear.fins ? 1.8 : 1) * (gear.paddles ? 1.35 : 1) * (gear.tube ? (gear.fins ? .55 : .3) : 1);
           bear.position.z += lap.dir * st.speed * surge * boost * dt;
           bear.position.x += (lap.x - bear.position.x) * Math.min(1, dt * 2);
           if (lap.dir * bear.position.z >= end) { bear.position.z = lap.dir * end; lap.turn = .9; splash = .6; }
