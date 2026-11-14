@@ -172,7 +172,7 @@ export function createLighting(scene, renderer, { coarse = false } = {}) {
       document.documentElement.dataset.light = mood;
       return mood;
     },
-    // Aim the lamps a little in front of the island's centre, where the puppy plays.
+    // Aim the lamps a little in front of the island's centre, where the bears play.
     // direction (optional) is the island's camera home direction.
     aim(x, z, direction) {
       centre.set(x, -1.6, z + 4);

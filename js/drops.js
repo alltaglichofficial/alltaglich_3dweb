@@ -2,7 +2,6 @@ import * as THREE from 'three';
 import { RoomEnvironment } from '../product/vendor/environments/RoomEnvironment.js';
 import { createSwimBear } from './bear.js';
 import { replaceWithPlush, plushAnchor, createThrowable, bearTarget } from './plush.js';
-import { createDogHouse, createFetchToy } from './house.js';
 
 // Droplet island: a thin clear acrylic sheet. Water drops fall on it one by one
 // and splat into the puddle shapes of the droplet photo; the swim bear walks
@@ -28,7 +27,6 @@ const TINTS = [["#8dc5d4",0.052],["#a2d9d0",0.152],["#8dc5d4",0.052],["#8dc5d4",
 export function createDropletIsland(scene, island, opts = {}) {
   const embedded = !!opts.parent;
   const root = new THREE.Group(); root.name = 'island-drops'; (opts.parent ?? scene).add(root); root.position.set(opts.x ?? 0, 0, opts.z ?? 0);
-  const obstacles = [];
 
   // Thin clear acrylic sheet with softly rounded corners.
   const sheetShape = roundedRect(W, D, .45);
@@ -170,10 +168,6 @@ export function createDropletIsland(scene, island, opts = {}) {
     walker.vx = walker.vz = 0; walker.act = null; walker.cool = 0; newTarget();
   };
 
-  const house = createDogHouse(root, obstacles, { x: 0, z: D / 2 + 3, y: GROUND });
-  const toy = createFetchToy(root, { x: 0, y: GROUND + .17, z: D / 2 + 2 }, island.spawn);
-  house.object.visible = false; toy.ball.visible = false;
-
   let pendingReset = false;
   const world = {
     // replay from the start every time the island is opened
@@ -185,7 +179,7 @@ export function createDropletIsland(scene, island, opts = {}) {
       try { const job = renderer.compileAsync(root, camera, scene); back(); return job.catch(() => {}); }
       catch { back(); return Promise.resolve(); }
     },
-    root, island, obstacles, house, fetchActivity: toy, bear, drops,
+    root, island, bear, drops,
     // opens looking across the laptop's long side (landscape diagonal)
     viewDirection: new THREE.Vector3(29, 23, -15).normalize(),
     // brushed-silver reflections for the laptop only
@@ -193,8 +187,6 @@ export function createDropletIsland(scene, island, opts = {}) {
       const pmrem = new THREE.PMREMGenerator(renderer), tex = pmrem.fromScene(new RoomEnvironment(), .04).texture; pmrem.dispose();
       for (const m of laptop.materials) { m.envMap = tex; m.needsUpdate = true; }
     },
-    navigationOptions: { bounds: { minX: -W / 2 + .5, maxX: W / 2 - .5, minZ: -D / 2 + .5, maxZ: D / 2 - .5 }, clearance: .6, min: -11, size: 60 },
-    activity: { type: 'none' },
     grabTargets: embedded ? [] : [bearTarget(plush, toss)],
     view: { center: { x: 0, z: 0 }, min: [-LAPTOP_W / 2 - .2, GROUND, -LAPTOP_D / 2 - .2], max: [LAPTOP_W / 2 + .2, 2.6, LAPTOP_D / 2 + .2] },
     ready: Promise.resolve(),

@@ -1,19 +1,13 @@
 import { createPlushBear, createThrowable, bearTarget } from './plush.js';
 import * as THREE from 'three';
 import { box, sphere, ico, cylinder, tube, flatPath, roundedPad, mesh, batchStatic } from './geometry.js';
-import { createDropletIsland } from './drops.js';
 import { createPoolIsland } from './pool.js';
-import { createDogHouse, createFetchToy } from './house.js';
 
 export function createWorld(scene, island) {
   if (island.id === 'pool') return createPoolIsland(scene, island);
   const root = new THREE.Group(); root.name = `island-${island.id}`;
   const staticRoot = new THREE.Group(); root.add(staticRoot); scene.add(root);
   let group = staticRoot;
-  let activity = null;
-  const obstacles = [];
-  const rect = (x, z, w, d) => obstacles.push({ type: 'rect', x: x + group.position.x, z: z + group.position.z, w, d });
-  const circle = (x, z, r) => obstacles.push({ type: 'circle', x: x + group.position.x, z: z + group.position.z, r });
   const cream = 0xf4e8cf, green = island.id === 'pool' ? 0xa4bd91 : 0x98b27c, dark = 0x4d6a48;
   function sportsGroup(x, z) { group = new THREE.Group(); group.position.set(x, 0, z); staticRoot.add(group); }
 
@@ -32,7 +26,7 @@ export function createWorld(scene, island) {
   flatPath(group, loop, .95, cream);
   roundedPad(group, 1.35, 2.5, .035, 0, .05, 5.45, cream, .5);
 
-  // Tennis. White doubles, singles and service lines, an open mesh net and a ball.
+  // Tennis. White doubles, singles and service lines and an open mesh net.
   if (island.id === 'tennis') {
   sportsGroup(5.6, .6);
   roundedPad(group, 7.9, 10.1, .10, -5.6, .04, -.6, 0xd3ad8a, .5);
@@ -47,11 +41,7 @@ export function createWorld(scene, island) {
   box(group, 6.9, .06, .055, -5.6, 1.17, -.6, line);
   for (let x = -8.95; x < -2.2; x += .23) box(group, .014, .84, .014, x, .72, -.6, 0x63765e);
   for (let y = .32; y < 1.14; y += .17) box(group, 6.85, .014, .014, -5.6, y, -.6, 0x63765e);
-  rect(-5.6, -.6, 6.95, .14);
-  const ball = new THREE.Group(); ball.position.set(-1.5, .31, 2.7); root.add(ball);
-  sphere(ball, .16, 0, 0, 0, 0xdce785);
-  tube(ball, [[-.13, .015, -.08], [0, .16, -.01], [.13, .015, .08]], .009, line);
-  activity = { type: 'fetch', ball, ballHome: { x: -1.5, y: .32, z: 2.7 }, returnTo: { x: 1.6, z: 3.2 } };
+  
   bench(-8.1, 5.05, 0);
   // Small court sign, kept in-world instead of floating UI labels.
   sign('01  /  TENNIS', -5.9, -6.22, .9);
@@ -65,10 +55,9 @@ export function createWorld(scene, island) {
   const steps = [-2, 0, 2].map((x, i) => {
     const height = .25 + i * .25;
     roundedPad(group, 1.15, 1.05, height, x + 5.1, .25, 5, [0x8fa79d, 0xa8b5ce, 0xdcb19a][i], .15);
-    rect(x + 5.1, 5, 1.15, 1.05);
+    
     return { x, z: .4, y: .25 + height };
   });
-  activity = { type: 'climb', entry: { x: -3.6, z: 2.6 }, steps, landing: { x: 3.4, z: 2.6 } };
   const wall = new THREE.Group();
   wall.position.set(5.1, .15, 2.65);
   for (let i = 0; i < 3; i++) {
@@ -89,18 +78,18 @@ export function createWorld(scene, island) {
     tube(group, [[x, .12, 1.5], [x, 2.9, 2.5]], .065, dark);
     cylinder(group, .12, .15, .18, x, .16, 1.5, dark);
   }
-  rect(5.1, 2.65, 7.45, .9);
-  rect(2.2, 1.9, .35, 1.4);
-  rect(8, 1.9, .35, 1.4);
+  
+  
+  
   sign('03  /  CLIMB', 4.65, 7.4, .75);
   }
 
-  // Small landscape touches, all deterministic for predictable navigation/tests.
+  // Small landscape touches.
   group = staticRoot;
   for (const [x, z, size] of [[-6, -3.5, .95], [-4.5, -5.4, .9], [2.8, -5.7, .85], [6.4, -4, 1], [6.7, 1.7, .8], [-6.3, 2, .85], [-4.8, 4.8, .85], [4.8, 4.8, .85]]) tree(x, z, size);
   for (const [x, z] of [[-7, -1.8], [6.3, 3.3], [-3.4, -6.1]]) {
     for (let i = 0; i < 3; i++) ico(group, .36, x + i * .27, .29 + (i % 2) * .1, z, [0x899e68, 0x9eaf77, 0xa9b984][i]);
-    circle(x + .27, z, .65);
+    
   }
   for (let i = 0; i < 22; i++) {
     const x = Math.sin(i * 12.98) * 7.5, z = Math.cos(i * 4.17) * 6.4;
@@ -115,11 +104,8 @@ export function createWorld(scene, island) {
   for (let i = 0; i < 3; i++) roundedPad(group, .75, .32, .045, 0, .06, 5.9 + i * .36, 0xede1c9, .12);
   cylinder(group, .04, .055, 2.2, -1.3, 1.14, 6.1, 0x73845d);
   box(group, .8, .47, .035, -.9, 2, 6.1, island.id === 'pool' ? 0xa7d2d6 : island.id === 'climb' ? 0xe6bea1 : 0xefe9c7);
-  circle(-1.3, 6.1, .15);
+  
   batchStatic(staticRoot);
-
-  const house = createDogHouse(root, obstacles, island.id === 'tennis' ? { x: 5.3, z: -2, color: 0x8fa980 } : { x: -5.05, z: -.5, color: 0xd0a285 });
-  const fetchActivity = activity.type === 'fetch' ? activity : createFetchToy(root, { x: 1.4, y: .3, z: 3 }, island.spawn);
 
   // The island's Alltäglich plush bears. They play on their own and can be picked up
   // and thrown. Tennis bear: holds a racket and rallies — balls come over the net, it
@@ -391,8 +377,7 @@ export function createWorld(scene, island) {
   const PLAY = { tennis: playTennis, wall: playWall, steps: playSteps };
 
   return {
-    root, island, obstacles, activity, house, fetchActivity,
-    navigationOptions: { radiusX: 8.2, radiusZ: 7.05, clearance: .75 },
+    root, island,
     grabTargets: plushBears.map(p => bearTarget(p.bear, p.toss)),
     get tennis() { return { rally, bears: tennisBears }; },
     update(time = 0, reducedMotion = false) {
@@ -423,7 +408,7 @@ export function createWorld(scene, island) {
     cylinder(group, .1 * s, .15 * s, 1.15 * s, x, .61 * s, z, 0x9d8760, 7);
     ico(group, .82 * s, x, 1.72 * s, z, 0x7f9a67, [.95, 1.15, .95]);
     ico(group, .67 * s, x + .29 * s, 2.05 * s, z - .1, 0x97ad79, [1, 1.1, 1]);
-    circle(x, z, .5 * s);
+    
   }
   function bench(x, z, angle) {
     const b = new THREE.Group();
@@ -434,23 +419,23 @@ export function createWorld(scene, island) {
       box(b, .075, .55, .07, xx, .28, .19, dark);
       box(b, .075, 1.05, .07, xx, .55, -.24, dark);
     }
-    group.add(b); rect(x, z, 2, .75);
+    group.add(b); 
   }
   function lounge(x, z) {
     box(group, .75, .12, 1.6, x, .39, z, 0xe8d7b0);
     const back = box(group, .75, .1, .7, x, .58, z - .65, 0xf3e7ca); back.rotation.x = .55;
     for (const zz of [-.6, .6]) box(group, .65, .28, .07, x, .21, z + zz, 0xa7ac8a);
-    rect(x, z, 1, 2.2);
+    
   }
   function umbrella(x, z) {
     cylinder(group, .035, .035, 2.3, x, 1.2, z, 0xb79d73);
     const canopy = cylinder(group, .06, 1.05, .48, x, 2.43, z, 0xf1d5ae, 10);
     canopy.castShadow = true;
     sphere(group, .07, x, 2.72, z, cream);
-    circle(x, z, .25);
+    
   }
   function sign(text, x, z, width) {
-    rect(x, z, width * 1.5, .2);
+    
     cylinder(group, .035, .035, .8, x, .44, z, dark);
     box(group, width * 1.5, .45, .12, x, .85, z, cream);
     // Locally drawn text adds no network font or image dependency.

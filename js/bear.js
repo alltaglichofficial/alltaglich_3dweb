@@ -73,7 +73,7 @@ export function createSwimBear(root, home, pool = null) {
     const leg = new THREE.Group(); leg.position.set(side * .18, -.3, .05); bear.add(leg); legs.push(leg);
     tuft(leg, .15, [0, -.1, .07], [1, .9, 1.2], 37 + side, .07);
   }
-  // Ripples around the bear, separate from the puppy's wake.
+  // Ripples around the bear.
   const rings = [];
   for (let i = 0; i < 2; i++) {
     const ring = new THREE.Mesh(new THREE.TorusGeometry(.62, .014, 4, 44), new THREE.MeshBasicMaterial({ color: 0xeefcff, transparent: true, opacity: .3, depthWrite: false }));

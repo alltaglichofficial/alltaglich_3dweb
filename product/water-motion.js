@@ -4,7 +4,7 @@ import * as THREE from 'three';
 // same animation is used in the standalone viewer and in the sports island.
 // Interactive waves, in the water mesh's local units (body width 1):
 //  - movers: a continuous wake that travels outward from something moving in
-//    the water (the swimming puppy, the paddling bear); xy = position, z = strength.
+//    the water (the paddling bear); xy = position, z = strength.
 //  - ripples: one-off splash rings that expand and fade (jumping in, climbing
 //    out, a hop landing); xy = origin, z = start time, w = strength.
 const MOVERS = 2, RIPPLES = 8;
@@ -74,7 +74,7 @@ export function createWaterMotion(water, floor = null) {
     object.material.customProgramCacheKey = () => 'alltaglich-caustics-v1'; object.material.needsUpdate = true;
   });
   // A coarse height field follows the actual STL top, without raycasting the
-  // high-resolution mesh each frame. Used to keep the swimming puppy afloat.
+  // high-resolution mesh each frame. Used to keep the swimming bear afloat.
   const size = 65, heights = new Float32Array(size * size).fill(.22);
   const counts = new Uint16Array(size * size), positions = water.geometry.attributes.position;
   for (let i = 0; i < positions.count; i++) {
@@ -93,7 +93,6 @@ export function createWaterMotion(water, floor = null) {
       // Reduced motion: no wakes or splash rings, just the calm static surface.
       if (reducedMotion) { movers.forEach(m => { m.z = 0; }); ripples.forEach(r => { r.w = 0; }); }
     },
-    setSwimmer(x, z, active) { this.setMover(0, x, z, active ? 1 : 0); },
     setMover(index, x, z, strength) { movers[index]?.set(x, z, strength); },
     addRipple(x, z, strength = 1) { ripples[nextRipple].set(x, z, uniforms.time.value, strength); nextRipple = (nextRipple + 1) % RIPPLES; },
     heightAt(x, z) {

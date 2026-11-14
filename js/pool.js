@@ -4,7 +4,6 @@ import { mergeGeometries } from '../product/vendor/utils/BufferGeometryUtils.js'
 import { loadSwimmingPoolKeyring } from '../product/load-keyring.js';
 import { createWaterMotion } from '../product/water-motion.js';
 import { RoomEnvironment } from '../product/vendor/environments/RoomEnvironment.js';
-import { createDogHouse, createFetchToy } from './house.js';
 import { createSwimBear } from './bear.js';
 import { createKeyringHardware } from './keyring.js';
 import { replaceWithPlush, plushCamera } from './plush.js';
@@ -20,18 +19,14 @@ const HX = .5, HZ = .7726628, CORNER = .06, FLOOR_TOP = .05167452, ACRYLIC = .04
 // Clear resin under the print is as thin as on the keyring (0.35 mm of 30 mm).
 const PRINT = .1, BACK_DOME = .03, UNDER = .0117;
 const SLAB_TOP = FLOOR_TOP * (1 - PRINT) - .0008, SLAB_BOTTOM = SLAB_TOP - UNDER;
-// World layout: the block sits on a white poolside deck. The puppy lives on the
-// front deck, climbs the ladder over the front wall into the water and back out.
+// World layout: the block sits on a white poolside deck.
 const DECK_Y = -1.6, WALL_X = HX * 11.2, WALL_Z = HZ * 11.2;
 // The back deck runs on behind the block to hold the keyring hardware.
 const DECK = { minX: -8.6, maxX: 8.6, minZ: -32.2, maxZ: 15.8 };
-// The pool island has no puppy (see main.js); the bear swims alone.
-const NO_DOG = true;
 
 export function createPoolIsland(scene, island) {
   const root = new THREE.Group(); root.name = 'island-pool'; scene.add(root);
-  const obstacles = [{ type: 'rect', x: 0, z: 0, w: WALL_X * 2, d: WALL_Z * 2 }];
-  let motion = null, swimmer = null, clock = 0, reduced = false, lastPaddle = -99;
+  let motion = null, clock = 0, reduced = false;
   const splash = (x, z, strength) => { if (motion && !reduced) motion.addRipple(x / SCALE, z / SCALE, strength); };
   // No deck: the pool block and its keyring hardware stand on their own.
   // Water drops would sink straight into the sand, so the deck puddles are hidden.
@@ -49,14 +44,8 @@ export function createPoolIsland(scene, island) {
   const wetMarks = createWetMarks(poolGroup, DECK_Y);
   const spray = createSpray(poolGroup, (x, z, k) => splash(x, z, k), (x, z, r) => wetMarks.add(x, z, r), DECK_Y);
   let wet = 0, dripIn = 0, lastBearState = '';
-  const house = createDogHouse(root, obstacles, { x: 4.6, z: 11.3, y: DECK_Y, color: 0x8cb9bc });
-  const toy = createFetchToy(root, { x: -3, y: DECK_Y + .17, z: 12.8 }, island.spawn);
-  // No puppy on this island: its house and ball stay in the data (the shared dog
-  // code expects them) but are not shown.
-  house.object.visible = false; toy.ball.visible = false;
   const bearPlane = new THREE.Plane(), bearHit = new THREE.Vector3();
   const inPool = (x, z) => Math.abs(x) <= WALL_X && Math.abs(z) <= WALL_Z;
-  const ladder = new THREE.Group(); ladder.name = 'PuppyPoolLadder'; root.add(ladder);
   const bear = createSwimBear(poolGroup, { x: 0, z: -.15 }, {
     inPool: (x, z) => Math.abs(x) <= WALL_X - .3 && Math.abs(z) <= WALL_Z - .3, groundY: DECK_Y,
     laneZ: WALL_Z - 1.5, laneX: WALL_X - 1.4,   // lengths are swum along Z, end wall to end wall
@@ -97,17 +86,8 @@ export function createPoolIsland(scene, island) {
   // Nothing is drawn under the block, but a shadow-only ground keeps things grounded.
   const ground = new THREE.Mesh(new THREE.PlaneGeometry(90, 110), new THREE.ShadowMaterial({ opacity: .18 }));
   ground.rotation.x = -Math.PI / 2; ground.position.set(0, DECK_Y - .005, -8); ground.receiveShadow = true; root.add(ground);
-  const wake = new THREE.Group(); wake.name = 'PuppyWaterWake'; root.add(wake);
-  for (let i = 0; i < 3; i++) { const ring = new THREE.Mesh(new THREE.TorusGeometry(.45, .012, 4, 40), new THREE.MeshBasicMaterial({ color: 0xe4fbff, transparent: true, opacity: .3, depthWrite: false })); ring.rotation.x = -Math.PI / 2; wake.add(ring); }
-  wake.visible = false;
   const world = {
-    root, island, obstacles, house, fetchActivity: toy,
-    // Only the front deck is walkable; the pool block itself is an obstacle.
-    navigationOptions: { bounds: { minX: -7.9, maxX: 7.9, minZ: 8, maxZ: 15.2 }, clearance: .75, min: -12, size: 71 },
-    // The puppy climbs the A-frame ladder up the outside of the front wall, over
-    // the rim, down into the water, swims the lane corridor and loops around the
-    // playing bear, then climbs back out onto the deck the same way.
-    activity: { type: 'swim', entry: { x: 0, z: 10 }, ladderTop: { x: 0, z: WALL_Z - .15, y: 1 }, waterEntry: { x: 0, z: 7 }, corridorStart: { x: 0, z: 2.8 }, route: [{ x: 0, z: 2.8 }, { x: -1.65, z: 2.35 }, { x: -1.65, z: -2.6 }, { x: 1.6, z: -2.6 }, { x: 1.6, z: 2.35 }, { x: 0, z: 2.8 }] },
+    root, island,
     bear, droplets, hardware, dropsScene,
     // 'lane' (lane-mark tiles) or 'photo' (Prussian blue tiles in a black grid); switched from the bottom tab.
     print: 'lane',
@@ -131,7 +111,7 @@ export function createPoolIsland(scene, island) {
       const drops = focus === 'drops', pool = focus === 'pool';
       poolParts.visible = pool; dropsScene.root.visible = drops;
       for (const key in goods.scenes) goods.scenes[key].root.visible = key === focus;
-      for (const name of ['KeyringHardware', 'KeyringLoose', 'PuppyPoolLadder']) { const o = root.getObjectByName(name); if (o) o.visible = pool; }
+      for (const name of ['KeyringHardware', 'KeyringLoose']) { const o = root.getObjectByName(name); if (o) o.visible = pool; }
       pop = 0;
       if (bear.state === 'held') bear.release();
       if (product()) {
@@ -180,23 +160,12 @@ export function createPoolIsland(scene, island) {
     // Default view frames the block, the front deck and the hardware behind it.
     getSurfaceHeight: surfaceHeight,
     heightAt(x, z) {
-      if (Math.abs(x - house.object.position.x) < 1.4 && Math.abs(z - house.object.position.z) < 1.3) return house.object.position.y + .02;
       return inPool(x, z) ? surfaceHeight(x, z) : DECK_Y;
-    },
-    setSwimmer(point) {
-      if (NO_DOG) point = null;
-      // Jumping in throws a big splash ring; climbing out leaves a smaller one.
-      if (!swimmer && point) splash(point.x, point.z, 1.3);
-      if (swimmer && !point) splash(swimmer.x, swimmer.z, .7);
-      swimmer = point ? { x: point.x, z: point.z } : null;
-      motion?.setSwimmer(point ? point.x / SCALE : 99, point ? point.z / SCALE : 99, !!point);
     },
     update(time, reducedMotion) {
       hardware.step(clock ? Math.min(.05, Math.max(0, time - clock)) : 0);
       clock = time; reduced = reducedMotion;
-      motion?.update(time, reducedMotion); wake.visible = !!swimmer;
-      // Little paddle splashes while the puppy swims.
-      if (swimmer && time - lastPaddle > 1.05) { splash(swimmer.x, swimmer.z, .35); lastPaddle = time; }
+      motion?.update(time, reducedMotion);
       // The bear leaves a gentle wake as it bobs and paddles; each hop landing rings out.
       const b = bear.update(time, reducedMotion, surfaceHeight);
       // thrown onto the laptop: from here on the water-drop scene moves the bear
@@ -233,7 +202,6 @@ export function createPoolIsland(scene, island) {
         lastBearState = st;
       }
       if (b.splash) { splash(b.x, b.z, b.splash); if (b.splash > .5) splash(b.x + .6, b.z - .4, b.splash * .5); }
-      if (swimmer) { wake.position.set(swimmer.x, surfaceHeight(swimmer.x, swimmer.z) + .025, swimmer.z); wake.children.forEach((ring, i) => { const t = (time * .75 + i / 3) % 1; ring.scale.setScalar(.6 + t * 1.8); ring.material.opacity = (1 - t) * .35; }); }
     },
     // Dark room: studio reflections dim and the tiles glow softly from within,
     // like a pool with its underwater lights on at night. The tiles always carry
@@ -257,8 +225,6 @@ export function createPoolIsland(scene, island) {
     water.geometry.rotateY(Math.PI); water.geometry.computeBoundingSphere();
     motion = createWaterMotion(water, floor); world.waterMotion = motion; world.water = water; world.product = model;
     clearResin(water); // after createWaterMotion, which sets its own optical defaults
-    const rim = surfaceHeight(0, 8.15);
-    world.activity.ladderTop.y = rim + .32;
     return world;
   });
   return world;
@@ -418,7 +384,6 @@ function addBackDome(model, material) {
 // Clear water droplets and puddles on the deck, after the reference sheet: round
 // beads, ovals, lobed splats and curving drips. Each is a domed polar mesh (flat
 // top, steep meniscus edge); all are merged into one clear refractive mesh.
-// A wet trail gathers at the foot of the ladder where the puppy climbs out.
 function createDroplets(root) {
   let seed = 7;
   const rand = () => (seed = (seed * 16807) % 2147483647) / 2147483647;

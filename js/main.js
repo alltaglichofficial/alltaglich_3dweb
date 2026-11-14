@@ -2,9 +2,6 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { createWorld } from './world.js';
 import { ISLANDS } from './islands.js';
-import { Navigation } from './navigation.js';
-import { createDog } from './dog.js';
-import { createBondInteractions } from './bond.js';
 import { setPlushCamera } from './plush.js';
 import { createLighting, LIGHTS } from './lighting.js';
 
@@ -46,7 +43,6 @@ async function start() {
 
   const worlds = ISLANDS.map(island => {
     const world = createWorld(scene, island);
-    world.navigation = new Navigation(world.obstacles, world.navigationOptions);
     world.root.visible = false;
     return world;
   });
@@ -107,9 +103,8 @@ async function start() {
     document.querySelector('#lightMenu').setAttribute('aria-expanded', String(open));
     if (open) document.querySelector('[data-light][aria-pressed=true]')?.scrollIntoView({ block: 'center' });
   });
-  let islandIndex = 0, world = worlds[0], navigation = world.navigation;
+  let islandIndex = 0, world = worlds[0];
   world.root.visible = true;
-  const puppy = createDog(world, navigation);
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true; controls.dampingFactor = .065;
   controls.enablePan = false;
@@ -120,7 +115,7 @@ async function start() {
   controls.touches.ONE = THREE.TOUCH.ROTATE;
   controls.touches.TWO = THREE.TOUCH.DOLLY_ROTATE;
 
-  let transition = false, islandTransition = null, bond = null, dogView = false;
+  let transition = false, islandTransition = null;
   const goalCamera = new THREE.Vector3(), goalTarget = new THREE.Vector3();
   const direction = new THREE.Vector3(15, 23, 29).normalize();
 
@@ -162,21 +157,12 @@ async function start() {
   }
   function viewCenter() { const c = world.view?.center; return new THREE.Vector3(c?.x || 0, c?.y ?? .3, c?.z || 0); }
   function resetCamera(immediate = false) {
-    dogView = false; controls.minDistance = 12;
     goalTarget.copy(viewCenter());
     goalCamera.copy(goalTarget).addScaledVector(world.viewDirection ?? direction, fitDistance());
     lighting.aim(goalTarget.x, goalTarget.z, world.viewDirection ?? direction);
     if (immediate || motionPreference.matches) {
       camera.position.copy(goalCamera); controls.target.copy(goalTarget); controls.update(); transition = false;
     } else transition = true;
-  }
-  function focusDog(point) {
-    dogView = true; controls.minDistance = 6;
-    const p = point || puppy.root.position;
-    goalTarget.set(p.x, (point ? world.heightAt(p.x, p.z) : p.y) + .65, p.z);
-    goalCamera.copy(goalTarget).addScaledVector(direction, innerWidth <= 650 ? 10 : 7.5);
-    if (motionPreference.matches) { camera.position.copy(goalCamera); controls.target.copy(goalTarget); controls.update(); transition = false; }
-    else transition = true;
   }
   function updateIslandUI() {
     const island = ISLANDS[islandIndex];
@@ -199,28 +185,21 @@ async function start() {
     document.querySelector('#island-eyebrow').textContent = island.english;
     document.querySelector('#island-name').textContent = island.label;
     document.querySelector('#island-number').textContent = island.number;
-    document.querySelector('[data-command=play]').textContent = island.playLabel;
     const mains = ISLANDS.filter(i => !i.partOf), at = mains.findIndex(i => i.id === main);
-    document.querySelector('#prevIsland').setAttribute('aria-label', `${mains[(at + 2) % 3].label}으로 이동`);
-    document.querySelector('#nextIsland').setAttribute('aria-label', `${mains[(at + 1) % 3].label}으로 이동`);
+    document.querySelector('#prevIsland').setAttribute('aria-label', `${mains[(at + 2) % 3].label} 섬으로 이동`);
+    document.querySelector('#nextIsland').setAttribute('aria-label', `${mains[(at + 1) % 3].label} 섬으로 이동`);
     document.documentElement.style.setProperty('--island-accent', island.accent);
-    // Islands without the puppy (the pool): hide the dog and its care/command UI.
-    const noDog = !!island.noDog;
-    document.documentElement.classList.toggle('no-dog', noDog);
-    puppy.root.traverse(o => { if (noDog) o.layers.disableAll(); else o.layers.set(0); });
-    document.querySelector('#status').textContent = noDog ? `${island.label}에 도착했어요.` : `${island.label}에 도착했어요. 스피츠에게 명령해 보세요.`;
-    bond?.onIslandChange();
+    document.querySelector('#status').textContent = `${island.label}에 도착했어요.`;
   }
   function selectIsland(id, immediate = false, step = 1) {
     const index = ISLANDS.findIndex(island => island.id === id);
     if (index < 0) return;
     if (index === islandIndex) { world.onEnter?.(); return; }   // tapping the open island replays it
-    bond?.endPetting();
     const outgoing = world;
     // Rapid clicks replace the current transition without leaving stray islands.
     for (const item of worlds) { item.root.visible = false; item.root.position.set(0, 0, 0); }
-    islandIndex = index; world = worlds[index]; navigation = world.navigation;
-    world.root.visible = true; puppy.setEnvironment(world, navigation);
+    islandIndex = index; world = worlds[index];
+    world.root.visible = true;
     world.onEnter?.();
     if (immediate || motionPreference.matches) islandTransition = null;
     else {
@@ -300,29 +279,16 @@ async function start() {
   document.querySelectorAll('[data-island]').forEach(button => button.addEventListener('click', () => selectIsland(button.dataset.island, false, ISLANDS.findIndex(i => i.id === button.dataset.island) > islandIndex ? 1 : -1)));
   document.querySelector('#prevIsland').addEventListener('click', () => nextIsland(-1));
   document.querySelector('#nextIsland').addEventListener('click', () => nextIsland(1));
-  document.querySelector('#resetView').addEventListener('click', () => { bond?.endPetting(); resetCamera(); });
+  document.querySelector('#resetView').addEventListener('click', () => resetCamera());
   addEventListener('keydown', event => {
     if (document.querySelector('dialog[open]') || event.altKey || event.ctrlKey || event.metaKey || /INPUT|TEXTAREA|SELECT/.test(event.target.tagName)) return;
     if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') { event.preventDefault(); nextIsland(event.key === 'ArrowLeft' ? -1 : 1); }
   });
-  const commandLabels = { come: '이리 와! 스피츠가 섬 입구로 달려와요.', sit: '앉아! 다음 명령까지 앉아 있어요.', stay: '기다려! 다음 명령까지 그 자리에 있어요.', walk: '산책하며 이 섬에 어울리는 놀이를 즐겨요.', play: '좋아요! 이 섬에서 신나게 놀아 보아요.', feed: '밥그릇으로 가고 있어요. 다 먹으면 호감도 +15!', pet: '강아지 위에서 누른 채 좌우로 쓰다듬어 주세요.' };
-  document.querySelectorAll('[data-command]').forEach(button => button.addEventListener('click', () => {
-    document.querySelector('.trick-menu').open = false;
-    const accepted = puppy.execute(button.dataset.command);
-    if (accepted && ['home', 'fetch', 'play'].includes(button.dataset.command)) resetCamera();
-    const message = accepted ? commandLabels[button.dataset.command] : '안전한 길을 찾지 못했어요. 산책 후 다시 불러 주세요.';
-    document.querySelector('#dog-message').textContent = message;
-    document.querySelector('#status').textContent = message;
-  }));
-
-  Object.assign(commandLabels, { paw: '손! 앉아서 작은 앞발을 내밀어요.', highfive: '하이파이브! 앞발을 높이 들어 인사해요.', bang: '빵! 발라당 누워 배를 보여줘요. 다른 명령으로 일어나요.', fetch: '가져와! 공을 찾아 입에 물고 돌아와요.', home: '집으로 들어가요. 이리 와!를 누르면 다시 나와요.', greet: '안녕하세요! 고개를 끄덕이며 인사해요.' });
   const raycaster = new THREE.Raycaster(), pointer = new THREE.Vector2();
-  const activePointers = new Set();
-  let press = null, gesture = false;
   const canvas = renderer.domElement;
   // Pick up things on the current island (the pool's bear, the keyring chain):
   // each target in world.grabTargets gets grab(point, camera) / drag(ray, camera) /
-  // release(). Runs before the orbit and petting handlers.
+  // release(). Runs before the orbit handlers.
   let carry = null;
   const carryRay = event => {
     const r = canvas.getBoundingClientRect();
@@ -360,35 +326,6 @@ async function start() {
   };
   canvas.addEventListener('pointerup', drop, { capture: true });
   canvas.addEventListener('pointercancel', drop, { capture: true });
-  canvas.addEventListener('pointerdown', event => {
-    activePointers.add(event.pointerId);
-    if (activePointers.size > 1) { gesture = true; press = null; return; }
-    gesture = false;
-    press = { x: event.clientX, y: event.clientY, id: event.pointerId, moved: false };
-  });
-  canvas.addEventListener('pointermove', event => {
-    if (press && Math.hypot(event.clientX - press.x, event.clientY - press.y) > 7) press.moved = true;
-  });
-  function release(event) {
-    activePointers.delete(event.pointerId);
-    if (!press || press.id !== event.pointerId || press.moved || gesture || event.type === 'pointercancel') { if (!activePointers.size) press = null; return; }
-    const bounds = canvas.getBoundingClientRect();
-    pointer.set((event.clientX - bounds.left) / bounds.width * 2 - 1, -(event.clientY - bounds.top) / bounds.height * 2 + 1);
-    raycaster.setFromCamera(pointer, camera);
-    const hit = islandTransition || !puppy.root.visible ? null : raycaster.intersectObject(world.root, true)[0];
-    let object = hit?.object;
-    while (object && object !== puppy.root) object = object.parent;
-    if (object === puppy.root) {
-      puppy.greet(); document.querySelector('#status').textContent = '반가워요! 강아지가 꼬리를 흔들어요.';
-    }
-    press = null;
-  }
-  canvas.addEventListener('pointerup', release);
-  canvas.addEventListener('pointercancel', release);
-  canvas.addEventListener('lostpointercapture', event => { activePointers.delete(event.pointerId); if (!activePointers.size) press = null; });
-  bond = createBondInteractions({ puppy, canvas, camera, controls, getWorld: () => world, focusDog, resetView: () => resetCamera(), stopCamera: () => { transition = false; press = null; activePointers.clear(); }, notify: message => { document.querySelector('#dog-message').textContent = message; document.querySelector('#status').textContent = message; } });
-  bond.onIslandChange();
-
   // Keeps things smooth on slower graphics: each island remembers how sharp it can be
   // drawn. If frames stay slow there (the swimming island's refracting water is the
   // heavy one), the picture is rendered a step less sharp until it runs smoothly.
@@ -409,25 +346,14 @@ async function start() {
     if (maxRatio() * now <= .62) { slowFrames = 0; return; }
     sharpness.set(world.island.id, now * .82); applyResolution();
   }
-  let frame = 0, previous = null, elapsed = 0, paused = false, lastCommand = '', lastMessage = '', lastTrick = null;
+  let frame = 0, previous = null, elapsed = 0, paused = false;
   function render(now) {
     if (paused) return;
     const rawDt = previous === null ? 0 : (now - previous) / 1000;
     const dt = Math.min(rawDt, .05);
     previous = now; elapsed += dt;
     tuneResolution(rawDt);
-    puppy.update(dt, elapsed, reducedMotion); world.update(elapsed, reducedMotion); lighting.update(elapsed, reducedMotion, camera);
-    const dog = puppy.snapshot();
-    if (dog.trick.kind && dog.trick.kind !== lastTrick) focusDog();
-    lastTrick = dog.trick.kind;
-    bond.update(dog);
-    const command = dog.activity.active && !dog.pendingCommand ? 'play' : dog.command;
-    if (command !== lastCommand) {
-      document.querySelectorAll('[data-command]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.command === command)));
-      lastCommand = command;
-    }
-    const message = dog.activity.active ? dog.activity.label : dog.care.phase === 'eating' ? '냠냠! 맛있게 먹고 있어요.' : commandLabels[dog.command];
-    if (message !== lastMessage) { document.querySelector('#dog-message').textContent = message; lastMessage = message; }
+    world.update(elapsed, reducedMotion); lighting.update(elapsed, reducedMotion, camera);
     if (islandTransition) {
       const slide = islandTransition;
       slide.time += dt;
@@ -454,20 +380,16 @@ async function start() {
   addEventListener('resize', () => {
     camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
     renderer.setPixelRatio(Math.max(.6, maxRatio() * (sharpness.get(world.island.id) ?? 1)));
-    renderer.setSize(innerWidth, innerHeight); viewOffset(); if (dogView) focusDog(); else resetCamera(true);
+    renderer.setSize(innerWidth, innerHeight); viewOffset(); resetCamera(true);
   });
   resume();
 
   // Explicit opt-in diagnostics for local smoke checks; no extra production UI.
   if (new URLSearchParams(location.search).has('debug')) {
     window.__park = {
-      ready: true, scene, camera, renderer, controls, puppy, worlds, lighting, setMood, affinity: bond.affinity, focusDog,
-      get navigation() { return navigation; }, get world() { return world; },
-      selectIsland, resetCamera, snapshot: () => ({ dog: puppy.snapshot(), island: world.island.id, switching: Boolean(islandTransition), calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, cameraY: camera.position.y }),
-      dogScreen: () => {
-        const p = puppy.root.localToWorld(new THREE.Vector3(0, .7, 0)).project(camera);
-        return { x: (p.x + 1) / 2 * innerWidth, y: (1 - p.y) / 2 * innerHeight };
-      },
+      ready: true, scene, camera, renderer, controls, worlds, lighting, setMood,
+      get world() { return world; },
+      selectIsland, resetCamera, snapshot: () => ({ island: world.island.id, switching: Boolean(islandTransition), calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, cameraY: camera.position.y }),
     };
   }
 }
