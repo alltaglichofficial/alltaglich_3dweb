@@ -55,8 +55,8 @@ export function createMagnetPlay(parent, { plush, groundY, K, site }) {
   }
   const total = () => site().lines.reduce((a, l) => a + l.n, 0);
   const OUT = () => HMM * .3;   // how far the bear's middle is off the panel while it climbs
-  // where the bear's middle goes for the pen at memo point (xp, yp): its right paw reaches up and right to the pen
-  const penSpot = (xp, yp) => { const [x, z] = memoPoint(xp, yp); return [x - HMM * .16, z + HMM * .36]; };
+  // where the bear's middle goes for the pen at memo point (xp, yp): its right paw reaches diagonally up and right to the pen
+  const penSpot = (xp, yp) => { const [x, z] = memoPoint(xp, yp); return [x - HMM * .3, z + HMM * .3]; };   // (the writing paw is up and out to the right)
 
   const play = {
     anchor,
@@ -100,8 +100,9 @@ export function createMagnetPlay(parent, { plush, groundY, K, site }) {
         anchor.rotation.set(-api.panel.tilt, Math.PI, side * .1 * Math.sin(f * Math.PI), 'YXZ');
         const up = side < 0 ? 'armL' : 'armR', down = side < 0 ? 'armR' : 'armL';
         P.limbs = {};
-        P.limbs[up] = arm(side, .35 + .45 * reach - .2 * ease, 1.05);
-        P.limbs[down] = arm(-side, .8 - .45 * ease * .8, 1.05);
+        // paws reach up and out diagonally (not straight in front, where they would hit the goggles)
+        P.limbs[up] = arm(side, .5 + .45 * reach - .2 * ease, .15);
+        P.limbs[down] = arm(-side, .95 - .45 * ease * .8, .15);
         P.limbs[side < 0 ? 'legR' : 'legL'] = leg(-side, .9 * Math.sin(Math.min(1, f * 1.3) * Math.PI), .5);
         P.limbs[side < 0 ? 'legL' : 'legR'] = leg(side, .25, .5);
         if (P.pz <= tz + .01 || reducedMotion) { P.mode = 'write'; P.t = 0; }
@@ -115,25 +116,25 @@ export function createMagnetPlay(parent, { plush, groundY, K, site }) {
         onPanel(P.px, P.pz, OUT(), anchor.position);
         const scrib = Math.sin(time * 22) * .12, wob = Math.sin(time * 9) * .05;
         anchor.rotation.set(-api.panel.tilt, Math.PI + wob * .4, wob, 'YXZ');
-        P.limbs = { armL: arm(-1, .62, 1.05), armR: arm(1, .5 + scrib, .95 + scrib * .6), legL: leg(-1, .3, .5), legR: leg(1, .2, .5) };
+        P.limbs = { armL: arm(-1, .95, .15), armR: arm(1, .62 + scrib, .2 + scrib * .3), legL: leg(-1, .3, .5), legR: leg(1, .2, .5) };
         if (P.written >= total()) { P.mode = 'look'; P.t = 0; }
       } else if (P.mode === 'look') {
         // done: a look round at us over its shoulder, legs swinging
         anchor.rotation.y = Math.PI + Math.sin(Math.min(1, P.t / 1.4) * Math.PI) * .8;
         const kick = Math.sin(P.t * 6) * .4;
-        P.limbs = { armL: arm(-1, .7, 1.05), armR: arm(1, .7, 1.05), legL: leg(-1, Math.max(0, kick)), legR: leg(1, Math.max(0, -kick)) };
+        P.limbs = { armL: arm(-1, 1.0, .15), armR: arm(1, 1.0, .15), legL: leg(-1, Math.max(0, kick)), legR: leg(1, Math.max(0, -kick)) };
         if (P.t > 1.6) { P.mode = 'jump'; P.t = 0; P.vy = 4.2; P.vz = 3.2; }
       } else if (P.mode === 'jump') {
         // pushes off the panel, a back flip, lands on the table in front
         P.vy -= 26 * dt; anchor.position.y += P.vy * dt; anchor.position.z += P.vz * dt;
         const fall = Math.min(1, P.t / .95); anchor.rotation.x = -api.panel.tilt * (1 - fall) - fall * Math.PI * 2; anchor.rotation.z = 0;
         const tuck = Math.sin(fall * Math.PI);
-        P.limbs = { armL: arm(-1, .6 + tuck * .4, 1.2 * tuck), armR: arm(1, .6 + tuck * .4, 1.2 * tuck), legL: leg(-1, tuck * 1.1, .45), legR: leg(1, tuck * 1.1, .45) };
+        P.limbs = { armL: arm(-1, .6 + tuck * .4, .2 * tuck), armR: arm(1, .6 + tuck * .4, .2 * tuck), legL: leg(-1, tuck * 1.1, .45), legR: leg(1, tuck * 1.1, .45) };
         if (anchor.position.y <= groundY + HALF && P.vy < 0) { stand(); anchor.rotation.set(0, Math.PI, 0, 'YXZ'); P.mode = 'cheer'; P.t = 0; P.done = true; }
       } else if (P.mode === 'cheer') {
         const clap = Math.abs(Math.sin(P.t * 9)) * .25;
         stand(); face(0, dt * 2);
-        P.limbs = { armL: arm(-1, .55, .95 + clap), armR: arm(1, .55, .95 + clap), legL: leg(-1), legR: leg(1) };
+        P.limbs = { armL: arm(-1, .8 + clap, .15), armR: arm(1, .8 + clap, .15), legL: leg(-1), legR: leg(1) };
         if (P.t > 1.8) { P.mode = 'wait'; P.t = 0; P.wait = 2 + Math.random() * 3; }
       } else if (P.mode === 'roam') {
         // pootles about in front of the stand
