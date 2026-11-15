@@ -28,9 +28,10 @@ export function createGripPlay(parent, { plush, groundY, K, site, onReady }) {
     if (p && Math.abs(x / K - p[0]) < p[2] && Math.abs(z / K - p[1]) < p[3]) return groundY + p[4] * K;
     return groundY;
   }
-  const LIMIT = 9;   // how far it can be thrown (it comes back)
+  const LIMIT = 11;   // how far it can be thrown (it comes back)
   const toss = createThrowable(body, { bottom: foot, groundAt: surface, limit: (x, z) => { const d = Math.hypot(x, z); return d > LIMIT ? [x * LIMIT / d, z * LIMIT / d] : [x, z]; } });
-  const st = { mode: 'swim', a: 0, r: 0, dir: 1, speed: .55, turnIn: 6, walkHop: 0 };
+  const st = { mode: 'swim', a: 0, r: 0, dir: 1, speed: .55, turnIn: 6, walkHop: 0, ph: 0 };
+  const qYaw = new THREE.Quaternion(), qPitch = new THREE.Quaternion(), qRoll = new THREE.Quaternion(), AX = new THREE.Vector3(1, 0, 0), AY = new THREE.Vector3(0, 1, 0);
   const settleOn = () => {
     const x = body.position.x, z = body.position.z, d = Math.hypot(x, z);
     if (d < capR() * .9) { st.mode = 'swim'; st.a = Math.atan2(z, x); st.r = Math.min(d, capR() * .62); }
@@ -59,7 +60,7 @@ export function createGripPlay(parent, { plush, groundY, K, site, onReady }) {
       const a = Math.random() * Math.PI * 2, far = power >= 2;
       const side = far ? 1.2 + Math.random() * 1.6 : .15 + Math.random() * .25;
       body.position.y = surface(body.position.x, body.position.z) + foot + .05;
-      toss.launch(new THREE.Vector3(Math.cos(a) * side, far ? 25 : 11, Math.sin(a) * side), far ? 8 : 3.5);
+      toss.launch(new THREE.Vector3(Math.cos(a) * side, far ? 35 : 15.5, Math.sin(a) * side), far ? 8 : 3.5);   // (twice the height of before: v × √2)
       return true;
     },
     bearTarget: bearTarget(plush, toss),
@@ -84,17 +85,18 @@ export function createGripPlay(parent, { plush, groundY, K, site, onReady }) {
         if (!reducedMotion) st.a += st.dir * st.speed * dt / Math.max(.6, d) * 1.6;
         const nr = d + (target - d) * Math.min(1, dt * 1.5);
         const x = Math.cos(st.a) * nr, z = Math.sin(st.a) * nr;
-        body.position.set(x, surface(x, z) + foot * .3, z);
-        // facing along the circle
-        body.rotation.set(0, 0, 0, 'YXZ');
+        // lying on the water, head first along the circle, rolling with each stroke (freestyle)
+        st.ph += dt * (reducedMotion ? 0 : 5.5);
         const tx = -Math.sin(st.a) * st.dir, tz = Math.cos(st.a) * st.dir;
-        body.rotation.y = Math.atan2(tx, tz);
+        qYaw.setFromAxisAngle(AY, Math.atan2(tx, tz)); qPitch.setFromAxisAngle(AX, 1.25); qRoll.setFromAxisAngle(AY, Math.sin(st.ph) * .4);
+        body.quaternion.copy(qYaw).multiply(qPitch).multiply(qRoll);
+        body.position.set(x, surface(x, z) + foot * .32 + Math.sin(st.ph * 2) * .015, z);
         plush.update(anchor, { swim: true, goggles: true, ground: surface(x, z) });
         return;
       }
       // on the table or the phone: walk back to the grip and hop up onto it
       const x = body.position.x, z = body.position.z, d = Math.hypot(x, z) || .001;
-      body.rotation.y = Math.atan2(-x, -z);
+      body.rotation.set(0, Math.atan2(-x, -z), 0, 'YXZ');   // upright again on land
       if (d > R + 1.4) {
         const step = Math.min(d - R - 1.3, (reducedMotion ? 6 : 2.4) * dt);
         st.walkHop += dt * 9;

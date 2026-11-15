@@ -318,7 +318,7 @@ export function createWorld(scene, island) {
       a.rotation.z = side * .12 * Math.sin(f * Math.PI); a.rotation.x = -.18;
       // paws reach up and out to the side (diagonally), not straight out in front, where they
       // would cross the face and the goggles
-      const high = .95, low = .5, FWD = .15;
+      const high = .6, low = .3, FWD = .15;
       const up = side < 0 ? 'armL' : 'armR', down = side < 0 ? 'armR' : 'armL';
       p.limbs = {};
       p.limbs[up] = arm(side, low + (high - low) * reach - .2 * ease, FWD);
@@ -331,20 +331,20 @@ export function createWorld(scene, island) {
       a.rotation.z = Math.sin(p.t * 3) * .08;
       a.rotation.y = Math.PI + Math.sin(Math.min(1, p.t / 1.2) * Math.PI) * .7;
       const kick = Math.sin(p.t * 6) * .4;
-      p.limbs = { armL: arm(-1, 1.0, .15), armR: arm(1, 1.0, .15), legL: leg(-1, Math.max(0, kick)), legR: leg(1, Math.max(0, -kick)) };
+      p.limbs = { armL: arm(-1, .65, .15), armR: arm(1, .65, .15), legL: leg(-1, Math.max(0, kick)), legR: leg(1, Math.max(0, -kick)) };
       if (p.t > 1.4) { p.mode = 'jump'; p.t = 0; p.vy = 3.6; p.vz = 2.6; }
     } else if (p.mode === 'jump') {
       // push off, tuck into a back flip, land on the mat
       p.vy -= 26 * dt; a.position.y += p.vy * dt; a.position.z += p.vz * dt;
       const fall = Math.min(1, p.t / .9); a.rotation.x = -fall * Math.PI * 2; a.rotation.z = 0;
       const tuck = Math.sin(fall * Math.PI);
-      p.limbs = { armL: arm(-1, .6 + tuck * .4, .2 * tuck), armR: arm(1, .6 + tuck * .4, .2 * tuck), legL: leg(-1, tuck * 1.1, .45), legR: leg(1, tuck * 1.1, .45) };
+      p.limbs = { armL: arm(-1, .4 + tuck * .25, .2 * tuck), armR: arm(1, .4 + tuck * .25, .2 * tuck), legL: leg(-1, tuck * 1.1, .45), legR: leg(1, tuck * 1.1, .45) };
       const floor = groundAt(a.position.x, a.position.z) + HALF;
       if (a.position.y <= floor && p.vy < 0) { a.position.y = floor; a.rotation.set(0, Math.PI, 0, 'YXZ'); p.mode = 'cheer'; p.t = 0; }
     } else if (p.mode === 'cheer') {
       // pleased with itself: paws forward and a little up, a small clap
       const clap = Math.abs(Math.sin(p.t * 9)) * .25;
-      stand(p); p.limbs = { armL: arm(-1, .8 + clap, .15), armR: arm(1, .8 + clap, .15), legL: leg(-1), legR: leg(1) };
+      stand(p); p.limbs = { armL: arm(-1, .45 + clap, .15), armR: arm(1, .45 + clap, .15), legL: leg(-1), legR: leg(1) };
       face(p, 0, dt * 2);
       if (p.t > .9) { p.mode = 'idle'; p.t = 0; p.wait = 1 + Math.random() * 1.5; }
     }
@@ -356,7 +356,7 @@ export function createWorld(scene, island) {
       stand(p); face(p, -.3, dt);
       // stretching: arms up, side to side
       const s = Math.sin(p.t * 2.4);
-      p.limbs = { armL: arm(-1, .8 + s * .15, .15), armR: arm(1, .8 - s * .15, .15), legL: leg(-1), legR: leg(1) }; a.rotation.z = s * .1;
+      p.limbs = { armL: arm(-1, .5 + s * .12, .15), armR: arm(1, .5 - s * .12, .15), legL: leg(-1), legR: leg(1) }; a.rotation.z = s * .1;
       if (p.t > p.wait) { p.mode = 'toStep'; p.step = 0; p.target.set(STEPS[0][0] - 1.1, STEPS[0][1] + .9); }
     } else if (p.mode === 'toStep') { if (walkTo(p, dt)) { p.mode = 'hop'; p.t = 0; p.from = a.position.clone(); } }
     else if (p.mode === 'hop') {
@@ -365,12 +365,12 @@ export function createWorld(scene, island) {
       a.position.lerpVectors(p.from, to, k); a.position.y += Math.sin(k * Math.PI) * .7;
       face(p, Math.atan2(to.x - p.from.x, to.z - p.from.z), dt * 2); a.rotation.x = Math.sin(k * Math.PI) * -.2; a.rotation.z = 0;
       const air = Math.sin(k * Math.PI);
-      p.limbs = { armL: arm(-1, .2 + air * .7, .15), armR: arm(1, .2 + air * .7, .15), legL: leg(-1, air * .6), legR: leg(1, air * .6) };
+      p.limbs = { armL: arm(-1, .2 + air * .4, .15), armR: arm(1, .2 + air * .4, .15), legL: leg(-1, air * .6), legR: leg(1, air * .6) };
       if (k >= 1) { p.step++; p.t = 0; p.from = a.position.clone(); if (p.step >= STEPS.length) { p.mode = 'leap'; p.vy = 6; p.vx = 1.6; p.vz = 1.4; } }
     } else if (p.mode === 'leap') {
       // star jump with a spin off the top step
       p.vy -= 26 * dt; a.position.x += p.vx * dt; a.position.z += p.vz * dt; a.position.y += p.vy * dt; a.rotation.y += dt * 9; a.rotation.x = 0;
-      p.limbs = { armL: arm(-1, .9, .15), armR: arm(1, .9, .15), legL: leg(-1, 0, 1), legR: leg(1, 0, 1) };
+      p.limbs = { armL: arm(-1, .55, .15), armR: arm(1, .55, .15), legL: leg(-1, 0, 1), legR: leg(1, 0, 1) };
       const floor = groundAt(a.position.x, a.position.z) + HALF;
       if (a.position.y <= floor && p.vy < 0) { a.position.y = floor; p.mode = 'idle'; p.t = 0; p.wait = 1 + Math.random() * 1.5; }
     }
