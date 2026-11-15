@@ -102,15 +102,15 @@ export function createPoolIsland(scene, island) {
   const LAYER = { pool: 'keyring', drops: null, grip: 'grip', magnet: 'magnets' };
   let focus = 'pool', grabbed = null, poolParts = null, toyLast = null, entered = false;
   dropsScene.root.visible = false;
-  const POOL_VIEW = { center: { x: 0, z: -7.6 }, min: [-8.9, -1.75, -32.5], max: [8.9, 3.9, 16.1] };
-  const DROPS_VIEW = { center: { x: LAP.x, z: LAP.z }, min: [LAP.x - LAP_W / 2 - .2, DECK_Y, LAP.z - LAP_D / 2 - .2], max: [LAP.x + LAP_W / 2 + .2, 2.6, LAP.z + LAP_D / 2 + .2] };
+  const POOL_VIEW = { screen: [-.018, .036], center: { x: 0, z: -7.6 }, min: [-8.9, -1.75, -32.5], max: [8.9, 3.9, 16.1] };
+  const DROPS_VIEW = { screen: [-.007, .11], screenPortrait: [-.007, .053], center: { x: LAP.x, z: LAP.z }, min: [LAP.x - LAP_W / 2 - .2, DECK_Y, LAP.z - LAP_D / 2 - .2], max: [LAP.x + LAP_W / 2 + .2, 2.6, LAP.z + LAP_D / 2 + .2] };
   const DROPS_DIR = new THREE.Vector3(29, 23, -15).normalize();
   const GRIP_DIR = new THREE.Vector3(16, 19, 24).normalize();
   const MAGNET_DIR = new THREE.Vector3(14, 12, 30).normalize();
-  const MAGNET_VIEW = { center: { x: 0, y: DECK_Y + 80 * MAG_K, z: 15 * MAG_K }, min: [-75 * MAG_K, DECK_Y, -45 * MAG_K], max: [75 * MAG_K, DECK_Y + 175 * MAG_K, 100 * MAG_K] };
+  const MAGNET_VIEW = { screen: [.008, .038], center: { x: 0, y: DECK_Y + 80 * MAG_K, z: 15 * MAG_K }, min: [-75 * MAG_K, DECK_Y, -45 * MAG_K], max: [75 * MAG_K, DECK_Y + 175 * MAG_K, 100 * MAG_K] };
   const gripView = () => grip()?.phone
-    ? { center: { x: 0, y: DECK_Y + 3, z: -10 * GRIP_K }, min: [-40 * GRIP_K, DECK_Y, -86 * GRIP_K], max: [40 * GRIP_K, DECK_Y + 32 * GRIP_K, 66 * GRIP_K] }
-    : { center: { x: 0, y: DECK_Y + 26 * GRIP_K, z: 0 }, min: [-34 * GRIP_K, DECK_Y, -34 * GRIP_K], max: [34 * GRIP_K, DECK_Y + 62 * GRIP_K, 34 * GRIP_K] };
+    ? { screen: [.01, .086], center: { x: 0, y: DECK_Y + 3, z: -10 * GRIP_K }, min: [-40 * GRIP_K, DECK_Y, -86 * GRIP_K], max: [40 * GRIP_K, DECK_Y + 32 * GRIP_K, 66 * GRIP_K] }
+    : { screen: [.01, .086], center: { x: 0, y: DECK_Y + 26 * GRIP_K, z: 0 }, min: [-34 * GRIP_K, DECK_Y, -34 * GRIP_K], max: [34 * GRIP_K, DECK_Y + 62 * GRIP_K, 34 * GRIP_K] };
   bear.object.userData.noGrab = true;
   // Nothing of the table is drawn here, but a shadow-only ground keeps the bear grounded.
   const ground = new THREE.Mesh(new THREE.PlaneGeometry(90, 110), new THREE.ShadowMaterial({ opacity: .18 }));

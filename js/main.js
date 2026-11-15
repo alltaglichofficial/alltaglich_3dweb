@@ -120,11 +120,17 @@ async function start() {
   const goalCamera = new THREE.Vector3(), goalTarget = new THREE.Vector3();
   const direction = new THREE.Vector3(15, 23, 29).normalize();
 
+  // Each island and product sits in the middle of the free space between the header
+  // (or, on phones, the intro text) and the menu at the bottom. view.screen is where the
+  // object's visual centre lands without any shift, as a fraction of the screen (x, y);
+  // view.screenPortrait overrides it on phones held upright.
   function viewOffset() {
     const portrait = innerWidth <= 650 && innerHeight > innerWidth;
-    const wide = innerWidth > 1100;
-    const vertical = portrait ? (innerHeight < 700 ? .025 : -.07) : innerHeight < 550 ? .10 : .005;
-    camera.setViewOffset(innerWidth, innerHeight, wide ? -innerWidth * .09 : 0, innerHeight * vertical, innerWidth, innerHeight);
+    const top = (portrait ? document.querySelector('.intro') : document.querySelector('.masthead'))?.getBoundingClientRect().bottom ?? 0;
+    const bottom = document.querySelector('.zone-nav')?.getBoundingClientRect().top ?? innerHeight;
+    const target = (top + bottom) / 2 - innerHeight / 2;
+    const view = world?.view, [sx, sy] = (portrait && view?.screenPortrait) || view?.screen || [.007, .05];
+    camera.setViewOffset(innerWidth, innerHeight, sx * innerWidth, sy * innerHeight - target, innerWidth, innerHeight);
   }
   function fitDistance() {
     const testCamera = camera.clone(); testCamera.clearViewOffset();
@@ -158,6 +164,7 @@ async function start() {
   }
   function viewCenter() { const c = world.view?.center; return new THREE.Vector3(c?.x || 0, c?.y ?? .3, c?.z || 0); }
   function resetCamera(immediate = false) {
+    viewOffset();
     goalTarget.copy(viewCenter());
     goalCamera.copy(goalTarget).addScaledVector(world.viewDirection ?? direction, fitDistance());
     lighting.aim(goalTarget.x, goalTarget.z, world.viewDirection ?? direction);
@@ -197,6 +204,7 @@ async function start() {
     document.documentElement.style.setProperty('--island-accent', island.accent);
     document.querySelector('#status').textContent = `${island.label}에 도착했어요.`;
     placeViewerButtons();
+    viewOffset();   // the menu may have grown or shrunk (Swim adds the product row)
   }
   function selectIsland(id, immediate = false, step = 1) {
     const index = ISLANDS.findIndex(island => island.id === id);
