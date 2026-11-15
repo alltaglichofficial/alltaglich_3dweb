@@ -9,7 +9,8 @@ import { createProductViewers } from './viewers.js';
 // with this scene; what lives here is everything that plays on them:
 //   Aquable / Prussian Blue – the lane keyring lying on the table: its resin block is the
 //       pool the swim bear swims in (thrown, splashing, with pool toys)
-//   Water Drop – the acrylic sheet: drops fall into their outlines, the bear dodges them
+//   Water Drop – drawn here, not by a viewer: drops fall onto a closed laptop (drops.js)
+//       and the bear dodges them
 //   Grip Tok, Magnet – the viewers alone (turn them, move the magnets, fold the grip)
 // The keyring's resin block is 30 × 46.4 mm; here it is WALL_X × WALL_Z (half sizes).
 const DECK_Y = -1.6, WALL_X = 5.6, WALL_Z = 8.654, UNIT = WALL_X / 15;   // world units per millimetre
@@ -54,7 +55,7 @@ export function createPoolIsland(scene, island) {
   // shown as the Alltäglich swim bear plush (bears/swim.html); the three.js bear drives it
   const plush = replaceWithPlush(poolGroup, bear.object, 'swim');
   // Water Drop stands where the pool stands: choosing it puts the keyring away and brings
-  // the sheet out in its place (and back again). It is the same swim bear in both.
+  // the laptop out in its place (and back again). It is the same swim bear in both.
   const LAP = { x: 0, z: -.5 };
   const dropsScene = createDropletIsland(null, { id: 'drops' }, {
     parent: poolGroup, x: LAP.x, z: LAP.z, plush,
@@ -63,14 +64,6 @@ export function createPoolIsland(scene, island) {
   const [LAP_W, LAP_D] = dropsScene.size;
   const overSheet = (x, z) => Math.abs(x - LAP.x) <= LAP_W / 2 && Math.abs(z - LAP.z) <= LAP_D / 2;
   const toSheet = (velocity, flying) => { dropsScene.receive(poolGroup.localToWorld(bear.object.position.clone()), velocity, flying); bear.park(); };
-  // which of the viewer's drops is which of ours (nearest centre), worked out once it has loaded
-  let dropMap = null, dropApi = null; const dropAmounts = new Float32Array(dropsScene.spots.length), viewerAmounts = [];
-  const waterdrop = () => {
-    const api = viewers.api('waterdrop'); if (!api) return null;
-    if (dropApi !== api) { dropApi = api; dropMap = null; }
-    if (!dropMap) dropMap = api.drops.map(([x, z]) => { let best = 0, bd = 1e9; dropsScene.spots.forEach(([sx, sz], i) => { const d = Math.hypot(sx - x, sz - z); if (d < bd) { bd = d; best = i; } }); return best; });
-    return api;
-  };
   // Pool toys (the 물놀이 button): a swim ring, fins and a kickboard the bear can be given.
   const anchorPos = new THREE.Vector3(), anchorQuat = new THREE.Quaternion();
   const toys = createPoolGear(poolGroup, {
@@ -79,7 +72,7 @@ export function createPoolIsland(scene, island) {
     bearHeight: plush.height, surfaceAt: (x, z) => surfaceHeight(x, z),
     onChange: g => { Object.assign(bear.gear, g); },
   });
-  const LAYER = { pool: 'keyring', drops: 'waterdrop', grip: 'grip', magnet: 'magnets' };
+  const LAYER = { pool: 'keyring', drops: null, grip: 'grip', magnet: 'magnets' };
   let focus = 'pool', grabbed = null, poolParts = null, toyLast = null, entered = false;
   dropsScene.root.visible = false;
   const POOL_VIEW = { center: { x: 0, z: -7.6 }, min: [-8.9, -1.75, -32.5], max: [8.9, 3.9, 16.1] };
@@ -92,7 +85,7 @@ export function createPoolIsland(scene, island) {
   const embedded = () => viewers.mode(LAYER[focus]) === 'embed';
   // the chain of the keyring can be picked up: the pointer is handed on to its viewer
   const chain = { grab() {}, drag(ray, camera, ndc) { keyring()?.api.pick()?.move(ndc.x, ndc.y); }, release() { keyring()?.api.pick()?.up(); } };
-  const vp = new THREE.Matrix4(), place = new THREE.Matrix4(), camPos = new THREE.Vector3(), camQuat = new THREE.Quaternion(), offset = new THREE.Vector3();
+  const camPos = new THREE.Vector3(), camQuat = new THREE.Quaternion();
   const world = {
     root, island, bear, dropsScene, viewers,
     // 'lane' (lane-mark tiles) or 'photo' (Prussian blue tiles in a black grid); switched from the bottom tab.
@@ -102,7 +95,7 @@ export function createPoolIsland(scene, island) {
     get focus() { return focus; },
     get embedded() { return entered && embedded(); },
     setFocus(next) {
-      const to = LAYER[next] ? next : 'pool';
+      const to = next in LAYER ? next : 'pool';
       if (to === focus) { if (to === 'drops') dropsScene.onEnter(); return; }
       focus = to;
       // everything that belongs to the pool (splashes, wet marks, toys) goes into one group
@@ -133,6 +126,9 @@ export function createPoolIsland(scene, island) {
         dropsScene.letGo(); bear.launch(at, { x: 0, y: 0, z: 0 });
       }
     },
+    // still waiting for the product on screen to load
+    get loading() { return !!LAYER[focus] && !viewers.api(LAYER[focus]); },
+    setupEnvironment(renderer) { dropsScene.setupEnvironment?.(renderer); },
     onEnter() { entered = true; viewers.show(LAYER[focus]); if (focus === 'drops') dropsScene.onEnter(); },
     onLeave() { entered = false; viewers.show(null); },
     // ↺ in an embedded viewer puts its own camera back
@@ -148,18 +144,6 @@ export function createPoolIsland(scene, island) {
         camera.getWorldPosition(camPos); camera.getWorldQuaternion(camQuat);
         const view = camera.view?.enabled ? [camera.view.fullWidth, camera.view.fullHeight, camera.view.offsetX, camera.view.offsetY, camera.view.width, camera.view.height] : null;
         k.api.frame({ pos: [camPos.x / k.scale + k.cx, (camPos.y - DECK_Y) / k.scale, camPos.z / k.scale + k.cz], quat: camQuat.toArray(), fov: camera.fov, aspect: camera.aspect, near: camera.near / k.scale, far: camera.far / k.scale, offset: view, dt, ratio });
-        return true;
-      }
-      if (focus === 'drops') {
-        const api = waterdrop(); if (!api) return false;
-        const mm = dropsScene.mm;
-        offset.set(LAP.x, dropsScene.ground, LAP.z); poolGroup.localToWorld(offset);
-        place.makeScale(mm, mm, mm).setPosition(offset);
-        vp.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse).multiply(place);
-        camera.getWorldPosition(camPos).sub(offset).divideScalar(mm);
-        dropsScene.amounts(dropAmounts);
-        for (let i = 0; i < dropMap.length; i++) viewerAmounts[i] = dropAmounts[dropMap[i]];
-        api.frame({ vp: vp.elements, cam: [camPos.x, camPos.y, camPos.z], amounts: viewerAmounts, ratio });
         return true;
       }
       return false;

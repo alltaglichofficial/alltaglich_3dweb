@@ -218,10 +218,36 @@ async function start() {
     }
     resetCamera(immediate); updateIslandUI(); applyResolution();
   }
+  // Moving between islands or products: a calm three-second loading screen covers the
+  // change (and stays a little longer if the product has not finished loading).
+  const travelEl = document.querySelector('#travel');
+  let travelling = false;
+  function travel(label, run) {
+    if (travelling) return;
+    if (!travelEl) { run(); return; }
+    travelling = true;
+    travelEl.querySelector('.travel-name').textContent = label;
+    travelEl.hidden = false; travelEl.classList.remove('out'); void travelEl.offsetWidth; travelEl.classList.add('go');
+    const started = performance.now();
+    setTimeout(run, 350);   // once the screen is covered
+    const finish = () => {
+      const waited = performance.now() - started;
+      if (waited < 3000 || (world.loading && waited < 12000)) { setTimeout(finish, 120); return; }
+      travelEl.classList.add('out');
+      setTimeout(() => { travelEl.hidden = true; travelEl.classList.remove('go', 'out'); travelling = false; }, 420);
+    };
+    setTimeout(finish, 3000);
+  }
+  function goIsland(id) {
+    const index = ISLANDS.findIndex(island => island.id === id);
+    if (index < 0) return;
+    if (index === islandIndex) { selectIsland(id); return; }
+    travel(ISLANDS[index].label, () => selectIsland(id, true));
+  }
   function nextIsland(step) {
     // prev / next walk the main islands only (the droplet island counts as the pool)
     const mains = ISLANDS.filter(i => !i.partOf), here = ISLANDS[islandIndex], at = mains.findIndex(i => i.id === (here.partOf ?? here.id));
-    selectIsland(mains[(at + step + mains.length) % mains.length].id, false, step);
+    goIsland(mains[(at + step + mains.length) % mains.length].id);
   }
   viewOffset(); resetCamera(true); updateIslandUI();
   controls.addEventListener('start', () => { transition = false; });
@@ -273,18 +299,23 @@ async function start() {
   document.querySelectorAll('[data-sub]').forEach(button => button.addEventListener('click', () => {
     const pool = worlds.find(w => w.setPrint), sub = button.dataset.sub;
     if (!pool) return;
+    // a different product (or coming from another island) gets the loading screen; Aquable ↔ Prussian Blue only repaints
+    const target = sub === 'drops' || sub === 'grip' || sub === 'magnet' ? sub : 'pool';
+    if (ISLANDS[islandIndex].id !== 'pool' || pool.focus !== target) travel(button.textContent.trim(), () => showSub(pool, sub)); else showSub(pool, sub);
+  }));
+  function showSub(pool, sub) {
     if (ISLANDS[islandIndex].id !== 'pool') selectIsland('pool', true);
-    // Water Drop puts the acrylic sheet where the keyring was (same island, same bear)
-    if (sub === 'drops') { pool.setFocus('drops'); resetCamera(); updateIslandUI(); document.querySelector('#status').textContent = '아크릴판 위로 물방울이 떨어져요. 수영곰이 건너가서 피해 다녀요.'; return; }
+    // Water Drop puts the laptop where the keyring was (same island, same bear)
+    if (sub === 'drops') { pool.setFocus('drops'); resetCamera(); updateIslandUI(); document.querySelector('#status').textContent = '노트북 위로 물방울이 떨어져요. 수영곰이 건너가서 피해 다녀요.'; return; }
     if (sub === 'grip' || sub === 'magnet') { pool.setFocus(sub); resetCamera(); updateIslandUI(); document.querySelector('#status').textContent = sub === 'grip' ? '맥세이프 그립톡이에요. 드래그로 돌려 보고, 그립을 접었다 펴 보세요.' : '스테인리스 스탠드에 붙인 수영장 자석들이에요. 끌어서 옮겨 보세요.'; return; }
     const print = sub === 'prussian' ? 'photo' : 'lane';
     if (pool.print !== print) pool.setPrint(print);
     if (pool.focus !== 'pool') { pool.setFocus('pool'); resetCamera(); }
     updateIslandUI();
     document.querySelector('#status').textContent = print === 'photo' ? '수영장 바닥을 Prussian Blue 타일로 바꿨어요.' : 'Aquable 레인 수영장이에요.';
-  }));
+  }
 
-  document.querySelectorAll('[data-island]').forEach(button => button.addEventListener('click', () => selectIsland(button.dataset.island, false, ISLANDS.findIndex(i => i.id === button.dataset.island) > islandIndex ? 1 : -1)));
+  document.querySelectorAll('[data-island]').forEach(button => button.addEventListener('click', () => goIsland(button.dataset.island)));
   document.querySelector('#prevIsland').addEventListener('click', () => nextIsland(-1));
   document.querySelector('#nextIsland').addEventListener('click', () => nextIsland(1));
   document.querySelector('#resetView').addEventListener('click', () => { resetCamera(); world.resetView?.(); });

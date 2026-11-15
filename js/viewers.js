@@ -2,12 +2,11 @@ import * as THREE from 'three';
 
 // The products themselves are drawn by their own viewers (products/*.html, the brand's
 // product pages), each in a frame stacked with the 3D scene:
-//   keyring, waterdrop – 'drive': drawn behind the (see-through) scene with the scene's own
-//                        camera, one frame at a time, so the swim bear plays on top of them
-//   grip, magnets      – 'embed': shown over the scene and run themselves (turn, zoom, move parts)
+//   keyring       – 'drive': drawn behind the (see-through) scene with the scene's own
+//                   camera, one frame at a time, so the swim bear plays on top of it
+//   grip, magnets – 'embed': shown over the scene and run themselves (turn, zoom, move parts)
 const SOURCES = {
   keyring: ['products/keyring.html', 'drive', '수영장 레인 키링'],
-  waterdrop: ['products/waterdrop.html', 'drive', 'Water Drop 물방울'],
   grip: ['products/griptok.html', 'embed', '수영장 그립톡 3D 보기'],
   magnets: ['products/magnets.html', 'embed', '수영장 마그넷 세트 3D 보기'],
 };

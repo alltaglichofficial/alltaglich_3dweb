@@ -8,7 +8,7 @@ export const ISLANDS = [
   {
     id: 'pool', label: 'Swim', english: 'THE SWIM ISLAND', number: '02', accent: '#86bdc4',
     title: '푸른 물결 곁에서,<br>잠깐의 여유.',
-    description: '파란 타일과 투명하게 일렁이는 물결.<br>수영곰을 수영장에도, 물방울 떨어지는 아크릴판에도 던져 보세요.',
+    description: '파란 타일과 투명하게 일렁이는 물결.<br>수영곰을 수영장에도, 물방울 떨어지는 노트북에도 던져 보세요.',
   },
   {
     id: 'climb', label: 'Climbing', english: 'THE CLIMBING ISLAND', number: '03', accent: '#d7aa87',
