@@ -827,8 +827,10 @@ function frame(now){
   const air = 0;
   for(const side of [-1, 1]){
     const ph = S.swimPhase + (side < 0 ? Math.PI : 0);
-    // swim stroke kept below the head so the arms never sweep through the goggles
-    const elev = lerp(0.12 + idle + flap*side + air, 0.02 + 0.30*Math.sin(ph), sw);
+    // swim stroke kept below the head so the arms never sweep through the goggles.
+    // Freestyle: lying face down the paw goes over the back toward the head, in, pulls
+    // under the tummy down to the feet and comes out again (back → front over the water)
+    const elev = lerp(0.12 + idle + flap*side + air, 0.02 - 0.30*Math.sin(ph), sw);
     const fwd  = lerp(0.04, 0.32*Math.cos(ph) - 0.08, sw);
     const arm = norm([side*Math.cos(elev)*Math.cos(fwd), Math.sin(elev), Math.cos(elev)*Math.sin(fwd)]);
     const kick = Math.sin(S.swimPhase*2.2 + (side < 0 ? Math.PI : 0))*0.42*sw - air*0.5;
