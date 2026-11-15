@@ -6,6 +6,7 @@ import { createDropletIsland } from './drops.js';
 import { createProductViewers } from './viewers.js';
 import { createGripPlay } from './gripplay.js';
 import { createMagnetPlay } from './magnetplay.js';
+import { createWaterline } from './waterline.js';
 
 // Swim island. The products are drawn by their own viewers (see viewers.js), stacked
 // with this scene; what lives here is everything that plays on them:
@@ -57,6 +58,9 @@ export function createPoolIsland(scene, island) {
   });
   // shown as the Alltäglich swim bear plush (bears/swim.html); the three.js bear drives it
   const plush = replaceWithPlush(poolGroup, bear.object, 'swim');
+  // half under the water while it swims, with ripples and a wake
+  const poolWater = createWaterline(poolGroup, plush);
+  let waterLast = null;
   // Water Drop stands where the pool stands: choosing it puts the keyring away and brings
   // the laptop out in its place (and back again). It is the same swim bear in both.
   const LAP = { x: 0, z: -.5 };
@@ -139,6 +143,7 @@ export function createPoolIsland(scene, island) {
       if (entered) viewers.show(LAYER[focus]);
       if (bear.state === 'held') bear.release();
       if (focus !== 'magnet') magnetPlay.leave();
+      if (focus !== 'pool') poolWater.hide();
       if (focus === 'magnet') {
         // the bear goes to write its swim log
         dropsScene.letGo(); bear.park(); gripPlay.leave(); magnetPlay.enter();
@@ -254,6 +259,12 @@ export function createPoolIsland(scene, island) {
       if (focus === 'drops') dropsScene.update(time, reducedMotion);
       { const tdt = Math.min(.05, Math.max(0, time - (toyLast ?? time))); toyLast = time; toys.update(time, tdt, plushCamera(), bear.state === 'swim'); }
       if (!dropsScene.active) plush.update(plush.anchor, { swim: bear.state === 'swim' && !bear.gear.tube, goggles: bear.state === 'swim', ground: inPool(bear.object.position.x, bear.object.position.z) ? null : DECK_Y });
+      {
+        const bp = bear.object.position, st = bear.state, wdt = Math.min(.05, Math.max(0, time - (waterLast ?? time))); waterLast = time;
+        // (in the swim ring it sits up on the water: only the lower half of the ring's hole is under)
+        const level = (st === 'swim' || st === 'sink') && !dropsScene.active ? bearSurface(bp.x, bp.z) - (bear.gear.tube ? plush.height * .18 : 0) : null;
+        poolWater.update(wdt, level, bp.x, bp.z, reducedMotion);
+      }
       if (b.splash >= .8 && !reducedMotion) spray.burst(b.x, surfaceHeight(b.x, b.z), b.z, b.splash);
       const sdt = Math.min(.05, Math.max(0, time - (spray.last ?? time))); spray.last = time;
       spray.update(sdt, surfaceHeight, inPool); wetMarks.update(sdt);

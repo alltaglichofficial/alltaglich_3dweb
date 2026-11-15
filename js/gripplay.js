@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { createSwimBear } from './bear.js';
 import { plushAnchor, createThrowable, bearTarget } from './plush.js';
+import { createWaterline } from './waterline.js';
 
 // The swim bear on the Grip Tok. The grip itself is drawn by its viewer (products/griptok.html)
 // behind the scene; this moves the bear over it.
@@ -20,6 +21,8 @@ export function createGripPlay(parent, { plush, groundY, K, site, onReady }) {
   body.rotation.order = 'YXZ';
 
   const capR = () => (site()?.R ?? 21.5) * K;
+  // half under the water of the grip's little pool while it swims (ripples kept on the grip)
+  const water = createWaterline(parent, plush, { spread: .45 });
   // the surface under (x, z): the grip's top, the phone, or the table
   function surface(x, z) {
     const api = site(); if (!api) return groundY;
@@ -53,7 +56,7 @@ export function createGripPlay(parent, { plush, groundY, K, site, onReady }) {
       body.position.set(Math.cos(st.a) * st.r, surface(0, 0) + 3.5, Math.sin(st.a) * st.r);
       toss.launch(new THREE.Vector3(0, 2, 0), 2);   // drops in
     },
-    leave() { root.visible = false; toss.cancel(); },
+    leave() { root.visible = false; toss.cancel(); water.hide(); },
     // the grip opened: 1 = from one folded stage (a little hop), 2 = from fully folded (sent flying)
     launch(power) {
       if (toss.state === 'held' || st.mode !== 'swim' || toss.busy()) return false;
@@ -75,6 +78,7 @@ export function createGripPlay(parent, { plush, groundY, K, site, onReady }) {
         const s = toss.update(dt);
         if (s === 'landed') settleOn();
         plush.update(anchor, { ground: surface(body.position.x, body.position.z) });
+        water.update(dt, null, body.position.x, body.position.z, reducedMotion);
         return;
       }
       if (st.mode === 'swim') {
@@ -92,6 +96,7 @@ export function createGripPlay(parent, { plush, groundY, K, site, onReady }) {
         body.quaternion.copy(qYaw).multiply(qPitch).multiply(qRoll);
         body.position.set(x, surface(x, z) + foot * .32 + Math.sin(st.ph * 2) * .015, z);
         plush.update(anchor, { swim: true, goggles: true, ground: surface(x, z) });
+        water.update(dt, body.position.y + .02, x, z, reducedMotion);
         return;
       }
       // on the table or the phone: walk back to the grip and hop up onto it
@@ -109,6 +114,7 @@ export function createGripPlay(parent, { plush, groundY, K, site, onReady }) {
         toss.launch(new THREE.Vector3((to.x - from.x) / T, (to.y - from.y + .5 * 30 * T * T) / T, (to.z - from.z) / T), 2.5);
       }
       plush.update(anchor, { ground: surface(body.position.x, body.position.z) });
+      water.update(dt, null, body.position.x, body.position.z, reducedMotion);
     },
   };
   return play;

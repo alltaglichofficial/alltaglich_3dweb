@@ -30,6 +30,7 @@ async function start() {
   // see-through where nothing is drawn: on the Swim island the product viewers show from behind (viewers.js)
   const renderer = new THREE.WebGLRenderer({ antialias: !coarse, alpha: true, powerPreference: 'low-power' });
   renderer.setClearColor(0x000000, 0);
+  renderer.localClippingEnabled = true;   // the swim bear is cut at the water line (waterline.js)
   renderer.setPixelRatio(Math.min(devicePixelRatio, coarse ? 1.5 : 1.8));
   renderer.setSize(innerWidth, innerHeight);
   renderer.shadowMap.enabled = true;
