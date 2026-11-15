@@ -111,3 +111,12 @@
 .zone-nav .island-indicator{position:absolute;left:50%;bottom:calc(100% + 12px);transform:translateX(-50%);white-space:nowrap;pointer-events:auto}
 .zone-nav .toy-tray{z-index:3}
 @media(max-width:1500px){.control-hint{display:none}}
+
+/* product viewers (viewers.js): drawn behind the see-through scene, or shown over it */
+:root{--scene-bg:#efebe3}
+body{background:var(--scene-bg)}
+#viewers{position:fixed;inset:0;z-index:0;pointer-events:none}
+#viewers iframe{position:absolute;inset:0;width:100%;height:100%;border:0;opacity:0;pointer-events:none;transition:opacity .35s ease}
+body.layer-live #viewers iframe.drive.on.ready{opacity:1}
+#viewers iframe.embed.on.ready{opacity:1;pointer-events:auto}
+body.viewer-embed #scene{visibility:hidden}

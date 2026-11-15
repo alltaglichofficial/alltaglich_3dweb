@@ -27,7 +27,9 @@ async function start() {
   motionPreference.addEventListener('change', event => { reducedMotion = event.matches; });
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(36, innerWidth / innerHeight, .1, 250);
-  const renderer = new THREE.WebGLRenderer({ antialias: !coarse, powerPreference: 'low-power' });
+  // see-through where nothing is drawn: on the Swim island the product viewers show from behind (viewers.js)
+  const renderer = new THREE.WebGLRenderer({ antialias: !coarse, alpha: true, powerPreference: 'low-power' });
+  renderer.setClearColor(0x000000, 0);
   renderer.setPixelRatio(Math.min(devicePixelRatio, coarse ? 1.5 : 1.8));
   renderer.setSize(innerWidth, innerHeight);
   renderer.shadowMap.enabled = true;
@@ -40,6 +42,7 @@ async function start() {
 
   setPlushCamera(camera);
   const lighting = createLighting(scene, renderer, { coarse });
+  const sceneBackground = scene.background;   // (taken off while a product viewer shows through, see render)
 
   const worlds = ISLANDS.map(island => {
     const world = createWorld(scene, island);
@@ -68,7 +71,9 @@ async function start() {
     document.querySelector('#light-list').appendChild(button);
   }
   function setMood(name) {
+    scene.background = sceneBackground;
     const mood = lighting.setMood(name, worlds);
+    worlds.forEach(w => w.viewers?.setBackground(sceneBackground));
     const dark = lighting.ui === 'dark';
     moodButton.setAttribute('aria-pressed', String(dark));
     moodButton.setAttribute('aria-label', dark ? '밝은 조명으로 바꾸기' : '어두운 방 분위기로 바꾸기');
@@ -164,6 +169,8 @@ async function start() {
       camera.position.copy(goalCamera); controls.target.copy(goalTarget); controls.update(); transition = false;
     } else transition = true;
   }
+  // an embedded product viewer keeps its own buttons just above the island tabs
+  function placeViewerButtons() { const nav = document.querySelector('.zone-nav'); if (nav) worlds.forEach(w => w.viewers?.setBottom(Math.round(innerHeight - nav.getBoundingClientRect().top + 58))); }
   function updateIslandUI() {
     const island = ISLANDS[islandIndex];
     // the droplet island is part of the swimming island: reached from its own tab there
@@ -190,12 +197,13 @@ async function start() {
     document.querySelector('#nextIsland').setAttribute('aria-label', `${mains[(at + 1) % 3].label} 섬으로 이동`);
     document.documentElement.style.setProperty('--island-accent', island.accent);
     document.querySelector('#status').textContent = `${island.label}에 도착했어요.`;
+    placeViewerButtons();
   }
   function selectIsland(id, immediate = false, step = 1) {
     const index = ISLANDS.findIndex(island => island.id === id);
     if (index < 0) return;
     if (index === islandIndex) { world.onEnter?.(); return; }   // tapping the open island replays it
-    const outgoing = world;
+    const outgoing = world; outgoing.onLeave?.();
     // Rapid clicks replace the current transition without leaving stray islands.
     for (const item of worlds) { item.root.visible = false; item.root.position.set(0, 0, 0); }
     islandIndex = index; world = worlds[index];
@@ -266,9 +274,9 @@ async function start() {
     const pool = worlds.find(w => w.setPrint), sub = button.dataset.sub;
     if (!pool) return;
     if (ISLANDS[islandIndex].id !== 'pool') selectIsland('pool', true);
-    // Water Drop looks at the laptop beside the pool (same island, same bear)
-    if (sub === 'drops') { pool.setFocus('drops'); resetCamera(); updateIslandUI(); document.querySelector('#status').textContent = '노트북 위로 물방울이 떨어져요. 수영곰이 건너가서 피해 다녀요.'; return; }
-    if (sub === 'grip' || sub === 'magnet') { pool.setFocus(sub); resetCamera(); updateIslandUI(); document.querySelector('#status').textContent = sub === 'grip' ? '맥세이프 그립톡이에요. 그립을 누르면 접혔다 펴져요.' : '스테인리스 스탠드에 붙인 수영장 자석들이에요. 끌어서 옮겨 보세요.'; return; }
+    // Water Drop puts the acrylic sheet where the keyring was (same island, same bear)
+    if (sub === 'drops') { pool.setFocus('drops'); resetCamera(); updateIslandUI(); document.querySelector('#status').textContent = '아크릴판 위로 물방울이 떨어져요. 수영곰이 건너가서 피해 다녀요.'; return; }
+    if (sub === 'grip' || sub === 'magnet') { pool.setFocus(sub); resetCamera(); updateIslandUI(); document.querySelector('#status').textContent = sub === 'grip' ? '맥세이프 그립톡이에요. 드래그로 돌려 보고, 그립을 접었다 펴 보세요.' : '스테인리스 스탠드에 붙인 수영장 자석들이에요. 끌어서 옮겨 보세요.'; return; }
     const print = sub === 'prussian' ? 'photo' : 'lane';
     if (pool.print !== print) pool.setPrint(print);
     if (pool.focus !== 'pool') { pool.setFocus('pool'); resetCamera(); }
@@ -279,7 +287,7 @@ async function start() {
   document.querySelectorAll('[data-island]').forEach(button => button.addEventListener('click', () => selectIsland(button.dataset.island, false, ISLANDS.findIndex(i => i.id === button.dataset.island) > islandIndex ? 1 : -1)));
   document.querySelector('#prevIsland').addEventListener('click', () => nextIsland(-1));
   document.querySelector('#nextIsland').addEventListener('click', () => nextIsland(1));
-  document.querySelector('#resetView').addEventListener('click', () => resetCamera());
+  document.querySelector('#resetView').addEventListener('click', () => { resetCamera(); world.resetView?.(); });
   addEventListener('keydown', event => {
     if (document.querySelector('dialog[open]') || event.altKey || event.ctrlKey || event.metaKey || /INPUT|TEXTAREA|SELECT/.test(event.target.tagName)) return;
     if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') { event.preventDefault(); nextIsland(event.key === 'ArrowLeft' ? -1 : 1); }
@@ -297,24 +305,25 @@ async function start() {
   };
   canvas.addEventListener('pointerdown', event => {
     const targets = world.grabTargets;
-    if (!targets?.length || event.button !== 0 || carry) return;
+    if ((!targets?.length && !world.grabFallback) || event.button !== 0 || carry) return;
     carryRay(event);
     let best = null;
-    for (const t of targets) {
+    for (const t of targets ?? []) {
       const hit = raycaster.intersectObjects(t.meshes || [t.object], true)[0];
       if (hit && (!best || hit.distance < best.hit.distance)) best = { t, hit };
     }
-    if (!best) return;
+    // nothing of the scene's: the island may hand the pointer on (the keyring's chain)
+    if (!best) { const t = world.grabFallback?.(pointer); if (!t) return; best = { t, hit: { object: null, point: null } }; }
     best.t.hitObject = best.hit.object;
     if (best.t.grab(best.hit.point, camera) === false) return;
     event.stopImmediatePropagation(); event.preventDefault();
     carry = { id: event.pointerId, target: best.t, x: event.clientX, y: event.clientY, t: performance.now() }; controls.enabled = false; transition = false;
     canvas.setPointerCapture(event.pointerId); canvas.style.cursor = 'grabbing';
-    best.t.drag(raycaster.ray, camera);
+    best.t.drag(raycaster.ray, camera, pointer);
   }, { capture: true });
   canvas.addEventListener('pointermove', event => {
     if (carry?.id !== event.pointerId) return;
-    event.stopImmediatePropagation(); carryRay(event); carry.target.drag(raycaster.ray, camera);
+    event.stopImmediatePropagation(); carryRay(event); carry.target.drag(raycaster.ray, camera, pointer);
   }, { capture: true });
   const drop = event => {
     if (carry?.id !== event.pointerId) return;
@@ -367,7 +376,13 @@ async function start() {
       camera.position.lerp(goalCamera, blend); controls.target.lerp(goalTarget, blend);
       if (camera.position.distanceTo(goalCamera) < .025 && controls.target.distanceTo(goalTarget) < .025) transition = false;
     }
-    controls.update(); renderer.render(scene, camera);
+    controls.update();
+    // Swim island: the product's own viewer is drawn behind the scene with this camera
+    // (then the scene is drawn see-through over it), or shown instead of it.
+    const layered = !islandTransition && world.renderLayer?.(camera, dt, renderer.getPixelRatio());
+    scene.background = layered ? null : sceneBackground;
+    document.body.classList.toggle('layer-live', !!layered);
+    if (!world.embedded) renderer.render(scene, camera);
     if (!loading.hidden) loading.hidden = true;
     frame = requestAnimationFrame(render);
   }
@@ -380,7 +395,7 @@ async function start() {
   addEventListener('resize', () => {
     camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
     renderer.setPixelRatio(Math.max(.6, maxRatio() * (sharpness.get(world.island.id) ?? 1)));
-    renderer.setSize(innerWidth, innerHeight); viewOffset(); resetCamera(true);
+    renderer.setSize(innerWidth, innerHeight); viewOffset(); resetCamera(true); placeViewerButtons();
   });
   resume();
 

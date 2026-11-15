@@ -1,48 +1,48 @@
 import * as THREE from 'three';
-import { box, tube, roundedPad } from './geometry.js';
-import { mergeGeometries } from '../product/vendor/utils/BufferGeometryUtils.js';
-import { loadSwimmingPoolKeyring } from '../product/load-keyring.js';
-import { createWaterMotion } from '../product/water-motion.js';
-import { RoomEnvironment } from '../product/vendor/environments/RoomEnvironment.js';
 import { createSwimBear } from './bear.js';
-import { createKeyringHardware } from './keyring.js';
 import { replaceWithPlush, plushCamera } from './plush.js';
-import { createGoodsScenes } from './goods.js';
 import { createPoolGear } from './gear.js';
 import { createDropletIsland } from './drops.js';
+import { createProductViewers } from './viewers.js';
 
-// Normalised keyring units (body width 1): footprint half-sizes and corner
-// radius of the GLB outline, top of the tile floor, acrylic slab and dome rise.
-const HX = .5, HZ = .7726628, CORNER = .06, FLOOR_TOP = .05167452, ACRYLIC = .045, DOME = .04;
-// As on the keyring: the tile print is only a thin layer (PRINT of the old floor
-// thickness, the rest is clear resin) and the back carries a clear resin dome.
-// Clear resin under the print is as thin as on the keyring (0.35 mm of 30 mm).
-const PRINT = .1, BACK_DOME = .03, UNDER = .0117;
-const SLAB_TOP = FLOOR_TOP * (1 - PRINT) - .0008, SLAB_BOTTOM = SLAB_TOP - UNDER;
-// World layout: the block sits on a white poolside deck.
-const DECK_Y = -1.6, WALL_X = HX * 11.2, WALL_Z = HZ * 11.2;
-// The back deck runs on behind the block to hold the keyring hardware.
-const DECK = { minX: -8.6, maxX: 8.6, minZ: -32.2, maxZ: 15.8 };
+// Swim island. The products are drawn by their own viewers (see viewers.js), stacked
+// with this scene; what lives here is everything that plays on them:
+//   Aquable / Prussian Blue – the lane keyring lying on the table: its resin block is the
+//       pool the swim bear swims in (thrown, splashing, with pool toys)
+//   Water Drop – the acrylic sheet: drops fall into their outlines, the bear dodges them
+//   Grip Tok, Magnet – the viewers alone (turn them, move the magnets, fold the grip)
+// The keyring's resin block is 30 × 46.4 mm; here it is WALL_X × WALL_Z (half sizes).
+const DECK_Y = -1.6, WALL_X = 5.6, WALL_Z = 8.654, UNIT = WALL_X / 15;   // world units per millimetre
 
 export function createPoolIsland(scene, island) {
   const root = new THREE.Group(); root.name = 'island-pool'; scene.add(root);
-  let motion = null, clock = 0, reduced = false;
-  const splash = (x, z, strength) => { if (motion && !reduced) motion.addRipple(x / SCALE, z / SCALE, strength); };
-  // No deck: the pool block and its keyring hardware stand on their own.
-  // Water drops would sink straight into the sand, so the deck puddles are hidden.
-  const droplets = createDroplets(root); droplets.visible = false;
-  // Uniform scale keeps the keyring's real block proportions. The block (thin
-  // print, clear resin, back doming) is positioned so the dome rests on the ground.
-  const SCALE = 11.2, BASE = DECK_Y - (SLAB_BOTTOM - BACK_DOME) * SCALE;
-  // Everything that is part of the keyring body moves together (it can be lifted).
-  const poolGroup = new THREE.Group(); poolGroup.name = 'PoolKeyringBody'; root.add(poolGroup);
-  const hardware = createKeyringHardware(root, { wallZ: WALL_Z, deckY: DECK_Y, wallX: WALL_X, blockTop: BASE + .2584 * SCALE, body: poolGroup });
-  const surfaceHeight = (x, z) => motion ? motion.heightAt(x / SCALE, z / SCALE) * SCALE + BASE : .08;
-  // Water thrown up when the bear plunges in; each drop rings the surface where it falls back.
-  // A bear fresh out of the water drips: drops fall from it and leave wet spots on
-  // the ground, and where it lands it leaves a puddle that slowly dries.
+  const viewers = createProductViewers();
+  const poolGroup = new THREE.Group(); poolGroup.name = 'PoolIsland'; root.add(poolGroup);
+  // ---- the keyring viewer: where its block is (viewer millimetres) and how high its waves stand
+  let ring = null;   // { api, cx, cz, scale, grid }
+  const keyring = () => {
+    if (ring) return ring;
+    const api = viewers.api('keyring'); if (!api) return null;
+    const b = api.box, scale = WALL_X * 2 / (b.maxX - b.minX);
+    ring = { api, cx: (b.minX + b.maxX) / 2, cz: (b.minZ + b.maxZ) / 2, scale, grid: api.grid, top: b.top };
+    api.setPrint(world.print === 'photo' ? 'prussian' : 'lane');
+    return ring;
+  };
+  // the resin's wavy top under (x, z): the bear floats on it
+  const surfaceHeight = (x, z) => {
+    const k = keyring(); if (!k) return DECK_Y + 3.05;
+    const { nx, nz, data } = k.grid;
+    const u = THREE.MathUtils.clamp((x / WALL_X * .5 + .5) * nx - .5, 0, nx - 1.001), v = THREE.MathUtils.clamp((z / WALL_Z * .5 + .5) * nz - .5, 0, nz - 1.001);
+    const i = u | 0, j = v | 0, fu = u - i, fv = v - j, p = j * nx + i;
+    return DECK_Y + ((data[p] * (1 - fu) + data[p + 1] * fu) * (1 - fv) + (data[p + nx] * (1 - fu) + data[p + nx + 1] * fu) * fv) * k.scale;
+  };
+  // (the block is solid resin: the bear rides a little higher than it would in water, so it sits on the waves)
+  const bearSurface = (x, z) => surfaceHeight(x, z) + .5;
+  // Water thrown up when the bear plunges in. A bear fresh out of the water drips: drops
+  // fall from it and leave wet spots on the table, and where it lands it leaves a puddle
+  // that slowly dries.
   const wetMarks = createWetMarks(poolGroup, DECK_Y);
-  const spray = createSpray(poolGroup, (x, z, k) => splash(x, z, k), (x, z, r) => wetMarks.add(x, z, r), DECK_Y);
+  const spray = createSpray(poolGroup, () => {}, (x, z, r) => wetMarks.add(x, z, r), DECK_Y);
   let wet = 0, dripIn = 0, lastBearState = '';
   const bearPlane = new THREE.Plane(), bearHit = new THREE.Vector3();
   const inPool = (x, z) => Math.abs(x) <= WALL_X && Math.abs(z) <= WALL_Z;
@@ -53,76 +53,78 @@ export function createPoolIsland(scene, island) {
   });
   // shown as the Alltäglich swim bear plush (bears/swim.html); the three.js bear drives it
   const plush = replaceWithPlush(poolGroup, bear.object, 'swim');
-  // The water-drop scene sits beside the pool: a closed laptop where drops fall. It is
-  // the same swim bear in both places — thrown (or sent by the Water Drop tab) onto the
-  // laptop it dodges the drops; thrown off it (or sent back) it dives into the pool.
-  // It stands where the pool stands: choosing Water Drop puts the pool away and brings
-  // the laptop out in its place (and back again).
+  // Water Drop stands where the pool stands: choosing it puts the keyring away and brings
+  // the sheet out in its place (and back again). It is the same swim bear in both.
   const LAP = { x: 0, z: -.5 };
-  const dropsScene = createDropletIsland(null, { id: 'drops', spawn: { x: 0, z: 6 } }, {
+  const dropsScene = createDropletIsland(null, { id: 'drops' }, {
     parent: poolGroup, x: LAP.x, z: LAP.z, plush,
     onLeave(position, velocity) { bear.launch(poolGroup.worldToLocal(position), velocity); },
   });
   const [LAP_W, LAP_D] = dropsScene.size;
-  const overLaptop = (x, z) => Math.abs(x - LAP.x) <= LAP_W / 2 && Math.abs(z - LAP.z) <= LAP_D / 2;
-  const toLaptop = (velocity, flying) => { dropsScene.receive(poolGroup.localToWorld(bear.object.position.clone()), velocity, flying); bear.park(); };
-  // Pool toys (the 물놀이 button): a swim ring and fins the bear can be given.
+  const overSheet = (x, z) => Math.abs(x - LAP.x) <= LAP_W / 2 && Math.abs(z - LAP.z) <= LAP_D / 2;
+  const toSheet = (velocity, flying) => { dropsScene.receive(poolGroup.localToWorld(bear.object.position.clone()), velocity, flying); bear.park(); };
+  // which of the viewer's drops is which of ours (nearest centre), worked out once it has loaded
+  let dropMap = null; const dropAmounts = new Float32Array(dropsScene.spots.length), viewerAmounts = [];
+  const waterdrop = () => {
+    const api = viewers.api('waterdrop'); if (!api) return null;
+    if (!dropMap) dropMap = api.drops.map(([x, z]) => { let best = 0, bd = 1e9; dropsScene.spots.forEach(([sx, sz], i) => { const d = Math.hypot(sx - x, sz - z); if (d < bd) { bd = d; best = i; } }); return best; });
+    return api;
+  };
+  // Pool toys (the 물놀이 button): a swim ring, fins and a kickboard the bear can be given.
   const anchorPos = new THREE.Vector3(), anchorQuat = new THREE.Quaternion();
   const toys = createPoolGear(poolGroup, {
     bearCentre: () => poolGroup.worldToLocal(plush.anchor.getWorldPosition(anchorPos)),
     bearQuat: () => plush.anchor.getWorldQuaternion(anchorQuat),
     bearHeight: plush.height, surfaceAt: (x, z) => surfaceHeight(x, z),
-    onChange: g => { Object.assign(bear.gear, g); if (bear.state === 'swim') splash(bear.object.position.x, bear.object.position.z, .5); },
+    onChange: g => { Object.assign(bear.gear, g); },
   });
-  // two more goods, each on its own screen: the grip on a phone and the magnets on a stand
-  const goods = createGoodsScenes(poolGroup, { groundY: DECK_Y });
-  const product = () => goods.scenes[focus];
-  let focus = 'pool', grabbed = null, poolParts = null, pop = 1, toyLast = null;
+  const LAYER = { pool: 'keyring', drops: 'waterdrop', grip: 'grip', magnet: 'magnets' };
+  let focus = 'pool', grabbed = null, poolParts = null, toyLast = null, entered = false;
   dropsScene.root.visible = false;
   const POOL_VIEW = { center: { x: 0, z: -7.6 }, min: [-8.9, -1.75, -32.5], max: [8.9, 3.9, 16.1] };
   const DROPS_VIEW = { center: { x: LAP.x, z: LAP.z }, min: [LAP.x - LAP_W / 2 - .2, DECK_Y, LAP.z - LAP_D / 2 - .2], max: [LAP.x + LAP_W / 2 + .2, 2.6, LAP.z + LAP_D / 2 + .2] };
   const DROPS_DIR = new THREE.Vector3(29, 23, -15).normalize();
   bear.object.userData.noGrab = true;
-  // Nothing is drawn under the block, but a shadow-only ground keeps things grounded.
+  // Nothing of the table is drawn here, but a shadow-only ground keeps the bear grounded.
   const ground = new THREE.Mesh(new THREE.PlaneGeometry(90, 110), new THREE.ShadowMaterial({ opacity: .18 }));
   ground.rotation.x = -Math.PI / 2; ground.position.set(0, DECK_Y - .005, -8); ground.receiveShadow = true; root.add(ground);
+  const embedded = () => viewers.mode(LAYER[focus]) === 'embed';
+  // the chain of the keyring can be picked up: the pointer is handed on to its viewer
+  const chain = { grab() {}, drag(ray, camera, ndc) { keyring()?.api.pick()?.move(ndc.x, ndc.y); }, release() { keyring()?.api.pick()?.up(); } };
+  const vp = new THREE.Matrix4(), place = new THREE.Matrix4(), camPos = new THREE.Vector3(), camQuat = new THREE.Quaternion(), offset = new THREE.Vector3();
   const world = {
-    root, island,
-    bear, droplets, hardware, dropsScene,
+    root, island, bear, dropsScene, viewers,
     // 'lane' (lane-mark tiles) or 'photo' (Prussian blue tiles in a black grid); switched from the bottom tab.
     print: 'lane',
-    setPrint(kind) { world.print = kind === 'photo' ? 'photo' : 'lane'; setPrintTexture(world.print); },
-    // Things the visitor can pick up (see main.js): the bear, anywhere over the
-    // island, and the keyring chain (physics, added by keyring.js).
-    // which part of the island the camera shows: 'pool' or 'drops' (the laptop)
+    setPrint(kind) { world.print = kind === 'photo' ? 'photo' : 'lane'; keyring()?.api.setPrint(world.print === 'photo' ? 'prussian' : 'lane'); },
+    // which product is on screen: 'pool' (the keyring), 'drops', 'grip' or 'magnet'
     get focus() { return focus; },
+    get embedded() { return entered && embedded(); },
     setFocus(next) {
-      const to = next === 'drops' || goods.scenes[next] ? next : 'pool';
+      const to = LAYER[next] ? next : 'pool';
       if (to === focus) { if (to === 'drops') dropsScene.onEnter(); return; }
       focus = to;
-      // everything that belongs to the pool (block, water, chain, splashes, wet marks) goes
-      // into one group the first time, so it can be put away in one go
+      // everything that belongs to the pool (splashes, wet marks, toys) goes into one group
+      // the first time, so it can be put away in one go
       if (!poolParts) {
         poolParts = new THREE.Group(); poolParts.name = 'PoolParts';
-        const keep = new Set([dropsScene.root, plush.sprite, plush.proxy, plush.shadow, bear.object, ...Object.values(goods.scenes).map(s => s.root)]);
+        const keep = new Set([dropsScene.root, plush.sprite, plush.proxy, plush.shadow, bear.object]);
         for (const child of [...poolGroup.children]) if (!keep.has(child)) poolParts.add(child);
         poolGroup.add(poolParts);
       }
       const drops = focus === 'drops', pool = focus === 'pool';
       poolParts.visible = pool; dropsScene.root.visible = drops;
-      for (const key in goods.scenes) goods.scenes[key].root.visible = key === focus;
-      for (const name of ['KeyringHardware', 'KeyringLoose']) { const o = root.getObjectByName(name); if (o) o.visible = pool; }
-      pop = 0;
+      if (entered) viewers.show(LAYER[focus]);
       if (bear.state === 'held') bear.release();
-      if (product()) {
+      if (!pool && !drops) {
         // product screens: the bear waits out of sight
         dropsScene.letGo(); bear.park(); plush.sprite.visible = false; plush.shadow.visible = false;
       } else if (drops) {
         dropsScene.onEnter();   // the drops start over
-        // the bear drops onto the lid from where it was
+        // the bear drops onto the sheet from where it was
         const at = bear.object.position;
         at.set(THREE.MathUtils.clamp(at.x, LAP.x - LAP_W / 2 + 2, LAP.x + LAP_W / 2 - 2), dropsScene.top + dropsScene.bearBottom + 2.2, THREE.MathUtils.clamp(at.z, LAP.z - LAP_D / 2 + 2, LAP.z + LAP_D / 2 - 2));
-        toLaptop(new THREE.Vector3(0, 1.5, 0), false);
+        toSheet(new THREE.Vector3(0, 1.5, 0), false);
       } else {
         // and plunges back into the pool
         const at = plush.proxy.position.clone();
@@ -130,9 +132,42 @@ export function createPoolIsland(scene, island) {
         dropsScene.letGo(); bear.launch(at, { x: 0, y: 0, z: 0 });
       }
     },
-    get view() { return product()?.view ?? (focus === 'drops' ? DROPS_VIEW : POOL_VIEW); },
-    get viewDirection() { return product()?.viewDirection ?? (focus === 'drops' ? DROPS_DIR : undefined); },
-    get grabTargets() { return product()?.grabTargets ?? (focus === 'drops' ? world.grabTargets_ : [...world.grabTargets_, ...hardware.grabTargets]); },
+    onEnter() { entered = true; viewers.show(LAYER[focus]); if (focus === 'drops') dropsScene.onEnter(); },
+    onLeave() { entered = false; viewers.show(null); },
+    // ↺ in an embedded viewer puts its own camera back
+    resetView() { if (embedded()) viewers.api(LAYER[focus])?.reset?.(); },
+    // Draws the product behind the scene with the scene's camera. True if it did (the
+    // scene is then drawn see-through on top of it).
+    renderLayer(camera, dt, ratio) {
+      if (!entered || root.position.lengthSq() > 1e-6) return false;
+      camera.updateMatrixWorld();
+      if (focus === 'pool') {
+        const k = keyring(); if (!k) return false;
+        // scene → viewer millimetres: the block's centre sits at the island's centre, on the table
+        camera.getWorldPosition(camPos); camera.getWorldQuaternion(camQuat);
+        const view = camera.view?.enabled ? [camera.view.fullWidth, camera.view.fullHeight, camera.view.offsetX, camera.view.offsetY, camera.view.width, camera.view.height] : null;
+        k.api.frame({ pos: [camPos.x / k.scale + k.cx, (camPos.y - DECK_Y) / k.scale, camPos.z / k.scale + k.cz], quat: camQuat.toArray(), fov: camera.fov, aspect: camera.aspect, near: camera.near / k.scale, far: camera.far / k.scale, offset: view, dt, ratio });
+        return true;
+      }
+      if (focus === 'drops') {
+        const api = waterdrop(); if (!api) return false;
+        const mm = dropsScene.mm;
+        offset.set(LAP.x, dropsScene.ground, LAP.z); poolGroup.localToWorld(offset);
+        place.makeScale(mm, mm, mm).setPosition(offset);
+        vp.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse).multiply(place);
+        camera.getWorldPosition(camPos).sub(offset).divideScalar(mm);
+        dropsScene.amounts(dropAmounts);
+        for (let i = 0; i < dropMap.length; i++) viewerAmounts[i] = dropAmounts[dropMap[i]];
+        api.frame({ vp: vp.elements, cam: [camPos.x, camPos.y, camPos.z], amounts: viewerAmounts, ratio });
+        return true;
+      }
+      return false;
+    },
+    get view() { return focus === 'drops' ? DROPS_VIEW : POOL_VIEW; },
+    get viewDirection() { return focus === 'drops' ? DROPS_DIR : undefined; },
+    get grabTargets() { return focus === 'pool' || focus === 'drops' ? world.grabTargets_ : []; },
+    // nothing of ours under the pointer: maybe a part of the keyring's chain
+    grabFallback(ndc) { return focus === 'pool' && keyring()?.api.pick()?.down(ndc.x, ndc.y) ? chain : null; },
     // the 물놀이 tray: which toys the bear has on, giving / taking one, and where the bear is
     get toys() { return { ...toys.gear }; },
     giveToy(key, on) { toys.set(key, on); },
@@ -157,36 +192,26 @@ export function createPoolIsland(scene, island) {
       release() { if (grabbed) { grabbed.release(); grabbed = null; } else bear.release(); },
       tap() { plush.open(); },
     }],
-    // Default view frames the block, the front deck and the hardware behind it.
     getSurfaceHeight: surfaceHeight,
-    heightAt(x, z) {
-      return inPool(x, z) ? surfaceHeight(x, z) : DECK_Y;
-    },
+    heightAt(x, z) { return inPool(x, z) ? surfaceHeight(x, z) : DECK_Y; },
     update(time, reducedMotion) {
-      hardware.step(clock ? Math.min(.05, Math.max(0, time - clock)) : 0);
-      clock = time; reduced = reducedMotion;
-      motion?.update(time, reducedMotion);
-      // The bear leaves a gentle wake as it bobs and paddles; each hop landing rings out.
-      const b = bear.update(time, reducedMotion, surfaceHeight);
-      // thrown onto the laptop: from here on the water-drop scene moves the bear
+      if (embedded()) return;
+      const b = bear.update(time, reducedMotion, bearSurface);
+      // thrown onto the sheet: from here on the water-drop scene moves the bear
       if (!dropsScene.active && bear.state === 'falling') {
         const bp = bear.object.position, v = bear.velocity;
-        if (focus === 'drops' && overLaptop(bp.x, bp.z) && v.y < 0 && bp.y <= dropsScene.top + dropsScene.bearBottom + .15) toLaptop(new THREE.Vector3(v.x * .5, v.y, v.z * .5), false);
+        if (focus === 'drops' && overSheet(bp.x, bp.z) && v.y < 0 && bp.y <= dropsScene.top + dropsScene.bearBottom + .15) toSheet(new THREE.Vector3(v.x * .5, v.y, v.z * .5), false);
       }
       if (focus === 'drops') dropsScene.update(time, reducedMotion);
-      // whichever of the two just came out pops up into place
-      if (pop < 1) { pop = Math.min(1, pop + 1 / 18); const k = 1 - Math.pow(1 - pop, 3), sc = .86 + .14 * k; (product()?.root ?? (focus === 'drops' ? dropsScene.root : poolParts))?.scale.setScalar(sc); }
-      { const tdt = Math.min(.05, Math.max(0, time - (toyLast ?? time))); toyLast = time; goods.update(tdt); toys.update(time, tdt, plushCamera(), bear.state === 'swim'); }
-      if (!dropsScene.active && !product()) plush.update(plush.anchor, { swim: bear.state === 'swim' && !bear.gear.tube, goggles: bear.state === 'swim', ground: inPool(bear.object.position.x, bear.object.position.z) ? null : DECK_Y });
-      motion?.setMover(1, b.x / SCALE, b.z / SCALE, reducedMotion ? 0 : .55);
-      if (b.landed) splash(b.x, b.z, .9);
+      { const tdt = Math.min(.05, Math.max(0, time - (toyLast ?? time))); toyLast = time; toys.update(time, tdt, plushCamera(), bear.state === 'swim'); }
+      if (!dropsScene.active) plush.update(plush.anchor, { swim: bear.state === 'swim' && !bear.gear.tube, goggles: bear.state === 'swim', ground: inPool(bear.object.position.x, bear.object.position.z) ? null : DECK_Y });
       if (b.splash >= .8 && !reducedMotion) spray.burst(b.x, surfaceHeight(b.x, b.z), b.z, b.splash);
       const sdt = Math.min(.05, Math.max(0, time - (spray.last ?? time))); spray.last = time;
       spray.update(sdt, surfaceHeight, inPool); wetMarks.update(sdt);
       {
         const st = bear.state, bp = bear.object.position, inWater = st === 'sink' || st === 'swim';
         if (inWater) wet = 1; else wet = Math.max(0, wet - sdt / 30);
-        if (wet > .04 && !inWater && !reducedMotion && !dropsScene.active && !product()) {
+        if (wet > .04 && !inWater && !reducedMotion && !dropsScene.active) {
           // drips, quicker while it is still soaked
           dripIn -= sdt;
           if (dripIn <= 0) { spray.drip(bp.x + (Math.random() - .5) * .7, bp.y - .2 - Math.random() * .3, bp.z + (Math.random() - .5) * .7, st === 'ground' ? .5 : 1); dripIn = (.05 + Math.random() * .2) / (.15 + wet); }
@@ -201,237 +226,14 @@ export function createPoolIsland(scene, island) {
         }
         lastBearState = st;
       }
-      if (b.splash) { splash(b.x, b.z, b.splash); if (b.splash > .5) splash(b.x + .6, b.z - .4, b.splash * .5); }
     },
-    // Dark room: studio reflections dim and the tiles glow softly from within,
-    // like a pool with its underwater lights on at night. The tiles always carry
-    // an emissive map (black in the lamp mood), so switching never recompiles.
-    setMood(mood, { reflections }) {
-      for (const m of [world.water?.material, world.acrylic?.material, droplets.material, ...hardware.materials]) if (m?.userData.envBase !== undefined) m.envMapIntensity = m.userData.envBase * reflections;
-      goods.setMood(reflections);
-      world.floor?.traverse(object => { if (object.isMesh && object.material.emissiveMap) object.material.emissive.setHex(mood === 'dark' ? 0x5a7f99 : 0); });
-    },
-    // the laptop's drops are compiled up front too, though they stay hidden until first shown
+    // the falling drops are compiled up front, though they stay hidden until first shown
     precompile(renderer, scene, camera) { const was = root.visible; root.visible = true; dropsScene.precompile(renderer, scene, camera); root.visible = was; },
-    setupEnvironment(renderer) { dropsScene.setupEnvironment(renderer); const environment = new RoomEnvironment(); const pmrem = new THREE.PMREMGenerator(renderer); const texture = pmrem.fromScene(environment, .04).texture; environment.dispose(); pmrem.dispose(); goods.setEnvironment(texture); for (const m of [world.water.material, world.acrylic.material, droplets.material, ...hardware.materials]) { m.envMap = texture; m.userData.envBase = m === world.water.material ? WATER_REFLECTION : hardware.materials.includes(m) ? (m.userData.envDefault ?? 1) : 1.15; m.envMapIntensity = m.userData.envBase; m.needsUpdate = true; } },
+    ready: Promise.resolve(),
   };
-  world.ready = loadSwimmingPoolKeyring().then(({ model, floor, water }) => {
-    model.scale.setScalar(SCALE); model.position.y = BASE; poolGroup.add(model);
-    paintSampleTiles(floor); domeFloor(floor); thinPrint(floor); world.floor = floor;
-    world.acrylic = addAcrylicBase(model); addBackDome(model, world.acrylic.material);
-    // The clear resin's wave surface faces the other way round on the keyring
-    // (turned end for end, like the product viewer); tiles stay as they are.
-    // Rotate before createWaterMotion so its height field follows the turned surface.
-    water.geometry.rotateY(Math.PI); water.geometry.computeBoundingSphere();
-    motion = createWaterMotion(water, floor); world.waterMotion = motion; world.water = water; world.product = model;
-    clearResin(water); // after createWaterMotion, which sets its own optical defaults
-    return world;
-  });
+  // fetch the keyring viewer once the page has settled, so the Swim island opens ready
+  setTimeout(() => viewers.load('keyring'), 2500);
   return world;
-}
-
-// Print under the resin, as on the keyring: powder-blue tiles in a 13 × 22 grid,
-// dark grout, and the lane mark — a wide bar 4 rows from the ring end (back,
-// v = 1), a stem down the middle to the front edge and a short cross line near
-// the front. Canvas row 0 is the front (+Z) edge.
-const TILE = [136, 176, 208], GROUT = '#222e3c', LANE = [30, 44, 64], COLS = 13, ROWS = 22;
-const isLane = (c, r) => (c === 6 && r >= 3) || (r === 3 && c >= 4 && c <= 8) || (r === 17 && c >= 5 && c <= 7);
-function paintSampleTiles(floor) {
-  floor.traverse(object => {
-    if (!object.isMesh || !object.material.map) return;
-    const { width, height } = object.material.map.image;
-    const canvas = document.createElement('canvas'); canvas.width = width; canvas.height = height;
-    const ctx = canvas.getContext('2d');
-    if (width === 256) {
-      // Repeating side tile.
-      ctx.fillStyle = `rgb(${TILE})`; ctx.fillRect(0, 0, 256, 256);
-      ctx.fillStyle = GROUT; ctx.fillRect(0, 0, 256, 11); ctx.fillRect(0, 0, 11, 256);
-    } else {
-      const tw = width / COLS, th = height / ROWS, grout = Math.max(3, Math.min(tw, th) * .084);
-      for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
-        // r counts from the ring end (canvas bottom).
-        const j = (Math.sin(c * 127.1 + r * 311.7) * 43758.5453 % 1) * 10, base = isLane(c, r) ? LANE : TILE;
-        ctx.fillStyle = `rgb(${base.map(v => Math.round(v + j * (isLane(c, r) ? .4 : 1)))})`;
-        ctx.fillRect(c * tw, height - (r + 1) * th, tw + 1, th + 1);
-      }
-      ctx.fillStyle = GROUT;
-      for (let c = 0; c <= COLS; c++) ctx.fillRect(c * tw - grout / 2, 0, grout, height);
-      for (let r = 0; r <= ROWS; r++) ctx.fillRect(0, r * th - grout / 2, width, grout);
-    }
-    const texture = new THREE.CanvasTexture(canvas);
-    texture.flipY = false; texture.colorSpace = THREE.SRGBColorSpace;
-    texture.wrapS = texture.wrapT = object.material.map.wrapS; texture.anisotropy = 8;
-    object.material.map.dispose(); object.material.map = texture; object.material.emissiveMap = texture; object.material.emissive.setHex(0);
-    object.material.roughness = .55; object.material.metalness = 0; object.material.needsUpdate = true;
-    if (width !== 256) { printTop.mesh = object; printTop.lane = texture; }
-  });
-}
-// The alternative print: solid Prussian blue tiles in a black grid (8 × 12, as on
-// the photographed keyring), without the lane mark.
-const printTop = { mesh: null, lane: null, photo: null };
-const PRUSSIAN_BLUE = '#245e8a'; // Prussian blue, lightened so the black grid stays visible
-function navyGridTexture(width, height) {
-  const canvas = document.createElement('canvas'); canvas.width = width; canvas.height = height;
-  const ctx = canvas.getContext('2d'), cols = 8, rows = 12, tw = width / cols, th = height / rows, line = Math.max(4, tw * .07);
-  ctx.fillStyle = PRUSSIAN_BLUE; ctx.fillRect(0, 0, width, height);
-  ctx.fillStyle = '#121418';
-  for (let c = 0; c <= cols; c++) ctx.fillRect(c * tw - line / 2, 0, line, height);
-  for (let r = 0; r <= rows; r++) ctx.fillRect(0, r * th - line / 2, width, line);
-  const tex = new THREE.CanvasTexture(canvas); tex.flipY = false; tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 8;
-  return tex;
-}
-function setPrintTexture(kind) {
-  const m = printTop.mesh?.material; if (!m) return;
-  const apply = tex => { m.map = tex; m.emissiveMap = tex; m.needsUpdate = true; };
-  if (kind !== 'photo') { apply(printTop.lane); return; }
-  if (!printTop.photo) { const { width, height } = printTop.lane.image; printTop.photo = navyGridTexture(width, height); }
-  apply(printTop.photo);
-}
-
-// Clear resin with a light blue cast, as on the keyring: barely-there micro
-// roughness and modest reflections so it reads as cured resin, not acrylic.
-const WATER_REFLECTION = .35;
-function clearResin(water) {
-  const m = water.material;
-  m.color.set(0xd2eafa); m.attenuationColor.set(0x6fb2e6); m.attenuationDistance = 6.7;
-  m.ior = 1.5; m.roughness = .06; m.transmission = 1;
-  m.clearcoat = 0;
-  m.specularIntensity = .85; m.specularColor?.set(0xffffff);
-  m.envMapIntensity = WATER_REFLECTION; m.needsUpdate = true;
-}
-
-// Nearest point inside the rounded-rectangle footprint of the keyring body.
-function clampToFootprint(x, z) {
-  let qx = Math.max(-HX, Math.min(HX, x)), qz = Math.max(-HZ, Math.min(HZ, z));
-  const ix = HX - CORNER, iz = HZ - CORNER;
-  if (Math.abs(qx) > ix && Math.abs(qz) > iz) {
-    const cx = Math.sign(qx) * ix, cz = Math.sign(qz) * iz, dx = qx - cx, dz = qz - cz, d = Math.hypot(dx, dz);
-    if (d > CORNER) { qx = cx + dx / d * CORNER; qz = cz + dz / d * CORNER; }
-  }
-  return [qx, qz];
-}
-
-// Swap the flat 86-vertex tile top for a dense grid that rises gently towards
-// the middle and returns to the wall height at every edge. UVs match the GLB
-// (u = 0.5 - x, v runs north to south), so tiles and the T lane line up.
-function domeFloor(floor) {
-  floor.traverse(object => {
-    if (!object.isMesh || object.material.map?.image.width === 256 || !object.material.map) return;
-    const nx = 44, nz = 68, positions = [], uvs = [], indices = [];
-    for (let j = 0; j <= nz; j++) for (let i = 0; i <= nx; i++) {
-      const [x, z] = clampToFootprint(-HX - .01 + (2 * HX + .02) * i / nx, -HZ - .01 + (2 * HZ + .02) * j / nz);
-      const rise = Math.max(0, 1 - (x / HX) ** 2) * Math.max(0, 1 - (z / HZ) ** 2);
-      positions.push(x, FLOOR_TOP + DOME * rise, z); uvs.push(.5 - x, (HZ - z) / (2 * HZ));
-    }
-    for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) {
-      const a = j * (nx + 1) + i, b = a + 1, c = a + nx + 1, d = c + 1;
-      indices.push(a, c, b, b, c, d);
-    }
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-    geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
-    geo.setIndex(indices); geo.computeVertexNormals();
-    // Grid points clamped onto the outline only touch zero-area triangles.
-    const n = geo.attributes.normal;
-    for (let i = 0; i < n.count; i++) if (!(Math.abs(n.getY(i)) > .01)) n.setXYZ(i, 0, 1, 0);
-    object.geometry.dispose(); object.geometry = geo;
-  });
-}
-
-// Clear resin doming on the back, under the tile layer, same rounded footprint.
-function addAcrylicBase(model) {
-  const shape = new THREE.Shape(), ix = HX - CORNER, iz = HZ - CORNER;
-  shape.moveTo(-ix, -HZ); shape.lineTo(ix, -HZ); shape.absarc(ix, -iz, CORNER, -Math.PI / 2, 0);
-  shape.lineTo(HX, iz); shape.absarc(ix, iz, CORNER, 0, Math.PI / 2);
-  shape.lineTo(-ix, HZ); shape.absarc(-ix, iz, CORNER, Math.PI / 2, Math.PI);
-  shape.lineTo(-HX, -iz); shape.absarc(-ix, -iz, CORNER, Math.PI, Math.PI * 1.5);
-  // A thin layer of clear resin just under the print (the block below it is the back dome).
-  const geo = new THREE.ExtrudeGeometry(shape, { depth: UNDER, bevelEnabled: false, curveSegments: 10 });
-  geo.rotateX(Math.PI / 2); geo.translate(0, SLAB_TOP, 0);
-  const material = new THREE.MeshPhysicalMaterial({ color: 0xd2eafa, transmission: 1, roughness: .06, ior: 1.5, thickness: UNDER + BACK_DOME, attenuationColor: 0x6fb2e6, attenuationDistance: 6.7, specularIntensity: .85 });
-  const slab = new THREE.Mesh(geo, material); slab.name = 'Body_ClearAcrylicBase';
-  slab.receiveShadow = true; model.add(slab);
-  return slab;
-}
-
-// Squash the opaque tile body into a thin print layer just under the water;
-// the dome top (at or above FLOOR_TOP) is kept as it is.
-function thinPrint(floor) {
-  floor.traverse(object => {
-    if (!object.isMesh) return;
-    const p = object.geometry.attributes.position;
-    for (let i = 0; i < p.count; i++) { const y = p.getY(i); if (y < FLOOR_TOP - 1e-5) p.setY(i, FLOOR_TOP - (FLOOR_TOP - y) * PRINT); }
-    p.needsUpdate = true; object.geometry.computeBoundingBox(); object.geometry.computeBoundingSphere();
-  });
-}
-
-// Clear resin doming on the back: highest (lowest point of the block) in the
-// middle, easing out to nothing at the rounded edge, as on the keyring.
-function addBackDome(model, material) {
-  const nx = 40, nz = 62, positions = [], indices = [];
-  for (let j = 0; j <= nz; j++) for (let i = 0; i <= nx; i++) {
-    const [x, z] = clampToFootprint(-HX + 2 * HX * i / nx, -HZ + 2 * HZ * j / nz);
-    const e = Math.pow(Math.pow(Math.abs(x) / HX, 10) + Math.pow(Math.abs(z) / HZ, 10), .1);
-    positions.push(x, SLAB_BOTTOM - BACK_DOME * Math.pow(Math.max(0, 1 - Math.pow(Math.min(e, 1), 2.5)), .55), z);
-  }
-  for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) { const a = j * (nx + 1) + i, b = a + 1, c = a + nx + 1, d = c + 1; indices.push(a, b, c, b, d, c); }
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3)); geo.setIndex(indices); geo.computeVertexNormals();
-  const dome = new THREE.Mesh(geo, material); dome.name = 'Body_BackDoming'; dome.receiveShadow = true; model.add(dome);
-  return dome;
-}
-
-// Clear water droplets and puddles on the deck, after the reference sheet: round
-// beads, ovals, lobed splats and curving drips. Each is a domed polar mesh (flat
-// top, steep meniscus edge); all are merged into one clear refractive mesh.
-function createDroplets(root) {
-  let seed = 7;
-  const rand = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
-  const kinds = [
-    // [x, z, size, kind]
-    [.3, 10.35, .42, 'blob'], [-.55, 10.9, .2, 'round'], [.75, 11.2, .14, 'round'], [-.2, 11.65, .55, 'splat'], [.95, 10.05, .1, 'round'],
-    [-1.1, 10.25, .12, 'round'], [1.35, 11.8, .3, 'oval'], [-1.35, 12.3, .18, 'round'], [.45, 12.45, .09, 'round'], [-.8, 13.1, .34, 'drip'],
-    [-4.9, 9.85, .26, 'oval'], [-6.6, 11.2, .7, 'splat'], [-5.4, 12.6, .13, 'round'], [-6.9, 13.9, .2, 'round'], [-3.9, 14.3, .42, 'blob'],
-    [-2.2, 14.75, .1, 'round'], [-4.6, 15.05, .16, 'round'], [1.8, 14.6, .55, 'blob'], [3.2, 14.9, .12, 'round'], [6.7, 15, .3, 'oval'],
-    [7.4, 13.6, .1, 'round'], [7.2, 10.3, .45, 'drip'], [6.9, 6.2, .22, 'round'], [7.3, 3.4, .5, 'blob'], [6.75, .4, .13, 'round'],
-    [7.45, -2.2, .28, 'oval'], [6.9, -5.6, .62, 'splat'], [7.3, -8.4, .12, 'round'], [3.4, -9.25, .3, 'blob'], [-1.6, -9.5, .1, 'round'],
-    [-2.6, -9.2, .4, 'drip'], [-6.1, -9.15, .16, 'round'], [-7.3, -6.8, .48, 'blob'], [-6.85, -3.1, .1, 'round'], [-7.4, -.6, .3, 'oval'],
-    [-6.9, 2.9, .9, 'splat'], [-7.35, 6.4, .14, 'round'], [-6.4, 7.7, .24, 'round'], [5.9, 8.6, .11, 'round'], [-3.1, 9.6, .09, 'round'],
-  ];
-  const geos = kinds.map(([x, z, size, kind]) => {
-    const geo = dropletGeometry(rand, size, kind);
-    geo.rotateY(rand() * Math.PI * 2); geo.translate(x, DECK_Y + .004, z);
-    return geo;
-  });
-  const merged = mergeGeometries(geos); geos.forEach(geo => geo.dispose());
-  const material = new THREE.MeshPhysicalMaterial({ color: 0xffffff, transmission: 1, roughness: .02, ior: 1.33, thickness: .14, attenuationColor: 0xc4e2e8, attenuationDistance: .4, clearcoat: 1, clearcoatRoughness: .02, specularIntensity: 1 });
-  const droplets = new THREE.Mesh(merged, material); droplets.name = 'PoolsideDroplets';
-  droplets.receiveShadow = true; root.add(droplets);
-  return droplets;
-}
-function dropletGeometry(rand, size, kind) {
-  const rings = 9, segments = 44;
-  const lobes = kind === 'splat' ? [[3 + Math.floor(rand() * 3), .3], [7, .08]] : kind === 'blob' ? [[2, .16], [3, .1], [5, .04]] : kind === 'oval' ? [[2, .08]] : [[3, .03]];
-  const phases = lobes.map(() => rand() * Math.PI * 2);
-  const stretch = kind === 'oval' ? 1.45 : kind === 'drip' ? 2.6 : 1, bend = kind === 'drip' ? (rand() - .5) * .5 : 0;
-  const height = Math.min(.11, size * (kind === 'splat' ? .14 : kind === 'round' ? .55 : .3));
-  const radius = a => size * Math.max(.35, 1 + lobes.reduce((sum, [k, amp], i) => sum + amp * Math.cos(k * a + phases[i]), 0));
-  const positions = [0, height, 0], indices = [];
-  for (let r = 1; r <= rings; r++) for (let s = 0; s < segments; s++) {
-    const a = s / segments * Math.PI * 2, t = r / rings, rad = radius(a) * t;
-    let x = Math.cos(a) * rad, z = Math.sin(a) * rad * stretch;
-    if (kind === 'drip') { x *= .7 + .3 * (z / (size * stretch) + 1); x += bend * z * z / size; }
-    positions.push(x, height * Math.sqrt(Math.max(0, 1 - t ** 6)), z);
-  }
-  for (let s = 0; s < segments; s++) indices.push(0, 1 + (s + 1) % segments, 1 + s);
-  for (let r = 1; r < rings; r++) for (let s = 0; s < segments; s++) {
-    const a = 1 + (r - 1) * segments + s, b = 1 + (r - 1) * segments + (s + 1) % segments;
-    indices.push(a, b, a + segments, b, b + segments, a + segments);
-  }
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-  geo.setIndex(indices); geo.computeVertexNormals();
-  return geo.toNonIndexed();
 }
 
 // Splash spray: a crown of clear drops flung out and up from where the bear hits the
