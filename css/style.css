@@ -171,3 +171,9 @@ body.viewer-embed #scene{visibility:hidden}
 :root[data-mood=dark] .grip-controls button{border-color:#3a3d44;color:#d4d1c6}
 :root[data-mood=dark] .grip-controls button[aria-pressed=true]{background:#33402d;border-color:#4c5d43;color:#eef3e4}
 @media(max-width:480px){.grip-controls{gap:3px;padding:4px}.grip-controls button{font-size:11px;padding:6px 9px}}
+
+/* brand text logo (assets/logo-text.svg, inlined so it takes the text colour in both moods) */
+.wordmark{display:inline-flex;align-items:center;line-height:1}
+.wordmark .logo-text{height:.86em;width:auto;display:block}
+.travel-mark .logo-text{height:44px;width:auto;display:block}
+@media(max-width:480px){.travel-mark .logo-text{height:34px}}
