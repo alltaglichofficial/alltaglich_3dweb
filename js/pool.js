@@ -4,6 +4,7 @@ import { replaceWithPlush, plushCamera } from './plush.js';
 import { createPoolGear } from './gear.js';
 import { createDropletIsland } from './drops.js';
 import { createProductViewers } from './viewers.js';
+import { createGripPlay } from './gripplay.js';
 
 // Swim island. The products are drawn by their own viewers (see viewers.js), stacked
 // with this scene; what lives here is everything that plays on them:
@@ -11,7 +12,8 @@ import { createProductViewers } from './viewers.js';
 //       pool the swim bear swims in (thrown, splashing, with pool toys)
 //   Water Drop – drawn here, not by a viewer: drops fall onto a closed laptop (drops.js)
 //       and the bear dodges them
-//   Grip Tok, Magnet – the viewers alone (turn them, move the magnets, fold the grip)
+//   Grip Tok – the grip on the table; the bear swims on its top and is flung up when it opens
+//   Magnet – the magnet viewer alone (turn it, move the magnets); the memo is the bear's swim log
 // The keyring's resin block is 30 × 46.4 mm; here it is WALL_X × WALL_Z (half sizes).
 const DECK_Y = -1.6, WALL_X = 5.6, WALL_Z = 8.654, UNIT = WALL_X / 15;   // world units per millimetre
 
@@ -72,12 +74,28 @@ export function createPoolIsland(scene, island) {
     bearHeight: plush.height, surfaceAt: (x, z) => surfaceHeight(x, z),
     onChange: g => { Object.assign(bear.gear, g); },
   });
+  // Grip Tok: the grip stands where the pool stands, GRIP_K world units per millimetre
+  const GRIP_K = .17;
+  const grip = () => viewers.api('grip');
+  const gripPlay = createGripPlay(poolGroup, { plush, groundY: DECK_Y, K: GRIP_K, site: grip, onReady: () => world.onGrip?.() });
+  // open the grip: the bear on top goes flying, the further the more it was folded
+  function gripFold(n) {
+    const api = grip(); if (!api) return;
+    const was = api.fold;
+    if (n === 0 && was > 0) gripPlay.launch(was);
+    api.setFold(n); world.onGrip?.();
+  }
+  const gripTarget = { object: gripPlay.gripProxy, grab() {}, drag() {}, release() {}, tap() { const api = grip(); if (api) gripFold(api.fold ? 0 : 1); } };
   const LAYER = { pool: 'keyring', drops: null, grip: 'grip', magnet: 'magnets' };
   let focus = 'pool', grabbed = null, poolParts = null, toyLast = null, entered = false;
   dropsScene.root.visible = false;
   const POOL_VIEW = { center: { x: 0, z: -7.6 }, min: [-8.9, -1.75, -32.5], max: [8.9, 3.9, 16.1] };
   const DROPS_VIEW = { center: { x: LAP.x, z: LAP.z }, min: [LAP.x - LAP_W / 2 - .2, DECK_Y, LAP.z - LAP_D / 2 - .2], max: [LAP.x + LAP_W / 2 + .2, 2.6, LAP.z + LAP_D / 2 + .2] };
   const DROPS_DIR = new THREE.Vector3(29, 23, -15).normalize();
+  const GRIP_DIR = new THREE.Vector3(16, 19, 24).normalize();
+  const gripView = () => grip()?.phone
+    ? { center: { x: 0, y: DECK_Y + 3, z: -10 * GRIP_K }, min: [-40 * GRIP_K, DECK_Y, -86 * GRIP_K], max: [40 * GRIP_K, DECK_Y + 32 * GRIP_K, 66 * GRIP_K] }
+    : { center: { x: 0, y: DECK_Y + 26 * GRIP_K, z: 0 }, min: [-34 * GRIP_K, DECK_Y, -34 * GRIP_K], max: [34 * GRIP_K, DECK_Y + 62 * GRIP_K, 34 * GRIP_K] };
   bear.object.userData.noGrab = true;
   // Nothing of the table is drawn here, but a shadow-only ground keeps the bear grounded.
   const ground = new THREE.Mesh(new THREE.PlaneGeometry(90, 110), new THREE.ShadowMaterial({ opacity: .18 }));
@@ -85,7 +103,7 @@ export function createPoolIsland(scene, island) {
   const embedded = () => viewers.mode(LAYER[focus]) === 'embed';
   // the chain of the keyring can be picked up: the pointer is handed on to its viewer
   const chain = { grab() {}, drag(ray, camera, ndc) { keyring()?.api.pick()?.move(ndc.x, ndc.y); }, release() { keyring()?.api.pick()?.up(); } };
-  const camPos = new THREE.Vector3(), camQuat = new THREE.Quaternion();
+  const camPos = new THREE.Vector3(), camQuat = new THREE.Quaternion(), vp = new THREE.Matrix4(), place = new THREE.Matrix4(), offset = new THREE.Vector3();
   const world = {
     root, island, bear, dropsScene, viewers,
     // 'lane' (lane-mark tiles) or 'photo' (Prussian blue tiles in a black grid); switched from the bottom tab.
@@ -110,10 +128,14 @@ export function createPoolIsland(scene, island) {
       poolParts.visible = pool; dropsScene.root.visible = drops;
       if (entered) viewers.show(LAYER[focus]);
       if (bear.state === 'held') bear.release();
-      if (!pool && !drops) {
+      if (focus === 'grip') {
+        // the bear moves over to the grip
+        dropsScene.letGo(); bear.park(); gripPlay.enter();
+      } else if (!pool && !drops) {
         // product screens: the bear waits out of sight
-        dropsScene.letGo(); bear.park(); plush.sprite.visible = false; plush.shadow.visible = false;
+        dropsScene.letGo(); bear.park(); gripPlay.leave(); plush.sprite.visible = false; plush.shadow.visible = false;
       } else if (drops) {
+        gripPlay.leave();
         dropsScene.onEnter();   // the drops start over
         // the bear drops onto the sheet from where it was
         const at = bear.object.position;
@@ -121,6 +143,7 @@ export function createPoolIsland(scene, island) {
         toSheet(new THREE.Vector3(0, 1.5, 0), false);
       } else {
         // and plunges back into the pool
+        gripPlay.leave();
         const at = plush.proxy.position.clone();
         at.set(THREE.MathUtils.clamp(at.x, -WALL_X + 1.6, WALL_X - 1.6), 4.2, THREE.MathUtils.clamp(at.z, -WALL_Z + 1.8, WALL_Z - 1.8));
         dropsScene.letGo(); bear.launch(at, { x: 0, y: 0, z: 0 });
@@ -146,11 +169,24 @@ export function createPoolIsland(scene, island) {
         k.api.frame({ pos: [camPos.x / k.scale + k.cx, (camPos.y - DECK_Y) / k.scale, camPos.z / k.scale + k.cz], quat: camQuat.toArray(), fov: camera.fov, aspect: camera.aspect, near: camera.near / k.scale, far: camera.far / k.scale, offset: view, dt, ratio, sun: sun?.toArray() });
         return true;
       }
+      if (focus === 'grip') {
+        const api = grip(); if (!api) return false;
+        // scene → grip millimetres: the grip's centre at the island's centre, standing on the table
+        offset.set(0, DECK_Y, 0); poolGroup.localToWorld(offset);
+        place.makeScale(GRIP_K, GRIP_K, GRIP_K).setPosition(offset);
+        vp.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse).multiply(place);
+        camera.getWorldPosition(camPos).sub(offset).divideScalar(GRIP_K);
+        api.frame({ vp: vp.elements, cam: [camPos.x, camPos.y, camPos.z], dt, ratio, sun: sun?.toArray() });
+        return true;
+      }
       return false;
     },
-    get view() { return focus === 'drops' ? DROPS_VIEW : POOL_VIEW; },
-    get viewDirection() { return focus === 'drops' ? DROPS_DIR : undefined; },
-    get grabTargets() { return focus === 'pool' || focus === 'drops' ? world.grabTargets_ : []; },
+    // Grip Tok: fold (1 = one stage, 2 = all the way) or open (0), and the phone
+    gripFold, get gripState() { const api = grip(); return api ? { fold: api.fold, phone: api.phone } : null; },
+    gripPhone(on) { const api = grip(); if (!api) return; api.setPhone(on); world.onGrip?.(); },
+    get view() { return focus === 'drops' ? DROPS_VIEW : focus === 'grip' ? gripView() : POOL_VIEW; },
+    get viewDirection() { return focus === 'drops' ? DROPS_DIR : focus === 'grip' ? GRIP_DIR : undefined; },
+    get grabTargets() { return focus === 'pool' || focus === 'drops' ? world.grabTargets_ : focus === 'grip' ? [gripPlay.bearTarget, gripTarget] : []; },
     // nothing of ours under the pointer: maybe a part of the keyring's chain
     grabFallback(ndc) { return focus === 'pool' && keyring()?.api.pick()?.down(ndc.x, ndc.y) ? chain : null; },
     // the 물놀이 tray: which toys the bear has on, giving / taking one, and where the bear is
@@ -181,6 +217,7 @@ export function createPoolIsland(scene, island) {
     heightAt(x, z) { return inPool(x, z) ? surfaceHeight(x, z) : DECK_Y; },
     update(time, reducedMotion) {
       if (embedded()) return;
+      if (focus === 'grip') { const gdt = Math.min(.05, Math.max(0, time - (toyLast ?? time))); toyLast = time; gripPlay.update(time, gdt, reducedMotion); return; }
       const b = bear.update(time, reducedMotion, bearSurface);
       // thrown onto the sheet: from here on the water-drop scene moves the bear
       if (!dropsScene.active && bear.state === 'falling') {

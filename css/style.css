@@ -158,3 +158,16 @@ body.viewer-embed #scene{visibility:hidden}
 :root[data-mood=dark] .lamp-info p,:root[data-mood=dark] .lamp-height,:root[data-mood=dark] .lamp-side{color:#93968c}
 .light-panel{max-height:none}
 @media(max-width:480px){.lamp-body{gap:14px;padding:12px 14px 14px}.lamp-pad{width:132px;height:132px}.lamp-info p{display:none}}
+
+/* Grip Tok fold / open buttons, above the island counter */
+.grip-controls{position:absolute;left:50%;bottom:calc(100% + 58px);transform:translateX(-50%);display:flex;gap:6px;padding:6px;border:1px solid #e2dfd4;border-radius:40px;background:#fffdf6f2;box-shadow:0 8px 24px #2a2a2014;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);white-space:nowrap;z-index:3}
+.grip-controls[hidden]{display:none}
+.grip-controls button{font:inherit;font-size:12px;padding:7px 13px;border-radius:30px;border:1px solid #dcdccd;background:transparent;color:#3f4a36;cursor:pointer}
+.grip-controls button:hover{background:#eef0e4}
+.grip-controls button[aria-pressed=true]{background:#374731;border-color:#374731;color:#f3f0e8}
+.grip-controls .grip-open{font-weight:600}
+.grip-controls button:disabled{opacity:.5;cursor:default}
+:root[data-mood=dark] .grip-controls{background:#1b1d21f2;border-color:#33363c}
+:root[data-mood=dark] .grip-controls button{border-color:#3a3d44;color:#d4d1c6}
+:root[data-mood=dark] .grip-controls button[aria-pressed=true]{background:#33402d;border-color:#4c5d43;color:#eef3e4}
+@media(max-width:480px){.grip-controls{gap:3px;padding:4px}.grip-controls button{font-size:11px;padding:6px 9px}}

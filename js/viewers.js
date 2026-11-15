@@ -2,12 +2,12 @@ import * as THREE from 'three';
 
 // The products themselves are drawn by their own viewers (products/*.html, the brand's
 // product pages), each in a frame stacked with the 3D scene:
-//   keyring       – 'drive': drawn behind the (see-through) scene with the scene's own
-//                   camera, one frame at a time, so the swim bear plays on top of it
-//   grip, magnets – 'embed': shown over the scene and run themselves (turn, zoom, move parts)
+//   keyring, grip – 'drive': drawn behind the (see-through) scene with the scene's own
+//                   camera, one frame at a time, so the swim bear plays on top of them
+//   magnets       – 'embed': shown over the scene and run themselves (turn, zoom, move parts)
 const SOURCES = {
   keyring: ['products/keyring.html', 'drive', '수영장 레인 키링'],
-  grip: ['products/griptok.html', 'embed', '수영장 그립톡 3D 보기'],
+  grip: ['products/griptok.html', 'drive', '수영장 그립톡'],
   magnets: ['products/magnets.html', 'embed', '수영장 마그넷 세트 3D 보기'],
 };
 
@@ -47,7 +47,7 @@ export function createProductViewers() {
     const item = items[id] = { id, frame, mode, api: null, used: ++stamp };
     const poll = () => {
       let site = null; try { site = frame.contentWindow?.__site; } catch { /* cross-origin never happens here */ }
-      if (site?.ready) { item.api = site; frame.classList.add('ready'); paint(item); lift(item); } else setTimeout(poll, 150);
+      if (site?.ready) { item.api = site; frame.classList.add('ready'); paint(item); lift(item); if (shown === id) site.onShow?.(); } else setTimeout(poll, 150);
     };
     frame.addEventListener('load', poll);
     return item;
@@ -57,7 +57,7 @@ export function createProductViewers() {
     // which product is on screen (or none)
     show(id) {
       shown = id && SOURCES[id] ? id : null;
-      if (shown) { load(shown).used = ++stamp; trim(); }
+      if (shown) { const item = load(shown); item.used = ++stamp; item.api?.onShow?.(); trim(); }
       for (const key in items) items[key].frame.classList.toggle('on', key === shown);
       document.body.classList.toggle('viewer-embed', !!shown && SOURCES[shown][1] === 'embed');
     },

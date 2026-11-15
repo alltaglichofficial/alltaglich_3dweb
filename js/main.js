@@ -190,6 +190,9 @@ async function start() {
     const sub = poolWorld && poolWorld.focus !== 'pool' ? poolWorld.focus : poolWorld?.print === 'photo' ? 'prussian' : 'aquable';
     document.querySelectorAll('.pool-sub').forEach(el => { el.hidden = main !== 'pool'; if (el.dataset.sub) el.setAttribute('aria-pressed', String(main === 'pool' && el.dataset.sub === sub)); });
     const toysTab = document.querySelector('#toys-tab');
+    // Grip Tok: fold / open buttons
+    const gripBox = document.querySelector('#grip-controls'), gripHere = main === 'pool' && poolWorld?.focus === 'grip';
+    if (gripBox) { gripBox.hidden = !gripHere; if (gripHere) showGripState(); }
     const tray = document.querySelector('#toy-tray'), toysHere = main === 'pool' && poolWorld?.focus === 'pool';
     if (toysTab) { toysTab.hidden = !toysHere; if (!toysHere && tray) tray.hidden = true; toysTab.setAttribute('aria-pressed', String(!!tray && !tray.hidden)); }
     const worn = poolWorld?.toys ?? {};
@@ -263,6 +266,27 @@ async function start() {
 
   // 물놀이: the button opens a small inventory above it. Toys are dragged from there onto
   // the bear (it puts them on); dragging a worn toy away, or tapping it, takes it off.
+  function showGripState() {
+    const g = worlds.find(w => w.gripFold)?.gripState;
+    document.querySelectorAll('[data-grip]').forEach(b => {
+      const k = b.dataset.grip;
+      if (k === 'phone') { b.setAttribute('aria-pressed', String(!!g?.phone)); b.textContent = g?.phone ? '폰에서 떼기' : '폰에 부착'; }
+      else { b.setAttribute('aria-pressed', String(g ? g.fold === Number(k) : k === '0')); b.disabled = !g; }
+    });
+  }
+  {
+    const poolW = worlds.find(w => w.gripFold);
+    if (poolW) poolW.onGrip = showGripState;
+    document.querySelectorAll('[data-grip]').forEach(b => b.addEventListener('click', () => {
+      const k = b.dataset.grip, g = poolW?.gripState; if (!g) return;
+      if (k === 'phone') { poolW.gripPhone(!g.phone); resetCamera(); }
+      else {
+        const n = Number(k); poolW.gripFold(n);
+        document.querySelector('#status').textContent = n === 0 ? (g.fold === 2 ? '끝까지 접었다 펴서 수영곰이 멀리 날아갔어요!' : g.fold === 1 ? '한 단 접었다 펴서 수영곰이 살짝 튀어 올랐어요.' : '그립톡이 이미 펴져 있어요.') : n === 1 ? '그립을 한 단 접었어요. 펴면 수영곰이 살짝 튀어 올라요.' : '그립을 끝까지 접었어요. 펴면 수영곰이 멀리 날아가요!';
+      }
+      showGripState();
+    }));
+  }
   document.querySelector('#toys-tab')?.addEventListener('click', () => {
     const tray = document.querySelector('#toy-tray'); tray.hidden = !tray.hidden; updateIslandUI();
     document.querySelector('#status').textContent = tray.hidden ? '물놀이 용품을 넣어 두었어요.' : '튜브, 오리발, 킥판이에요. 끌어서 수영곰에게 주세요.';
@@ -316,7 +340,7 @@ async function start() {
     if (ISLANDS[islandIndex].id !== 'pool') selectIsland('pool', true);
     // Water Drop puts the laptop where the keyring was (same island, same bear)
     if (sub === 'drops') { pool.setFocus('drops'); resetCamera(); updateIslandUI(); document.querySelector('#status').textContent = '노트북 위로 물방울이 떨어져요. 수영곰이 건너가서 피해 다녀요.'; return; }
-    if (sub === 'grip' || sub === 'magnet') { pool.setFocus(sub); resetCamera(); updateIslandUI(); document.querySelector('#status').textContent = sub === 'grip' ? '맥세이프 그립톡이에요. 드래그로 돌려 보고, 그립을 접었다 펴 보세요.' : '스테인리스 스탠드에 붙인 수영장 자석들이에요. 끌어서 옮겨 보세요.'; return; }
+    if (sub === 'grip' || sub === 'magnet') { pool.setFocus(sub); resetCamera(); updateIslandUI(); document.querySelector('#status').textContent = sub === 'grip' ? '그립톡 위에서 수영곰이 헤엄쳐요. 그립을 접었다가 펴 보세요.' : '스테인리스 스탠드에 붙인 수영장 자석들이에요. 끌어서 옮겨 보세요.'; return; }
     const print = sub === 'prussian' ? 'photo' : 'lane';
     if (pool.print !== print) pool.setPrint(print);
     if (pool.focus !== 'pool') { pool.setFocus('pool'); resetCamera(); }

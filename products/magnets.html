@@ -51,6 +51,7 @@
   @media (max-width:560px){ .hint{ display:none; } header{ padding:16px 18px; } button{ padding:7px 10px; font-size:12.5px; min-height:32px; }
     .panel{ gap:6px; bottom:12px; } .group{ padding:3px; } .sel span{ font-size:11.5px; padding:0 4px 0 8px; } }
 </style>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nanum+Pen+Script&display=swap">
 <style>
 .site header,.site .hint,.site #film,.site #toFilm,.site #art,.site .label,.site .sun,.site .bar,.site #loading{display:none!important}
 .site-drive .panel{display:none!important}
@@ -565,6 +566,70 @@ const texMemoB=memoTex((x,S2)=>{ x.fillStyle='#6db3c6'; x.fillRect(0,0,S2,S2); }
 (function(){ const img=new Image(); img.onload=()=>{ const c=document.createElement('canvas'); c.width=c.height=768; c.getContext('2d').drawImage(img,0,0,768,768);
   gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D,texMemoB); gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,c); gl.generateMipmap(gl.TEXTURE_2D); dirty=true; };
   img.src='data:image/jpeg;base64,'+MEMO_B; })();
+/* ---------- 사이트: 아이보리 메모지에 수영곰의 오늘 수영 기록(손글씨) ---------- */
+const SWIM_LOG=(()=>{
+  const d=new Date(), day='일월화수목금토'[d.getDay()];
+  let s=d.getFullYear()*400+(d.getMonth()+1)*32+d.getDate();
+  const r=()=>(s=(s*16807)%2147483647)/2147483647, pick=a=>a[Math.floor(r()*a.length)];
+  const fr=pick([300,400,500]), bk=pick([100,150,200]), br=pick([100,150]), fly=pick([25,50]);
+  const total=fr+bk+br+fly, min=Math.round(total/21);
+  return { lines:[
+    {t:`${d.getMonth()+1}월 ${d.getDate()}일 (${day}) 오늘의 수영`, big:true},
+    {t:`자유형 ${fr}m`, note:pick(['물살이 좋았다!','쭉쭉 나감','숨쉬기 3번에 1번'])},
+    {t:`배영 ${bk}m`, note:pick(['천장 타일 셌다','코에 물 들어감 ㅠ','하늘 보며 둥둥'])},
+    {t:`평형 ${br}m`, note:pick(['개구리 발차기','천천히 길게'])},
+    {t:`접영 ${fly}m`, note:pick(['숨차다 ㅎㅎ','팔이 무거워…','멋있었을 듯'])},
+    {t:`총 ${total.toLocaleString()}m · ${min}분`, sum:true},
+    {t:pick(['다음엔 킥판 없이 50m!','내일은 오리발 끼고 쌩쌩','튜브 타고 쉬는 것도 수영!','턴 연습 10번 더 하기'])},
+    {t:'- 수영곰', sign:true} ] };
+})();
+let memoChars=1e9, memoTimer=0;
+function drawMemoA(x,S2,limit){ const u=S2/100;
+  x.fillStyle='#f6efdc'; x.fillRect(0,0,S2,S2);                                       // 아이보리
+  const g=x.createRadialGradient(S2*.5,S2*.45,S2*.1,S2*.5,S2*.5,S2*.75); g.addColorStop(0,'rgba(255,252,240,.5)'); g.addColorStop(1,'rgba(200,180,140,.12)'); x.fillStyle=g; x.fillRect(0,0,S2,S2);
+  x.strokeStyle='#8fbccb'; x.lineWidth=u*.5; x.lineCap='butt';
+  const L=y=>{ x.beginPath(); x.moveTo(8.6*u,y*u); x.lineTo(91.2*u,y*u); x.stroke(); };
+  L(7.7); L(9.3); for(let i=0;i<8;i++) L(18.3+i*9.09);
+  x.strokeStyle='#d07a6f'; x.beginPath(); x.moveTo(25.6*u,9.6*u); x.lineTo(25.6*u,81.9*u); x.stroke();
+  x.fillStyle='#6aa9b9'; x.textAlign='center'; x.textBaseline='alphabetic';
+  let fs=10*u; x.font=`400 ${fs}px "Helvetica Neue",Helvetica,Arial,sans-serif`;
+  fs*=22.5*u/x.measureText('Alltäglich').width; x.font=`400 ${fs}px "Helvetica Neue",Helvetica,Arial,sans-serif`;
+  x.fillText('Alltäglich',49.6*u,92.6*u);
+  // 손글씨: 파란 볼펜, 줄마다 살짝 기울고 흔들림
+  const HAND='"Nanum Pen Script","Gaegu","Comic Sans MS",cursive';
+  let left=limit; x.textAlign='left'; x.textBaseline='alphabetic';
+  SWIM_LOG.lines.forEach((ln,i)=>{ if(left<=0) return;
+    const base=(18.3+i*9.09-1.3)*u, tilt=((i*37)%7-3)*.004;
+    x.save(); x.translate(28*u, base); x.rotate(tilt);
+    x.fillStyle=ln.sign?'#2b4f8f':'#24447e';
+    let size=(ln.big?7.4:ln.sign?7.8:7)*u; x.font=`${size}px ${HAND}`;
+    const full=ln.t+(ln.note?'   '+ln.note:''), part=[...full].slice(0,left).join(''); left-=[...full].length;
+    { const room=(ln.sign?30:62)*u, w=x.measureText(full).width; if(w>room){ size*=room/w; x.font=`${size}px ${HAND}`; } }   // 줄 끝을 넘지 않게
+    if(ln.sign){ x.textAlign='right'; x.fillText(part,52*u,0); }
+    else if(ln.note&&part.length>ln.t.length){ x.fillText(ln.t,0,0); const w=x.measureText(ln.t+'   ').width;
+      x.fillStyle='#4a6aa0'; x.font=`${size*.86}px ${HAND}`; x.fillText(part.slice(ln.t.length+3),w,0); }
+    else x.fillText(part,0,0);
+    if(ln.sum&&part.length===ln.t.length){ const w=x.measureText(ln.t).width; x.strokeStyle='#e0806e'; x.lineWidth=u*.55; x.beginPath(); x.moveTo(-.5*u,1.2*u); x.quadraticCurveTo(w*.5,2.2*u,w+u,.9*u); x.stroke(); }   // 밑줄
+    x.restore();
+    // 여백 칸: 종목 줄마다 체크 표시
+    if(i>=1&&i<=4&&part.length){ x.save(); x.strokeStyle='#24447e'; x.lineWidth=u*.55; x.lineCap='round'; x.lineJoin='round';
+      const cx=18*u, cy=base-2.4*u; x.beginPath(); x.moveTo(cx-2*u,cy); x.lineTo(cx-.6*u,cy+1.6*u); x.lineTo(cx+2.4*u,cy-2.2*u); x.stroke(); x.restore(); }
+    // 서명 옆 작은 곰 얼굴
+    if(ln.sign&&part.length===full.length){ x.save(); x.strokeStyle='#2b4f8f'; x.lineWidth=u*.5; const bx=86*u, by=base-2.6*u;
+      for(const [ex,er] of [[-2.6,1.3],[2.6,1.3]]){ x.beginPath(); x.arc(bx+ex*u,by-2.6*u,er*u,0,Math.PI*2); x.stroke(); }
+      x.beginPath(); x.arc(bx,by,3.6*u,0,Math.PI*2); x.stroke();
+      x.fillStyle='#2b4f8f'; for(const ex of [-1.2,1.2]){ x.beginPath(); x.arc(bx+ex*u,by-.5*u,.45*u,0,Math.PI*2); x.fill(); }
+      x.beginPath(); x.arc(bx,by+1.1*u,.6*u,0,Math.PI*2); x.fill(); x.restore(); }
+  });
+}
+const memoCanvas=document.createElement('canvas'); memoCanvas.width=memoCanvas.height=768;
+function paintMemoA(limit){ const c=memoCanvas, x=c.getContext('2d'); x.clearRect(0,0,768,768); drawMemoA(x,768,limit);
+  gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D,texMemoA); gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,c); gl.generateMipmap(gl.TEXTURE_2D); dirty=true; }
+// 수영곰이 한 글자씩 적어 내려가는 것처럼
+function writeMemo(){ clearInterval(memoTimer); let n=0; const total=SWIM_LOG.lines.reduce((a,l)=>a+[...l.t].length+(l.note?3+[...l.note].length:0),0);
+  if(matchMedia('(prefers-reduced-motion: reduce)').matches){ paintMemoA(1e9); return; }
+  memoTimer=setInterval(()=>{ n+=2; paintMemoA(n); if(n>=total) clearInterval(memoTimer); },90); }
+if(window.SITE){ setTimeout(()=>paintMemoA(1e9)); document.fonts?.load('40px "Nanum Pen Script"','오늘의 수영 기록').then(()=>paintMemoA(1e9)).catch(()=>{}); }
 const pin=mesh(lathe([[1.8,0],[1.8,2.85],[1.68,3.0],[0,3.0]],48));               // 메모지를 누르는 원통 자석(지름 3.6 · 높이 3 mm)
 const ground=mesh({pos:[-900,0,-900, 900,0,-900, 900,0,900, -900,0,900],nor:[0,1,0,0,1,0,0,1,0,0,1,0],idx:[0,1,2,0,2,3]});
 
@@ -791,7 +856,7 @@ resize(); Object.assign(S,Tg);
 if(window.SITE){   // inside the site: on the A stand, seen at an angle
   bStand.click(); setView('angle'); applyView(); Object.assign(S,Tg);
   const A0=Tg.az;
-  window.__site={ ready:true, setLight(az,el){ const a=A0+az*Math.PI/180, e=el*Math.PI/180; L[0]=Math.sin(a)*Math.cos(e); L[1]=Math.sin(e); L[2]=Math.cos(a)*Math.cos(e); dirty=true; },  setBG(c){ BG[0]=c[0]; BG[1]=c[1]; BG[2]=c[2]; dirty=true; }, reset(){ wrapAz(); setView('angle'); applyView(); } };
+  window.__site={ ready:true, onShow(){ writeMemo(); }, setLight(az,el){ const a=A0+az*Math.PI/180, e=el*Math.PI/180; L[0]=Math.sin(a)*Math.cos(e); L[1]=Math.sin(e); L[2]=Math.cos(a)*Math.cos(e); dirty=true; },  setBG(c){ BG[0]=c[0]; BG[1]=c[1]; BG[2]=c[2]; dirty=true; }, reset(){ wrapAz(); setView('angle'); applyView(); } };
 }
 requestAnimationFrame(frame);
 
