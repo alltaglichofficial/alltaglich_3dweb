@@ -60,28 +60,14 @@ async function start() {
     try { renderer.compileAsync(scene, camera).catch(() => {}); } catch {}
     worlds.forEach((w, i) => { w.root.visible = shown[i]; });
   }
-  // Lighting: the lamp-lit studio or a dark room (the moon button), and the key lamp can
-  // be moved round the island from the light button. ?mood=dark opens straight in it.
-  const moodButton = document.querySelector('#moodToggle');
-  const store = { get(k) { try { return localStorage.getItem(k); } catch { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch { /* private mode: not remembered */ } } };
+  // Lighting: one lamp-lit room; the key lamp can be moved round the island from the light button.
   function setMood(name) {
     scene.background = sceneBackground;
     lighting.setMood(name, worlds);
     worlds.forEach(w => w.viewers?.setBackground(sceneBackground));
-    const dark = lighting.ui === 'dark';
-    moodButton.setAttribute('aria-pressed', String(dark));
-    moodButton.setAttribute('aria-label', dark ? '밝은 조명으로 바꾸기' : '어두운 방 분위기로 바꾸기');
-    moodButton.title = moodButton.getAttribute('aria-label');
-    document.querySelector('meta[name=theme-color]')?.setAttribute('content', dark ? '#0f1013' : '#f3f0e8');
     return lighting.mood;
   }
-  const askedMood = new URLSearchParams(location.search).get('mood') || store.get('alltaglich-mood');
-  setMood(askedMood === 'dark' ? 'dark' : 'lamp');
-  moodButton.addEventListener('click', () => {
-    const mood = setMood(lighting.ui === 'dark' ? 'lamp' : 'dark');
-    store.set('alltaglich-mood', mood);
-    document.querySelector('#status').textContent = mood === 'dark' ? '어두운 방에서 조명 하나만 켠 분위기예요.' : '부드러운 실내 조명으로 밝혔어요.';
-  });
+  setMood('lamp');
   // The lamp pad: a top view of the island. The dot is the lamp — round the rim it is low,
   // in the middle straight overhead; the bottom of the pad is the camera's side.
   const lightPanel = document.querySelector('#light-panel'), pad = document.querySelector('#lamp-pad'), dot = document.querySelector('#lamp-dot');
@@ -204,7 +190,7 @@ async function start() {
     const here = worlds[islandIndex];
     document.querySelector('#island-eyebrow').textContent = island.english;
     document.querySelector('#island-name').textContent = island.label;
-    document.querySelector('#island-number').textContent = island.number;
+    document.documentElement.style.setProperty('--island', island.accent);
     const mains = ISLANDS.filter(i => !i.partOf), at = mains.findIndex(i => i.id === main);
     document.querySelector('#prevIsland').setAttribute('aria-label', `${mains[(at + 2) % 3].label} 섬으로 이동`);
     document.querySelector('#nextIsland').setAttribute('aria-label', `${mains[(at + 1) % 3].label} 섬으로 이동`);

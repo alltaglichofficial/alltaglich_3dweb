@@ -1,15 +1,13 @@
 import * as THREE from 'three';
 
 // Indoor lamp lighting: a warm key lamp with a soft penumbra that casts the shadows,
-// a dim cool fill lamp from the other side and a low room bounce. Two rooms — the bright
-// studio ('lamp') and a dark room ('dark') — and the key lamp can be moved anywhere
+// a dim cool fill lamp from the other side and a low room bounce. The key lamp can be moved anywhere
 // round the island (setLamp):
 //   az  degrees round the island, seen from the camera's home position:
 //       0 = from the camera, + = camera right, - = camera left, 180 = behind the island
 //   el  height above the table in degrees (90 = straight overhead)
 const ROOMS = {
-  lamp: { ui: 'lamp', background: 0xefebe3, room: [0xfff6ea, 0x9a958a, 1.55], key: { c: 0xffe8cc, i: 2.6, ang: .85, pen: .5 }, fill: .6, exposure: .97, shadow: .14, reflections: 1 },
-  dark: { ui: 'dark', background: 0x0f1013, room: [0xa4acbd, 0x2b2b31, .5], key: { c: 0xffe8cc, i: 3.3, ang: .62, pen: 1 }, fill: .4, exposure: .9, shadow: .45, reflections: .38 },
+  lamp: { ui: 'lamp', background: 0xfafafa, room: [0xfff6ea, 0x9a958a, 1.55], key: { c: 0xffe8cc, i: 2.6, ang: .85, pen: .5 }, fill: .6, exposure: .97, shadow: .14, reflections: 1 },
 };
 export const MOOD_NAMES = Object.keys(ROOMS);
 // where the key lamp starts: up and to the left of the camera
@@ -28,7 +26,7 @@ export function createLighting(scene, renderer, { coarse = false } = {}) {
   scene.add(key, key.target);
   // Fill lamp from the other side; no shadows.
   const fill = new THREE.SpotLight(0xdfe9ff, .5, 0, .75, 1, 0); scene.add(fill, fill.target);
-  const floor = new THREE.Mesh(new THREE.PlaneGeometry(300, 300), new THREE.ShadowMaterial({ color: 0x2b2a26, opacity: .14 }));
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(300, 300), new THREE.ShadowMaterial({ color: 0x000000, opacity: .12 }));
   floor.rotation.x = -Math.PI / 2; floor.position.y = -1.64; floor.receiveShadow = true; scene.add(floor);
   scene.background = new THREE.Color();
 
