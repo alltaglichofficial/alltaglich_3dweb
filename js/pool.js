@@ -5,6 +5,7 @@ import { createPoolGear } from './gear.js';
 import { createDropletIsland } from './drops.js';
 import { createProductViewers } from './viewers.js';
 import { createGripPlay } from './gripplay.js';
+import { createMagnetPlay } from './magnetplay.js';
 
 // Swim island. The products are drawn by their own viewers (see viewers.js), stacked
 // with this scene; what lives here is everything that plays on them:
@@ -13,7 +14,7 @@ import { createGripPlay } from './gripplay.js';
 //   Water Drop – drawn here, not by a viewer: drops fall onto a closed laptop (drops.js)
 //       and the bear dodges them
 //   Grip Tok – the grip on the table; the bear swims on its top and is flung up when it opens
-//   Magnet – the magnet viewer alone (turn it, move the magnets); the memo is the bear's swim log
+//   Magnet – the A stand with its magnets; the bear climbs it and writes its swim log on the memo
 // The keyring's resin block is 30 × 46.4 mm; here it is WALL_X × WALL_Z (half sizes).
 const DECK_Y = -1.6, WALL_X = 5.6, WALL_Z = 8.654, UNIT = WALL_X / 15;   // world units per millimetre
 
@@ -86,6 +87,13 @@ export function createPoolIsland(scene, island) {
     api.setFold(n); world.onGrip?.();
   }
   const gripTarget = { object: gripPlay.gripProxy, grab() {}, drag() {}, release() {}, tap() { const api = grip(); if (api) gripFold(api.fold ? 0 : 1); } };
+  // Magnet: the stand at the island's centre, MAG_K world units per millimetre (the bear is about 40 mm tall)
+  const MAG_K = plush.height / 40;
+  const magnets = () => viewers.api('magnets');
+  const magnetPlay = createMagnetPlay(poolGroup, { plush, groundY: DECK_Y, K: MAG_K, site: magnets });
+  // the magnets can be slid about the stand: the pointer is handed on to its viewer
+  const toMM = (ray, out) => { offset.set(0, DECK_Y, 0); poolGroup.localToWorld(offset); return { o: ray.origin.clone().sub(offset).divideScalar(MAG_K).toArray(), d: ray.direction.toArray() }; };
+  const magnetDrag = { grab() {}, drag(ray) { const r = toMM(ray); magnets()?.pointer.move(r.o, r.d); }, release() { magnets()?.pointer.up(); } };
   const LAYER = { pool: 'keyring', drops: null, grip: 'grip', magnet: 'magnets' };
   let focus = 'pool', grabbed = null, poolParts = null, toyLast = null, entered = false;
   dropsScene.root.visible = false;
@@ -93,6 +101,8 @@ export function createPoolIsland(scene, island) {
   const DROPS_VIEW = { center: { x: LAP.x, z: LAP.z }, min: [LAP.x - LAP_W / 2 - .2, DECK_Y, LAP.z - LAP_D / 2 - .2], max: [LAP.x + LAP_W / 2 + .2, 2.6, LAP.z + LAP_D / 2 + .2] };
   const DROPS_DIR = new THREE.Vector3(29, 23, -15).normalize();
   const GRIP_DIR = new THREE.Vector3(16, 19, 24).normalize();
+  const MAGNET_DIR = new THREE.Vector3(14, 12, 30).normalize();
+  const MAGNET_VIEW = { center: { x: 0, y: DECK_Y + 80 * MAG_K, z: 15 * MAG_K }, min: [-75 * MAG_K, DECK_Y, -45 * MAG_K], max: [75 * MAG_K, DECK_Y + 175 * MAG_K, 100 * MAG_K] };
   const gripView = () => grip()?.phone
     ? { center: { x: 0, y: DECK_Y + 3, z: -10 * GRIP_K }, min: [-40 * GRIP_K, DECK_Y, -86 * GRIP_K], max: [40 * GRIP_K, DECK_Y + 32 * GRIP_K, 66 * GRIP_K] }
     : { center: { x: 0, y: DECK_Y + 26 * GRIP_K, z: 0 }, min: [-34 * GRIP_K, DECK_Y, -34 * GRIP_K], max: [34 * GRIP_K, DECK_Y + 62 * GRIP_K, 34 * GRIP_K] };
@@ -128,7 +138,11 @@ export function createPoolIsland(scene, island) {
       poolParts.visible = pool; dropsScene.root.visible = drops;
       if (entered) viewers.show(LAYER[focus]);
       if (bear.state === 'held') bear.release();
-      if (focus === 'grip') {
+      if (focus !== 'magnet') magnetPlay.leave();
+      if (focus === 'magnet') {
+        // the bear goes to write its swim log
+        dropsScene.letGo(); bear.park(); gripPlay.leave(); magnetPlay.enter();
+      } else if (focus === 'grip') {
         // the bear moves over to the grip
         dropsScene.letGo(); bear.park(); gripPlay.enter();
       } else if (!pool && !drops) {
@@ -169,6 +183,15 @@ export function createPoolIsland(scene, island) {
         k.api.frame({ pos: [camPos.x / k.scale + k.cx, (camPos.y - DECK_Y) / k.scale, camPos.z / k.scale + k.cz], quat: camQuat.toArray(), fov: camera.fov, aspect: camera.aspect, near: camera.near / k.scale, far: camera.far / k.scale, offset: view, dt, ratio, sun: sun?.toArray() });
         return true;
       }
+      if (focus === 'magnet') {
+        const api = magnets(); if (!api) return false;
+        offset.set(0, DECK_Y, 0); poolGroup.localToWorld(offset);
+        place.makeScale(MAG_K, MAG_K, MAG_K).setPosition(offset);
+        vp.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse).multiply(place);
+        camera.getWorldPosition(camPos).sub(offset).divideScalar(MAG_K);
+        api.frame({ vp: vp.elements, cam: [camPos.x, camPos.y, camPos.z], ratio, sun: sun?.toArray() });
+        return true;
+      }
       if (focus === 'grip') {
         const api = grip(); if (!api) return false;
         // scene → grip millimetres: the grip's centre at the island's centre, standing on the table
@@ -184,11 +207,14 @@ export function createPoolIsland(scene, island) {
     // Grip Tok: fold (1 = one stage, 2 = all the way) or open (0), and the phone
     gripFold, get gripState() { const api = grip(); return api ? { fold: api.fold, phone: api.phone } : null; },
     gripPhone(on) { const api = grip(); if (!api) return; api.setPhone(on); world.onGrip?.(); },
-    get view() { return focus === 'drops' ? DROPS_VIEW : focus === 'grip' ? gripView() : POOL_VIEW; },
-    get viewDirection() { return focus === 'drops' ? DROPS_DIR : focus === 'grip' ? GRIP_DIR : undefined; },
-    get grabTargets() { return focus === 'pool' || focus === 'drops' ? world.grabTargets_ : focus === 'grip' ? [gripPlay.bearTarget, gripTarget] : []; },
+    get view() { return focus === 'drops' ? DROPS_VIEW : focus === 'grip' ? gripView() : focus === 'magnet' ? MAGNET_VIEW : POOL_VIEW; },
+    get viewDirection() { return focus === 'drops' ? DROPS_DIR : focus === 'grip' ? GRIP_DIR : focus === 'magnet' ? MAGNET_DIR : undefined; },
+    get grabTargets() { return focus === 'pool' || focus === 'drops' ? world.grabTargets_ : focus === 'grip' ? [gripPlay.bearTarget, gripTarget] : focus === 'magnet' ? [magnetPlay.target] : []; },
     // nothing of ours under the pointer: maybe a part of the keyring's chain
-    grabFallback(ndc) { return focus === 'pool' && keyring()?.api.pick()?.down(ndc.x, ndc.y) ? chain : null; },
+    grabFallback(ndc, ray) {
+      if (focus === 'magnet' && ray) { const r = toMM(ray); return magnets()?.pointer.down(r.o, r.d) ? magnetDrag : null; }
+      return focus === 'pool' && keyring()?.api.pick()?.down(ndc.x, ndc.y) ? chain : null;
+    },
     // the 물놀이 tray: which toys the bear has on, giving / taking one, and where the bear is
     get toys() { return { ...toys.gear }; },
     giveToy(key, on) { toys.set(key, on); },
@@ -217,6 +243,7 @@ export function createPoolIsland(scene, island) {
     heightAt(x, z) { return inPool(x, z) ? surfaceHeight(x, z) : DECK_Y; },
     update(time, reducedMotion) {
       if (embedded()) return;
+      if (focus === 'magnet') { const mdt = Math.min(.05, Math.max(0, time - (toyLast ?? time))); toyLast = time; magnetPlay.update(time, mdt, reducedMotion); return; }
       if (focus === 'grip') { const gdt = Math.min(.05, Math.max(0, time - (toyLast ?? time))); toyLast = time; gripPlay.update(time, gdt, reducedMotion); return; }
       const b = bear.update(time, reducedMotion, bearSurface);
       // thrown onto the sheet: from here on the water-drop scene moves the bear

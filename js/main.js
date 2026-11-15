@@ -340,7 +340,7 @@ async function start() {
     if (ISLANDS[islandIndex].id !== 'pool') selectIsland('pool', true);
     // Water Drop puts the laptop where the keyring was (same island, same bear)
     if (sub === 'drops') { pool.setFocus('drops'); resetCamera(); updateIslandUI(); document.querySelector('#status').textContent = '노트북 위로 물방울이 떨어져요. 수영곰이 건너가서 피해 다녀요.'; return; }
-    if (sub === 'grip' || sub === 'magnet') { pool.setFocus(sub); resetCamera(); updateIslandUI(); document.querySelector('#status').textContent = sub === 'grip' ? '그립톡 위에서 수영곰이 헤엄쳐요. 그립을 접었다가 펴 보세요.' : '스테인리스 스탠드에 붙인 수영장 자석들이에요. 끌어서 옮겨 보세요.'; return; }
+    if (sub === 'grip' || sub === 'magnet') { pool.setFocus(sub); resetCamera(); updateIslandUI(); document.querySelector('#status').textContent = sub === 'grip' ? '그립톡 위에서 수영곰이 헤엄쳐요. 그립을 접었다가 펴 보세요.' : '수영곰이 스탠드를 올라가 오늘의 수영 기록을 적어요. 자석은 끌어서 옮길 수 있어요.'; return; }
     const print = sub === 'prussian' ? 'photo' : 'lane';
     if (pool.print !== print) pool.setPrint(print);
     if (pool.focus !== 'pool') { pool.setFocus('pool'); resetCamera(); }
@@ -377,7 +377,7 @@ async function start() {
       if (hit && (!best || hit.distance < best.hit.distance)) best = { t, hit };
     }
     // nothing of the scene's: the island may hand the pointer on (the keyring's chain)
-    if (!best) { const t = world.grabFallback?.(pointer); if (!t) return; best = { t, hit: { object: null, point: null } }; }
+    if (!best) { const t = world.grabFallback?.(pointer, raycaster.ray); if (!t) return; best = { t, hit: { object: null, point: null } }; }
     best.t.hitObject = best.hit.object;
     if (best.t.grab(best.hit.point, camera) === false) return;
     event.stopImmediatePropagation(); event.preventDefault();
