@@ -60,6 +60,7 @@ export function createPoolIsland(scene, island) {
   const plush = replaceWithPlush(poolGroup, bear.object, 'swim');
   // half under the water while it swims, with ripples and a wake
   const poolWater = createWaterline(poolGroup, plush);
+  bear.parts.rings.forEach(r => r.removeFromParent());   // (the old ring ripples: splashes instead)
   let waterLast = null;
   // Water Drop stands where the pool stands: choosing it puts the keyring away and brings
   // the laptop out in its place (and back again). It is the same swim bear in both.
