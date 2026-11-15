@@ -15,7 +15,20 @@ const SOURCES = {
 export function createProductViewers() {
   const layer = document.querySelector('#viewers');
   const items = {}, background = new THREE.Color(0xefebe3);
-  let shown = null;
+  let shown = null, stamp = 0;
+  // A browser only allows so many 3D canvases at once (about 8 on phones, 16 on desktops),
+  // and the bears use several. Past the limit it drops the oldest one — which can be the
+  // scene itself. So only the viewers in use are kept; the others are let go completely.
+  const KEEP = matchMedia('(pointer: coarse)').matches ? 1 : 2;
+  function unload(id) {
+    const item = items[id]; if (!item) return;
+    try { item.frame.contentDocument?.querySelector('canvas#gl')?.getContext('webgl2')?.getExtension('WEBGL_lose_context')?.loseContext(); } catch { /* already gone */ }
+    item.frame.remove(); delete items[id];
+  }
+  function trim() {
+    const others = Object.values(items).filter(item => item.id !== shown).sort((a, b) => b.used - a.used);
+    for (const item of others.slice(Math.max(0, KEEP - (shown ? 1 : 0)))) unload(item.id);
+  }
   // (getHexString gives the display colour, which is what the viewers work in)
   const paint = item => {
     if (!item.api) return;
@@ -25,13 +38,13 @@ export function createProductViewers() {
   const lift = item => { try { item.frame.contentDocument?.documentElement.style.setProperty('--site-bottom', `${bottom}px`); } catch { /* not loaded yet */ } };
   let bottom = 150;
   function load(id) {
-    if (items[id] || !layer || !SOURCES[id]) return items[id];
+    if (items[id] || !layer || !SOURCES[id]) return items[id] ?? {};
     const [src, mode, title] = SOURCES[id];
     const frame = document.createElement('iframe');
     frame.className = mode; frame.title = title; frame.src = `${src}?site=${mode}&bg=${background.getHexString()}`;
     if (mode === 'drive') { frame.setAttribute('aria-hidden', 'true'); frame.tabIndex = -1; }
     layer.appendChild(frame);
-    const item = items[id] = { id, frame, mode, api: null };
+    const item = items[id] = { id, frame, mode, api: null, used: ++stamp };
     const poll = () => {
       let site = null; try { site = frame.contentWindow?.__site; } catch { /* cross-origin never happens here */ }
       if (site?.ready) { item.api = site; frame.classList.add('ready'); paint(item); lift(item); } else setTimeout(poll, 150);
@@ -44,7 +57,7 @@ export function createProductViewers() {
     // which product is on screen (or none)
     show(id) {
       shown = id && SOURCES[id] ? id : null;
-      if (shown) load(shown);
+      if (shown) { load(shown).used = ++stamp; trim(); }
       for (const key in items) items[key].frame.classList.toggle('on', key === shown);
       document.body.classList.toggle('viewer-embed', !!shown && SOURCES[shown][1] === 'embed');
     },

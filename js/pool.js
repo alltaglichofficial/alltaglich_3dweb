@@ -21,8 +21,8 @@ export function createPoolIsland(scene, island) {
   // ---- the keyring viewer: where its block is (viewer millimetres) and how high its waves stand
   let ring = null;   // { api, cx, cz, scale, grid }
   const keyring = () => {
-    if (ring) return ring;
-    const api = viewers.api('keyring'); if (!api) return null;
+    const api = viewers.api('keyring'); if (!api) { ring = null; return null; }
+    if (ring?.api === api) return ring;   // (a viewer that was let go and loaded again is a new one)
     const b = api.box, scale = WALL_X * 2 / (b.maxX - b.minX);
     ring = { api, cx: (b.minX + b.maxX) / 2, cz: (b.minZ + b.maxZ) / 2, scale, grid: api.grid, top: b.top };
     api.setPrint(world.print === 'photo' ? 'prussian' : 'lane');
@@ -64,9 +64,10 @@ export function createPoolIsland(scene, island) {
   const overSheet = (x, z) => Math.abs(x - LAP.x) <= LAP_W / 2 && Math.abs(z - LAP.z) <= LAP_D / 2;
   const toSheet = (velocity, flying) => { dropsScene.receive(poolGroup.localToWorld(bear.object.position.clone()), velocity, flying); bear.park(); };
   // which of the viewer's drops is which of ours (nearest centre), worked out once it has loaded
-  let dropMap = null; const dropAmounts = new Float32Array(dropsScene.spots.length), viewerAmounts = [];
+  let dropMap = null, dropApi = null; const dropAmounts = new Float32Array(dropsScene.spots.length), viewerAmounts = [];
   const waterdrop = () => {
     const api = viewers.api('waterdrop'); if (!api) return null;
+    if (dropApi !== api) { dropApi = api; dropMap = null; }
     if (!dropMap) dropMap = api.drops.map(([x, z]) => { let best = 0, bd = 1e9; dropsScene.spots.forEach(([sx, sz], i) => { const d = Math.hypot(sx - x, sz - z); if (d < bd) { bd = d; best = i; } }); return best; });
     return api;
   };
