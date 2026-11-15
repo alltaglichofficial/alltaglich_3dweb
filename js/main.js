@@ -3,7 +3,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { createWorld } from './world.js';
 import { ISLANDS } from './islands.js';
 import { setPlushCamera } from './plush.js';
-import { createLighting, LIGHTS } from './lighting.js';
+import { createLighting, LAMP_HOME } from './lighting.js';
 
 const loading = document.querySelector('#load-state');
 const errorPanel = document.querySelector('#error-state');
@@ -59,54 +59,63 @@ async function start() {
     try { renderer.compileAsync(scene, camera).catch(() => {}); } catch {}
     worlds.forEach((w, i) => { w.root.visible = shown[i]; });
   }
-  // Lighting: the lamp-lit studio, a dark room, or one of 34 photographic
-  // set-ups from the picker. ?mood=dark (or ?mood=rembrandt ...) opens straight in it.
+  // Lighting: the lamp-lit studio or a dark room (the moon button), and the key lamp can
+  // be moved round the island from the light button. ?mood=dark opens straight in it.
   const moodButton = document.querySelector('#moodToggle');
-  const lightPanel = document.querySelector('#light-panel'), lightName = document.querySelector('#light-name');
-  const storedMood = () => { try { return localStorage.getItem('alltaglich-mood'); } catch { return null; } };
-  for (const light of LIGHTS) {
-    const button = document.createElement('button');
-    button.type = 'button'; button.dataset.light = light.id; button.title = light.en;
-    button.innerHTML = `<b>${light.no ? String(light.no).padStart(2, '0') : '·'}</b><span>${light.ko}</span>`;
-    document.querySelector('#light-list').appendChild(button);
-  }
+  const store = { get(k) { try { return localStorage.getItem(k); } catch { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch { /* private mode: not remembered */ } } };
   function setMood(name) {
     scene.background = sceneBackground;
-    const mood = lighting.setMood(name, worlds);
+    lighting.setMood(name, worlds);
     worlds.forEach(w => w.viewers?.setBackground(sceneBackground));
     const dark = lighting.ui === 'dark';
     moodButton.setAttribute('aria-pressed', String(dark));
     moodButton.setAttribute('aria-label', dark ? '밝은 조명으로 바꾸기' : '어두운 방 분위기로 바꾸기');
     moodButton.title = moodButton.getAttribute('aria-label');
-    document.querySelectorAll('[data-light]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.light === mood)));
-    lightName.textContent = lighting.label;
     document.querySelector('meta[name=theme-color]')?.setAttribute('content', dark ? '#0f1013' : '#f3f0e8');
-    return mood;
+    return lighting.mood;
   }
-  function chooseMood(name, message) {
-    const mood = setMood(name);
-    try { localStorage.setItem('alltaglich-mood', mood); } catch { /* private mode: mood just isn't remembered */ }
-    document.querySelector('#status').textContent = message || `조명을 ${lighting.label}(으)로 바꿨어요.`;
-    return mood;
-  }
-  setMood(new URLSearchParams(location.search).get('mood') || storedMood() || 'lamp');
+  const askedMood = new URLSearchParams(location.search).get('mood') || store.get('alltaglich-mood');
+  setMood(askedMood === 'dark' ? 'dark' : 'lamp');
   moodButton.addEventListener('click', () => {
-    const mood = lighting.ui === 'dark' ? 'lamp' : 'dark';
-    chooseMood(mood, mood === 'dark' ? '어두운 방에서 조명 하나만 켠 분위기예요.' : '부드러운 실내 조명으로 밝혔어요.');
+    const mood = setMood(lighting.ui === 'dark' ? 'lamp' : 'dark');
+    store.set('alltaglich-mood', mood);
+    document.querySelector('#status').textContent = mood === 'dark' ? '어두운 방에서 조명 하나만 켠 분위기예요.' : '부드러운 실내 조명으로 밝혔어요.';
   });
-  document.querySelector('#light-list').addEventListener('click', event => {
-    const button = event.target.closest('[data-light]'); if (button) chooseMood(button.dataset.light);
+  // The lamp pad: a top view of the island. The dot is the lamp — round the rim it is low,
+  // in the middle straight overhead; the bottom of the pad is the camera's side.
+  const lightPanel = document.querySelector('#light-panel'), pad = document.querySelector('#lamp-pad'), dot = document.querySelector('#lamp-dot');
+  const heightInput = document.querySelector('#lamp-height');
+  const LOW = 12, SPAN = 90 - LOW;
+  function setLamp(az, el, save = true) {
+    const lamp = lighting.setLamp(az, el);
+    const r = (90 - lamp.el) / SPAN, a = THREE.MathUtils.degToRad(lamp.az);
+    dot.style.left = `${50 + Math.sin(a) * r * 50}%`; dot.style.top = `${50 + Math.cos(a) * r * 50}%`;
+    heightInput.value = String(Math.round(lamp.el));
+    const side = Math.abs(lamp.az) < 25 ? '앞' : Math.abs(lamp.az) > 155 ? '뒤' : lamp.az > 0 ? '오른쪽' : '왼쪽';
+    document.querySelector('#lamp-where').textContent = `${side} · 높이 ${Math.round(lamp.el)}°`;
+    pad.setAttribute('aria-valuetext', `${side}, 높이 ${Math.round(lamp.el)}도`);
+    worlds.forEach(w => w.viewers?.setLight(lamp.az, lamp.el));
+    if (save) store.set('alltaglich-lamp', JSON.stringify(lamp));
+  }
+  {
+    let saved = null; try { saved = JSON.parse(store.get('alltaglich-lamp')); } catch { /* none yet */ }
+    setLamp(Number.isFinite(saved?.az) ? saved.az : LAMP_HOME.az, Number.isFinite(saved?.el) ? saved.el : LAMP_HOME.el, false);
+  }
+  const padPoint = event => {
+    const r = pad.getBoundingClientRect(), dx = (event.clientX - r.left) / r.width * 2 - 1, dy = (event.clientY - r.top) / r.height * 2 - 1;
+    setLamp(THREE.MathUtils.radToDeg(Math.atan2(dx, dy)), 90 - Math.min(1, Math.hypot(dx, dy)) * SPAN);
+  };
+  pad.addEventListener('pointerdown', event => { pad.setPointerCapture(event.pointerId); padPoint(event); event.preventDefault(); });
+  pad.addEventListener('pointermove', event => { if (pad.hasPointerCapture(event.pointerId)) padPoint(event); });
+  pad.addEventListener('keydown', event => {
+    const step = { ArrowLeft: [-10, 0], ArrowRight: [10, 0], ArrowUp: [0, 5], ArrowDown: [0, -5] }[event.key];
+    if (!step) return;
+    event.preventDefault(); const lamp = lighting.lamp; setLamp(lamp.az + step[0], lamp.el + step[1]);
   });
-  // Step through the set-ups without opening the list.
-  document.querySelectorAll('[data-light-step]').forEach(button => button.addEventListener('click', () => {
-    const index = LIGHTS.findIndex(light => light.id === lighting.mood);
-    chooseMood(LIGHTS[(index + Number(button.dataset.lightStep) + LIGHTS.length) % LIGHTS.length].id);
-    document.querySelector(`[data-light="${lighting.mood}"]`)?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-  }));
+  heightInput.addEventListener('input', () => setLamp(lighting.lamp.az, Number(heightInput.value)));
+  document.querySelector('#lampReset').addEventListener('click', () => { setLamp(LAMP_HOME.az, LAMP_HOME.el); document.querySelector('#status').textContent = '조명을 처음 자리로 옮겼어요.'; });
   lightPanel.addEventListener('toggle', () => {
-    const open = lightPanel.matches(':popover-open');
-    document.querySelector('#lightMenu').setAttribute('aria-expanded', String(open));
-    if (open) document.querySelector('[data-light][aria-pressed=true]')?.scrollIntoView({ block: 'center' });
+    document.querySelector('#lightMenu').setAttribute('aria-expanded', String(lightPanel.matches(':popover-open')));
   });
   let islandIndex = 0, world = worlds[0];
   world.root.visible = true;
@@ -387,6 +396,7 @@ async function start() {
     sharpness.set(world.island.id, now * .82); applyResolution();
   }
   let frame = 0, previous = null, elapsed = 0, paused = false;
+  const sunDirection = new THREE.Vector3();
   function render(now) {
     if (paused) return;
     const rawDt = previous === null ? 0 : (now - previous) / 1000;
@@ -410,7 +420,7 @@ async function start() {
     controls.update();
     // Swim island: the product's own viewer is drawn behind the scene with this camera
     // (then the scene is drawn see-through over it), or shown instead of it.
-    const layered = !islandTransition && world.renderLayer?.(camera, dt, renderer.getPixelRatio());
+    const layered = !islandTransition && world.renderLayer?.(camera, dt, renderer.getPixelRatio(), lighting.keyDirection(sunDirection));
     scene.background = layered ? null : sceneBackground;
     document.body.classList.toggle('layer-live', !!layered);
     if (!world.embedded) renderer.render(scene, camera);

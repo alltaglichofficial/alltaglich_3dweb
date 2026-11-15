@@ -790,7 +790,8 @@ window.addEventListener('resize',resize);
 resize(); Object.assign(S,Tg);
 if(window.SITE){   // inside the site: on the A stand, seen at an angle
   bStand.click(); setView('angle'); applyView(); Object.assign(S,Tg);
-  window.__site={ ready:true, setBG(c){ BG[0]=c[0]; BG[1]=c[1]; BG[2]=c[2]; dirty=true; }, reset(){ wrapAz(); setView('angle'); applyView(); } };
+  const A0=Tg.az;
+  window.__site={ ready:true, setLight(az,el){ const a=A0+az*Math.PI/180, e=el*Math.PI/180; L[0]=Math.sin(a)*Math.cos(e); L[1]=Math.sin(e); L[2]=Math.cos(a)*Math.cos(e); dirty=true; },  setBG(c){ BG[0]=c[0]; BG[1]=c[1]; BG[2]=c[2]; dirty=true; }, reset(){ wrapAz(); setView('angle'); applyView(); } };
 }
 requestAnimationFrame(frame);
 

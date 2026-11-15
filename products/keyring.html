@@ -418,6 +418,7 @@ function buildBlock(geo){
   dome.position.set(META.lo[0] + META.ext[0] / 2, META.lo[1] + META.ext[1] / 2, blockBottomZ - 0.005);
   body.add(dome);
   if (SITE === 'drive') dome.visible = false;   // the back dome faces the table; skipping it saves a whole refraction pass
+  if (SITE === 'drive') block.castShadow = true;   // lying on the site's table the block throws its own soft shadow
 }
 
 // ---------- hardware ----------
@@ -918,6 +919,7 @@ addEventListener('resize', resize);
 // __site.frame() once per frame with its camera; the table takes the site's background colour.
 function siteDrive(){
   controls.enabled = false; stageDome.visible = false; scene.background = stageMat.color;
+  shadowMat.opacity = 0.3;
   floor.material = new THREE.MeshBasicMaterial({ toneMapped: false }); floor.material.color = stageMat.color;
   if (window.SITE_BG) { document.documentElement.style.setProperty('--stage', '#' + new URLSearchParams(location.search).get('bg')); applyTheme(); }
   // height of the wavy top over the table, as a grid, so the site's bear can float on it
@@ -941,6 +943,7 @@ function siteDrive(){
       camera.position.fromArray(o.pos); camera.quaternion.fromArray(o.quat); camera.fov = o.fov; camera.aspect = o.aspect; camera.near = o.near; camera.far = o.far;
       if (o.offset) camera.setViewOffset(...o.offset); else camera.clearViewOffset();
       camera.updateProjectionMatrix(); camera.updateMatrixWorld();
+      if (o.sun) { key.position.fromArray(o.sun).multiplyScalar(230); sunW.copy(key.position).normalize(); }   // the site's lamp
       stepPhysics(Math.min(o.dt || 0, 0.05)); renderer.render(scene, camera);
     },
   };

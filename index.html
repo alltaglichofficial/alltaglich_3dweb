@@ -39,15 +39,26 @@
   <div class="scene-caption" aria-hidden="true">THREE ISLANDS. LITTLE EVERYDAY ESCAPES.</div>
   <button type="button" id="prevIsland" class="island-arrow previous" aria-label="Climbing 섬으로 이동"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 6-6 6 6 6"/></svg><span>PREV</span></button>
   <button type="button" id="nextIsland" class="island-arrow next" aria-label="Swim 섬으로 이동"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m10 6 6 6-6 6"/></svg><span>NEXT</span></button>
-  <section id="light-panel" class="light-panel" popover aria-label="조명 고르기">
-    <header><span class="light-eyebrow">LIGHTING · 34 SET-UPS</span><strong id="light-name">기본 조명</strong>
-      <span class="light-steps"><button type="button" data-light-step="-1" aria-label="이전 조명">‹</button><button type="button" data-light-step="1" aria-label="다음 조명">›</button><button type="button" popovertarget="light-panel" popovertargetaction="hide" aria-label="조명 목록 닫기">×</button></span></header>
-    <div id="light-list" class="light-list" role="group" aria-label="조명 종류"></div>
+  <section id="light-panel" class="light-panel" popover aria-label="조명 위치">
+    <header><span class="light-eyebrow">LIGHT POSITION</span><strong>조명 위치</strong>
+      <span class="light-steps"><button type="button" id="lampReset" class="lamp-reset">처음 자리</button><button type="button" popovertarget="light-panel" popovertargetaction="hide" aria-label="조명 위치 닫기">×</button></span></header>
+    <div class="lamp-body">
+      <div id="lamp-pad" class="lamp-pad" role="slider" tabindex="0" aria-label="조명 위치: 화살표로 방향과 높이를 바꿔요" aria-valuemin="12" aria-valuemax="90">
+        <span class="lamp-ring"></span><span class="lamp-island"></span>
+        <span class="lamp-side back">뒤</span><span class="lamp-side front">카메라 쪽</span>
+        <span id="lamp-dot" class="lamp-dot" aria-hidden="true"></span>
+      </div>
+      <div class="lamp-info">
+        <strong id="lamp-where"></strong>
+        <label class="lamp-height">높이<input id="lamp-height" type="range" min="12" max="89" step="1"></label>
+        <p>점을 끌어 조명을 옮겨 보세요. 가운데로 갈수록 위에서, 가장자리로 갈수록 낮게 비춰서 그림자가 길어져요.</p>
+      </div>
+    </div>
   </section>
   <footer class="footer">
     <div class="control-hint"><span class="orbit-icon">↔</span><span class="desktop-hint">드래그로 회전 · 스크롤로 확대</span><span class="mobile-hint">한 손가락 회전 · 두 손가락 확대</span></div>
     <nav class="zone-nav" aria-label="운동별 섬 선택">
-    <div class="island-indicator"><span class="island-count"><b id="island-number">01</b> / 03</span><span id="island-name">Tennis</span><button type="button" id="resetView" aria-label="현재 섬 전체 보기" title="현재 섬 전체 보기">↺</button><button type="button" id="lightMenu" class="light-menu" popovertarget="light-panel" aria-expanded="false" aria-label="조명 34가지 고르기" title="조명 34가지 고르기"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.6 10.8c.7.6 1.1 1.3 1.1 2.2h5c0-.9.4-1.6 1.1-2.2A6 6 0 0 0 12 3Z"/></svg></button><button type="button" id="moodToggle" class="mood-toggle" aria-pressed="false" aria-label="어두운 방 분위기로 바꾸기" title="어두운 방 분위기로 바꾸기"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5Z"/></svg></button></div>
+    <div class="island-indicator"><span class="island-count"><b id="island-number">01</b> / 03</span><span id="island-name">Tennis</span><button type="button" id="resetView" aria-label="현재 섬 전체 보기" title="현재 섬 전체 보기">↺</button><button type="button" id="lightMenu" class="light-menu" popovertarget="light-panel" aria-expanded="false" aria-label="조명 위치 조절" title="조명 위치 조절"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.6 10.8c.7.6 1.1 1.3 1.1 2.2h5c0-.9.4-1.6 1.1-2.2A6 6 0 0 0 12 3Z"/></svg></button><button type="button" id="moodToggle" class="mood-toggle" aria-pressed="false" aria-label="어두운 방 분위기로 바꾸기" title="어두운 방 분위기로 바꾸기"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5Z"/></svg></button></div>
       <button type="button" data-island="tennis" aria-pressed="true"><span class="nav-dot tennis"></span><span>Tennis</span></button>
       <button type="button" data-island="pool" aria-pressed="false"><span class="nav-dot pool"></span><span>Swim</span></button>
       <button type="button" data-island="climb" aria-pressed="false"><span class="nav-dot climb"></span><span>Climbing</span></button>

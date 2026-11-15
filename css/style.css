@@ -44,26 +44,26 @@
 .light-steps{display:flex;gap:6px}
 .light-steps button{width:34px;height:34px;border-radius:50%;border:1px solid #d3dac6;background:transparent;color:#5d6d4d;font-size:18px;line-height:1;cursor:pointer}
 .light-steps button:hover{background:#e7ebdc}
-.light-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(128px,1fr));gap:6px;padding:10px 12px 12px;overflow-y:auto;overscroll-behavior:contain}
-.light-list button{display:flex;align-items:center;gap:8px;min-height:40px;padding:0 10px;border:1px solid #dfe4d4;border-radius:12px;background:#f6f7ee;color:#46523b;font-size:11px;text-align:left;cursor:pointer}
-.light-list button b{font-weight:500;font-size:9px;color:#93a082;font-variant-numeric:tabular-nums;min-width:14px}
-.light-list button span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.light-list button:hover{background:#eaeedd}
-.light-list button[aria-pressed=true]{background:#374731;border-color:#374731;color:#f3f0e8}
-.light-list button[aria-pressed=true] b{color:#c5d1b3}
+
+
+
+
+
+
+
 .light-panel button:focus-visible{outline:2px solid #627e48;outline-offset:2px}
-@media(max-width:650px){.light-list{grid-template-columns:repeat(3,1fr)}.light-eyebrow{display:none}.light-list button{padding:0 8px;gap:6px;font-size:10.5px}}
-@media(max-width:360px){.light-list{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:650px){.light-eyebrow{display:none}}
+
 :root[data-mood=dark] .light-menu[aria-expanded=true]{background:#33402d;border-color:#4c5d43;color:#eef3e4}
 :root[data-mood=dark] .light-panel{background:#1a1c20f2;border-color:#33363c;color:#d9d6cb;box-shadow:0 10px 40px #0008}
 :root[data-mood=dark] .light-panel header{border-color:#2e3137}
 :root[data-mood=dark] .light-eyebrow{color:#7f8279}
 :root[data-mood=dark] .light-steps button{border-color:#3a3d44;color:#c9c6bb}
 :root[data-mood=dark] .light-steps button:hover{background:#262930}
-:root[data-mood=dark] .light-list button{background:#1f2126;border-color:#35383f;color:#d4d1c6}
-:root[data-mood=dark] .light-list button b{color:#7f8279}
-:root[data-mood=dark] .light-list button:hover{background:#282b31}
-:root[data-mood=dark] .light-list button[aria-pressed=true]{background:#33402d;border-color:#4c5d43;color:#eef3e4}
+:root[data-mood=dark] 
+:root[data-mood=dark] 
+:root[data-mood=dark] 
+:root[data-mood=dark] 
 .island-indicator>span{white-space:nowrap}
 @media(max-width:650px){.light-panel{max-height:36vh}.island-indicator{gap:8px}}
 /* Plush bears: hidden render frames, and the large viewer */
@@ -135,3 +135,26 @@ body.viewer-embed #scene{visibility:hidden}
 .travel-note{font-size:12px;opacity:.55}
 @keyframes travel-fill{to{transform:scaleX(1)}}
 @media(prefers-reduced-motion:reduce){.travel,.travel.out{transition:none}}
+
+/* lamp pad: a top view of the island, the dot is the lamp */
+.light-panel{width:min(420px,calc(100vw - 20px))}
+.lamp-body{display:flex;gap:18px;align-items:center;padding:16px 18px 18px}
+.lamp-pad{position:relative;flex:none;width:172px;height:172px;border-radius:50%;background:radial-gradient(circle,#fff9e8 0,#f4efe2 46%,#e9e5d8 100%);border:1px solid #dcdccd;touch-action:none;cursor:crosshair;outline:none}
+.lamp-pad:focus-visible{box-shadow:0 0 0 2px #627e48}
+.lamp-ring{position:absolute;inset:25%;border-radius:50%;border:1px dashed #cdd3bf;pointer-events:none}
+.lamp-island{position:absolute;left:50%;top:50%;width:30px;height:30px;margin:-15px 0 0 -15px;border-radius:50%;background:#c9d6b8;border:1px solid #a9b897;pointer-events:none}
+.lamp-side{position:absolute;left:50%;transform:translateX(-50%);font-size:9.5px;letter-spacing:.06em;color:#8a9679;pointer-events:none;white-space:nowrap}
+.lamp-side.back{top:7px}.lamp-side.front{bottom:7px}
+.lamp-dot{position:absolute;width:22px;height:22px;margin:-11px 0 0 -11px;border-radius:50%;background:#ffd98a;border:2px solid #fff;box-shadow:0 0 0 1px #c9a24c,0 0 18px 6px #ffd98a99;pointer-events:none}
+.lamp-info{display:grid;gap:10px;min-width:0;font-size:12px;line-height:1.5}
+.lamp-info strong{font-size:14px;font-weight:600}
+.lamp-info p{margin:0;color:#7d8870;font-size:11px}
+.lamp-height{display:grid;gap:4px;font-size:11px;color:#7d8870}
+.lamp-height input{width:100%;accent-color:#4d6140}
+.lamp-reset{width:auto!important;padding:0 12px;border-radius:17px!important;font-size:11px!important}
+:root[data-mood=dark] .lamp-pad{background:radial-gradient(circle,#2f2c25 0,#24252a 50%,#1c1d22 100%);border-color:#35383f}
+:root[data-mood=dark] .lamp-ring{border-color:#3e4148}
+:root[data-mood=dark] .lamp-island{background:#3b4535;border-color:#55634b}
+:root[data-mood=dark] .lamp-info p,:root[data-mood=dark] .lamp-height,:root[data-mood=dark] .lamp-side{color:#93968c}
+.light-panel{max-height:none}
+@media(max-width:480px){.lamp-body{gap:14px;padding:12px 14px 14px}.lamp-pad{width:132px;height:132px}.lamp-info p{display:none}}

@@ -14,7 +14,7 @@ const SOURCES = {
 export function createProductViewers() {
   const layer = document.querySelector('#viewers');
   const items = {}, background = new THREE.Color(0xefebe3);
-  let shown = null, stamp = 0;
+  let shown = null, stamp = 0, light = null;
   // A browser only allows so many 3D canvases at once (about 8 on phones, 16 on desktops),
   // and the bears use several. Past the limit it drops the oldest one — which can be the
   // scene itself. So only the viewers in use are kept; the others are let go completely.
@@ -33,6 +33,7 @@ export function createProductViewers() {
     if (!item.api) return;
     const hex = background.getHexString();
     if (item.id === 'keyring') item.api.setBG('#' + hex); else item.api.setBG([0, 2, 4].map(i => parseInt(hex.slice(i, i + 2), 16) / 255));
+    if (light) item.api.setLight?.(light.az, light.el);
   };
   const lift = item => { try { item.frame.contentDocument?.documentElement.style.setProperty('--site-bottom', `${bottom}px`); } catch { /* not loaded yet */ } };
   let bottom = 150;
@@ -65,6 +66,8 @@ export function createProductViewers() {
     api(id) { return items[id]?.api ?? null; },
     // the scene's background colour (changes with the lighting mood)
     setBackground(color) { background.copy(color); document.documentElement.style.setProperty('--scene-bg', '#' + color.getHexString()); for (const key in items) paint(items[key]); },
+    // where the site's lamp is (the grip and magnet viewers light themselves from the same side)
+    setLight(az, el) { light = { az, el }; for (const key in items) items[key].api?.setLight?.(az, el); },
     // keeps the viewers' own buttons clear of the site's tabs
     setBottom(px) { bottom = px; for (const key in items) lift(items[key]); },
   };

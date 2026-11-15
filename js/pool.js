@@ -135,7 +135,7 @@ export function createPoolIsland(scene, island) {
     resetView() { if (embedded()) viewers.api(LAYER[focus])?.reset?.(); },
     // Draws the product behind the scene with the scene's camera. True if it did (the
     // scene is then drawn see-through on top of it).
-    renderLayer(camera, dt, ratio) {
+    renderLayer(camera, dt, ratio, sun) {
       if (!entered || root.position.lengthSq() > 1e-6) return false;
       camera.updateMatrixWorld();
       if (focus === 'pool') {
@@ -143,7 +143,7 @@ export function createPoolIsland(scene, island) {
         // scene → viewer millimetres: the block's centre sits at the island's centre, on the table
         camera.getWorldPosition(camPos); camera.getWorldQuaternion(camQuat);
         const view = camera.view?.enabled ? [camera.view.fullWidth, camera.view.fullHeight, camera.view.offsetX, camera.view.offsetY, camera.view.width, camera.view.height] : null;
-        k.api.frame({ pos: [camPos.x / k.scale + k.cx, (camPos.y - DECK_Y) / k.scale, camPos.z / k.scale + k.cz], quat: camQuat.toArray(), fov: camera.fov, aspect: camera.aspect, near: camera.near / k.scale, far: camera.far / k.scale, offset: view, dt, ratio });
+        k.api.frame({ pos: [camPos.x / k.scale + k.cx, (camPos.y - DECK_Y) / k.scale, camPos.z / k.scale + k.cz], quat: camQuat.toArray(), fov: camera.fov, aspect: camera.aspect, near: camera.near / k.scale, far: camera.far / k.scale, offset: view, dt, ratio, sun: sun?.toArray() });
         return true;
       }
       return false;
