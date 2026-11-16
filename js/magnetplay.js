@@ -30,11 +30,11 @@ export function createMagnetPlay(parent, { plush, groundY, K, site }) {
     return [m.x + Math.cos(m.rot) * lx + Math.sin(m.rot) * lz, m.z - Math.sin(m.rot) * lx + Math.cos(m.rot) * lz];
   }
   // the pencil in the right paw while it writes: tip on the memo, the rest running back up
-  // through the paw. Drawn over the bear (the paw holds it), only while writing.
+  // through the paw; only while writing. The bear covers whatever of it is behind the bear.
   const pencil = new THREE.Group(); pencil.name = 'MagnetPencil'; pencil.visible = false; parent.add(pencil);
   {
-    const L = H * .34, r = H * .026, mat = c => new THREE.MeshStandardMaterial({ color: c, roughness: .6, depthTest: false, transparent: true });   // transparent: sorted with the bear's sprite, and after it
-    const part = (geo, c, y) => { const m = new THREE.Mesh(geo, mat(c)); m.position.y = y; m.renderOrder = 5; pencil.add(m); };
+    const L = H * .34, r = H * .026, mat = c => new THREE.MeshStandardMaterial({ color: c, roughness: .6 });   // ordinary depth: the bear's sprite, nearer the camera, covers it
+    const part = (geo, c, y) => { const m = new THREE.Mesh(geo, mat(c)); m.position.y = y; pencil.add(m); };
     const tip = L * .07, wood = L * .13, body = L * .64, band = L * .06, rub = L * .1;   // along the pencil from the point (y = 0) up
     part(new THREE.ConeGeometry(r * .32, tip, 6), 0x3a3a3c, tip / 2);   // graphite point
     pencil.children[0].rotation.x = Math.PI;
@@ -44,16 +44,17 @@ export function createMagnetPlay(parent, { plush, groundY, K, site }) {
     part(new THREE.CylinderGeometry(r * .98, r * .98, rub, 12), 0xe58f9b, tip + wood + body + band + rub / 2); // eraser
   }
   const up3 = new THREE.Vector3(0, 1, 0), tipW = new THREE.Vector3();
-  // Held like a pencil: the paw grips it in the middle, the point is down and to the left of
-  // the paw on the paper, the eraser end leans up and to the right, away from the panel.
+  // Held like a pencil: the paw grips it in the middle, the point is below the paw and a
+  // little outside it on the paper (clear of the bear, so it shows), the eraser end leans back
+  // up toward the shoulder, away from the panel.
   // (px, pz) is the bear's middle on the panel in mm; the paw is PAW_X to its right.
-  const PAW_X = HMM * .4, GRIP = HMM * .12;   // paw offset; the point is GRIP left of and below the paw
+  const PAW_X = HMM * .4, GRIP = HMM * .12;   // paw offset; the point is GRIP below the paw
   function holdPencil(px, pz, jx, jz) {
-    const x = px + PAW_X - GRIP + jx, z = pz + GRIP + jz;
-    onPanel(x, z, .6, tipW); onPanel(x + GRIP * 2, z - GRIP * 2, HMM * .14, w3);
+    const x = px + PAW_X + GRIP * .7 + jx, z = pz + GRIP + jz;
+    onPanel(x, z, .6, tipW); onPanel(x - GRIP * 1.4, z - GRIP * 2, HMM * .14, w3);
     pencil.position.copy(tipW);
     pencil.quaternion.setFromUnitVectors(up3, w3.sub(tipW).normalize());
-    pencil.visible = true;
+    pencil.visible = site().front?.() !== false;   // not through the stand from behind
   }
   const P = { mode: 'wait', t: 0, phase: 0, written: 0, target: new THREE.Vector2(), px: 0, pz: 0, vy: 0, vz: 0, wait: 1, limbs: null, done: false };
   const stand = () => { anchor.position.y = groundY + HALF; anchor.rotation.x = 0; anchor.rotation.z = 0; };
@@ -82,7 +83,7 @@ export function createMagnetPlay(parent, { plush, groundY, K, site }) {
   const total = () => site().lines.reduce((a, l) => a + l.n, 0);
   const OUT = () => HMM * .3;   // how far the bear's middle is off the panel while it climbs
   // where the bear's middle goes for the pen at memo point (xp, yp): its right paw reaches diagonally up and right to the pen
-  const penSpot = (xp, yp) => { const [x, z] = memoPoint(xp, yp); return [x - (PAW_X - GRIP), z - GRIP]; };   // (so the pencil point, below-left of the right paw, lands on the spot)
+  const penSpot = (xp, yp) => { const [x, z] = memoPoint(xp, yp); return [x - (PAW_X + GRIP * .7), z - GRIP]; };   // (so the pencil point, just below the right paw, lands on the spot)
 
   const play = {
     anchor, pencil,
