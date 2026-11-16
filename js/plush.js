@@ -8,10 +8,10 @@ import * as THREE from 'three';
 // large, where it can be turned, zoomed and poked like the stand-alone page.
 
 export const PLUSH = {
-  swim:          { src: 'bears/swim.html',         name: '수영곰' },
-  climbBrown:    { src: 'bears/climb-brown.html',  name: '클라이밍곰 브라운' },
-  climbOrange:   { src: 'bears/climb-orange.html', name: '클라이밍곰 오렌지' },
-  tennis:        { src: 'bears/tennis.html',       name: '테니스곰' },
+  swim:          { src: 'bears/swim.html',         name: '수영곰', reviewProduct: 'swim' },
+  climbBrown:    { src: 'bears/climb-brown.html',  name: '클라이밍곰 브라운', reviewProduct: 'climb' },
+  climbOrange:   { src: 'bears/climb-orange.html', name: '클라이밍곰 오렌지', reviewProduct: 'climb' },
+  tennis:        { src: 'bears/tennis.html',       name: '테니스곰', reviewProduct: 'tennis' },
 };
 
 let sceneCamera = null;
@@ -151,7 +151,7 @@ export function openLargeViewer(info) {
   if (!viewer) {
     viewer = document.createElement('div'); viewer.className = 'plush-viewer'; viewer.hidden = true;
     viewer.setAttribute('role', 'dialog'); viewer.setAttribute('aria-modal', 'true');
-    viewer.innerHTML = '<div class="plush-card"><p class="plush-name"></p><iframe class="plush-big" title=""></iframe><p class="plush-hint">드래그해서 돌리고, 휠이나 두 손가락으로 확대해요. 톡 누르면 폴짝 뛰어요.</p><button type="button" class="plush-close" aria-label="닫기">×</button></div>';
+    viewer.innerHTML = '<div class="plush-card"><p class="plush-name"></p><a class="product-review-link" target="_blank" rel="noopener noreferrer" hidden>구매 후기 ↗</a><iframe class="plush-big" title=""></iframe><p class="plush-hint">드래그해서 돌리고, 휠이나 두 손가락으로 확대해요. 톡 누르면 폴짝 뛰어요.</p><button type="button" class="plush-close" aria-label="닫기">×</button></div>';
     document.body.appendChild(viewer);
     const close = () => { viewer.hidden = true; viewer.querySelector('iframe').src = 'about:blank'; };
     viewer.querySelector('.plush-close').addEventListener('click', close);
@@ -159,6 +159,10 @@ export function openLargeViewer(info) {
     addEventListener('keydown', e => { if (e.key === 'Escape' && !viewer.hidden) close(); });
   }
   viewer.querySelector('.plush-name').textContent = info.name;
+  const reviewLink = viewer.querySelector('.product-review-link');
+  reviewLink.hidden = !info.reviewProduct;
+  if (info.reviewProduct) reviewLink.href = './product-reviews.html?product=' + encodeURIComponent(info.reviewProduct);
+  else reviewLink.removeAttribute('href');
   viewer.querySelector('.plush-hint').textContent = info.hint ?? '드래그해서 돌리고, 휠이나 두 손가락으로 확대해요. 톡 누르면 폴짝 뛰어요.';
   const frame = viewer.querySelector('iframe'); frame.title = info.name + ' 3D'; frame.src = info.src;
   viewer.hidden = false;
