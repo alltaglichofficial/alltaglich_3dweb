@@ -87,7 +87,7 @@ async function init() {
   $('title').textContent = page.name;
   document.title = page.name + ' Reviews · ALLTÄGLICH';
   try {
-    const response = await fetch('https://alltaglich-reviews.pages.dev/reviews/' + page.id + '.json');
+    const response = await fetch('https://alltaglich-reviews.pages.dev/reviews/' + page.id + '.json', { signal: AbortSignal.timeout(15000) });   // never wait for ever
     if (!response.ok) throw new Error('Unable to load reviews');
     reviews = await response.json();
     if (!Array.isArray(reviews)) throw new Error('Invalid review data');
