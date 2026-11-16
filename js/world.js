@@ -137,7 +137,7 @@ export function createWorld(scene, island) {
     a.position.y = groundAt(a.position.x, a.position.z) + HALF + Math.abs(Math.sin(p.phase)) * (p.hop ?? .14);
     a.rotation.z = Math.sin(p.phase) * .1; a.rotation.x = .1 + speed * .03;
     const sw = Math.sin(p.phase);
-    const swing = p.restArms ? 0 : sw * .55;
+    const swing = p.restArms ? 0 : -sw * .55;   // arms swing opposite the legs
     p.limbs = { armL: arm(-1, .12, swing), armR: arm(1, .12, -swing), legL: leg(-1, Math.max(0, sw)), legR: leg(1, Math.max(0, -sw)) };
     return false;
   }

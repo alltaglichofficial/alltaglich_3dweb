@@ -43,17 +43,16 @@ export function createMagnetPlay(parent, { plush, groundY, K, site }) {
     part(new THREE.CylinderGeometry(r * 1.04, r * 1.04, band, 12), 0xb9bcc0, tip + wood + body + band / 2);   // metal band
     part(new THREE.CylinderGeometry(r * .98, r * .98, rub, 12), 0xe58f9b, tip + wood + body + band + rub / 2); // eraser
   }
-  const up3 = new THREE.Vector3(0, 1, 0), tipW = new THREE.Vector3(), pawW = new THREE.Vector3();
-  // the right paw's tip in the world, for an arm pose arm(1, elev, fwd); on screen the bear's
-  // right paw is its local −x (it faces the panel, local +z); both points are in the parent's space
-  function pawTip(elev, fwd, target) {
-    return target.set(-(.5 + (elev - .42) * .3) * H, (elev - .42) * .5 * H, (.1 + fwd * .15) * H).applyMatrix4(anchor.matrix);   // measured on the sprite
-  }
-  function holdPencil(xp, yp, elev, fwd) {
-    const [x, z] = memoPoint(xp, yp);
-    onPanel(x, z, .6, tipW); anchor.updateMatrix(); pawTip(elev, fwd, pawW);
+  const up3 = new THREE.Vector3(0, 1, 0), tipW = new THREE.Vector3();
+  // Held like a pencil: the paw grips it in the middle, the point is down and to the left of
+  // the paw on the paper, the eraser end leans up and to the right, away from the panel.
+  // (px, pz) is the bear's middle on the panel in mm; the paw is PAW_X to its right.
+  const PAW_X = HMM * .4, GRIP = HMM * .12;   // paw offset; the point is GRIP left of and below the paw
+  function holdPencil(px, pz, jx, jz) {
+    const x = px + PAW_X - GRIP + jx, z = pz + GRIP + jz;
+    onPanel(x, z, .6, tipW); onPanel(x + GRIP * 2, z - GRIP * 2, HMM * .14, w3);
     pencil.position.copy(tipW);
-    pencil.quaternion.setFromUnitVectors(up3, w3.copy(pawW).sub(tipW).normalize());
+    pencil.quaternion.setFromUnitVectors(up3, w3.sub(tipW).normalize());
     pencil.visible = true;
   }
   const P = { mode: 'wait', t: 0, phase: 0, written: 0, target: new THREE.Vector2(), px: 0, pz: 0, vy: 0, vz: 0, wait: 1, limbs: null, done: false };
@@ -67,8 +66,8 @@ export function createMagnetPlay(parent, { plush, groundY, K, site }) {
     P.phase += dt * (6 + speed * 2.2);
     anchor.position.y = groundY + HALF + Math.abs(Math.sin(P.phase)) * .12;
     anchor.rotation.z = Math.sin(P.phase) * .1; anchor.rotation.x = .12;
-    const sw = Math.sin(P.phase);
-    P.limbs = { armL: arm(-1, .12, sw * .55), armR: arm(1, .12, -sw * .55), legL: leg(-1, Math.max(0, sw)), legR: leg(1, Math.max(0, -sw)) };
+    const sw = Math.sin(P.phase);   // left leg steps with the right arm, and the other way round
+    P.limbs = { armL: arm(-1, .12, -sw * .55), armR: arm(1, .12, sw * .55), legL: leg(-1, Math.max(0, sw)), legR: leg(1, Math.max(0, -sw)) };
     return false;
   }
   // the memo's lines: which one the pen is on and how far along, for `n` characters written
@@ -83,7 +82,7 @@ export function createMagnetPlay(parent, { plush, groundY, K, site }) {
   const total = () => site().lines.reduce((a, l) => a + l.n, 0);
   const OUT = () => HMM * .3;   // how far the bear's middle is off the panel while it climbs
   // where the bear's middle goes for the pen at memo point (xp, yp): its right paw reaches diagonally up and right to the pen
-  const penSpot = (xp, yp) => { const [x, z] = memoPoint(xp, yp); return [x - HMM * .7, z + HMM * .1]; };   // (the writing paw is out to the right, the pencil point just beyond it)
+  const penSpot = (xp, yp) => { const [x, z] = memoPoint(xp, yp); return [x - (PAW_X - GRIP), z - GRIP]; };   // (so the pencil point, below-left of the right paw, lands on the spot)
 
   const play = {
     anchor, pencil,
@@ -146,7 +145,7 @@ export function createMagnetPlay(parent, { plush, groundY, K, site }) {
         // right paw forward onto the memo with the pencil; the left one holds on lower down
         const eR = .42 + scrib, fR = .62 + scrib * .4;
         P.limbs = { armL: arm(-1, .18, .32), armR: arm(1, eR, fR), legL: leg(-1, .3, .5), legR: leg(1, .2, .5) };
-        holdPencil(xp + Math.sin(time * 22) * .5, p.line.y - 1.2 + Math.cos(time * 31) * .5, eR, fR);
+        holdPencil(P.px, P.pz, Math.sin(time * 22) * HMM * .012, Math.cos(time * 31) * HMM * .01);
         if (P.written >= total()) { P.mode = 'look'; P.t = 0; pencil.visible = false; }
       } else if (P.mode === 'look') {
         // done: a look round at us over its shoulder, legs swinging
