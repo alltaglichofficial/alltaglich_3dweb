@@ -91,6 +91,11 @@ export function createMagnetPlay(parent, { plush, groundY, K, site }) {
   const toss = createThrowable(anchor, { bottom: HALF, groundAt: () => groundY, limit: (x, z) => {
     const front = (site()?.panel ? onPanel(0, site().panel.half[1], 0, v3).z : 0) + HALF * 1.1, R = 170 * K;
     z = Math.max(front, z); const d = Math.hypot(x, z); return d > R ? [x * R / d, z * R / d] : [x, z]; } });
+  // seen from the other side of the stand, the stand is in the way (it is drawn behind the scene)
+  function behindStand(api) {
+    const p = anchor.position;
+    if (api.hidden?.([p.x / K, (p.y - groundY) / K, p.z / K])) { plush.sprite.visible = false; plush.shadow.visible = false; pencil.visible = false; }
+  }
   const play = {
     anchor, pencil,
     enter() {
@@ -120,13 +125,18 @@ export function createMagnetPlay(parent, { plush, groundY, K, site }) {
       if (toss.busy()) {
         // in the hand, or dropped: when it is back on its feet it goes back to the memo
         const s = toss.update(dt);
-        P.limbs = { armL: arm(-1, .7, .2), armR: arm(1, .7, .2), legL: leg(-1, .3, .9), legR: leg(1, .3, .9) };
+        // held up: it struggles, arms and legs paddling in turn
+        const wr = Math.sin(time * 17), kick = Math.sin(time * 21 + 1);
+        P.limbs = toss.state === 'held'
+          ? { armL: arm(-1, .15 + wr * .3, .25 + wr * .25), armR: arm(1, .15 - wr * .3, .25 - wr * .25), legL: leg(-1, Math.max(0, kick) * .9, .7), legR: leg(1, Math.max(0, -kick) * .9, .7) }
+          : { armL: arm(-1, .3, .2), armR: arm(1, .3, .2), legL: leg(-1, .3, .9), legR: leg(1, .3, .9) };
+        if (toss.state === 'held') anchor.rotation.z = Math.sin(time * 13) * .18;
         if (s === 'landed') {
           P.t = 0;
           if (P.done || P.written >= total()) { P.done = true; P.mode = 'wait'; P.wait = 1; }
           else { const [x] = penSpot(28, 17); onPanel(x, top, 0, w3); P.target.set(w3.x, w3.z + HALF * .9); P.mode = 'walk'; }   // written so far is kept
         }
-        plush.update(anchor, { ground: groundY, limbs: P.limbs });
+        plush.update(anchor, { ground: groundY, limbs: P.limbs }); behindStand(api);
         return;
       }
       if (P.mode === 'wait') {
@@ -198,7 +208,7 @@ export function createMagnetPlay(parent, { plush, groundY, K, site }) {
         // pootles about in front of the stand
         if (walkTo(dt, 1.1)) { P.mode = 'wait'; P.t = 0; P.wait = 2.5 + Math.random() * 4; }
       }
-      plush.update(anchor, { ground: P.mode === 'climb' || P.mode === 'write' || P.mode === 'look' ? null : groundY, limbs: P.limbs });
+      plush.update(anchor, { ground: P.mode === 'climb' || P.mode === 'write' || P.mode === 'look' ? null : groundY, limbs: P.limbs }); behindStand(api);
     },
   };
   anchor.visible = false;

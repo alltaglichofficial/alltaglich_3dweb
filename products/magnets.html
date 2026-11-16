@@ -886,6 +886,12 @@ if(window.SITE==='drive'){   // the site draws each frame with its own camera; t
   function spinStep(dt){ let any=false; for(const k in SPIN){ const q=PL[k], d=SPIN[k]-q.rot; if(Math.abs(d)<.002){ q.rot=SPIN[k]; delete SPIN[k]; } else q.rot+=d*Math.min(1,dt*11); clampItem(k); any=true; } if(any) refreshShadows(); }
   window.__site={ ready:true,
     onStand(o,d){ const s=onPanel(o,d); return !!s&&Math.abs(s[0])<=PW&&Math.abs(s[1])<=PL2; },   // 이 광선이 스탠드 앞판에 닿는가
+    hidden(p){ const c=DRV&&DRV.cam; if(!c) return false; const d=[p[0]-c[0],p[1]-c[1],p[2]-c[2]];      // 카메라→점 사이에 앞판·뒤판이 있는가
+      for(const F of [FR_F,FR_B]){ const M=F.M, n=[M[3],M[4],M[5]], den=d[0]*n[0]+d[1]*n[1]+d[2]*n[2]; if(Math.abs(den)<1e-6) continue;
+        const k=((F.O[0]-c[0])*n[0]+(F.O[1]-c[1])*n[1]+(F.O[2]-c[2])*n[2])/den; if(k<=0.02||k>=.98) continue;
+        const q=[c[0]+d[0]*k-F.O[0],c[1]+d[1]*k-F.O[1],c[2]+d[2]*k-F.O[2]], x=M[0]*q[0]+M[1]*q[1]+M[2]*q[2], z=M[6]*q[0]+M[7]*q[1]+M[8]*q[2];
+        if(Math.abs(x)<=PW&&Math.abs(z)<=PL2) return true; }
+      return false; },
     front(){ const M=FR_F.M, c=DRV?DRV.cam:CAM; return !c||(c[0]-FR_F.O[0])*M[3]+(c[1]-FR_F.O[1])*M[4]+(c[2]-FR_F.O[2])*M[5]>0; },   // 카메라가 앞판 앞쪽인가
     setBG(c){ BG[0]=c[0]; BG[1]=c[1]; BG[2]=c[2]; },
     // the stand: front panel frame (columns: across, out of the panel, down the panel) and its size

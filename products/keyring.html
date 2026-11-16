@@ -934,11 +934,14 @@ function siteDrive(){
     if (v.y > H[b * nx + a]) H[b * nx + a] = v.y;
   }
   for (let i = 0; i < H.length; i++) if (H[i] < 0) H[i] = box.max.y * 0.85;
-  const tapRay = new THREE.Raycaster(), tapNdc = new THREE.Vector2();
+  const tapRay = new THREE.Raycaster(), tapNdc = new THREE.Vector2(), tapBox = new THREE.Box3();
   window.__site = {
     ready: true, box: { minX: box.min.x, maxX: box.max.x, minZ: box.min.z, maxZ: box.max.z, top: box.max.y }, grid: { nx, nz, data: H },
     setPrint, pick: () => window.__pick || null,
-    hit(nx, ny){ tapRay.setFromCamera(tapNdc.set(nx, ny), camera); return tapRay.intersectObject(product, true).length > 0; },   // is the keyring under this point?
+    // is the keyring under this point? (every part's box, a little generous, so the whole of it counts)
+    hit(nx, ny){ tapRay.setFromCamera(tapNdc.set(nx, ny), camera); let on = false;
+      product.traverse(o => { if (!on && o.isMesh && o.visible) { tapBox.setFromObject(o).expandByScalar(1.2); if (tapRay.ray.intersectsBox(tapBox)) on = true; } });
+      return on; },
     setBG(hex){ document.documentElement.style.setProperty('--stage', hex); applyTheme(); },
     resetChain(){ document.getElementById('v-reset').click(); },
     frame(o){
@@ -975,7 +978,7 @@ function siteDrive(){
     if (SITE === 'drive') { document.getElementById('loading').hidden = true; siteDrive(); return; }
     const v = views.angle(); camera.position.set(...v.p); controls.target.set(...v.t); controls.update();
     document.getElementById('loading').hidden = true;
-    if (SITE === 'big') { const k = new URLSearchParams(location.search).get('print'); if (k) setPrint(k); if (window.SITE_BG) { document.documentElement.style.setProperty('--stage', '#' + new URLSearchParams(location.search).get('bg')); applyTheme(); } }   // opened large from the site
+    if (SITE === 'big') { stageDome.visible = false; scene.background = stageMat.color; const k = new URLSearchParams(location.search).get('print'); if (k) setPrint(k); if (window.SITE_BG) { document.documentElement.style.setProperty('--stage', '#' + new URLSearchParams(location.search).get('bg')); applyTheme(); } }   // opened large from the site
     if (!SITE) FILM.start(true);
     const clock = new THREE.Clock();
     renderer.setAnimationLoop(() => {

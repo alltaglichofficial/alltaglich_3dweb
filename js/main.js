@@ -399,7 +399,7 @@ async function start() {
   canvas.addEventListener('pointerdown', event => { tapStart = event.button === 0 ? { x: event.clientX, y: event.clientY, t: performance.now() } : null; });
   canvas.addEventListener('pointerup', event => {
     const s = tapStart; tapStart = null;
-    if (!s || !world.tap || Math.hypot(event.clientX - s.x, event.clientY - s.y) > 6 || performance.now() - s.t > 350) return;
+    if (!s || !world.tap || Math.hypot(event.clientX - s.x, event.clientY - s.y) > 8 || performance.now() - s.t > 500) return;
     carryRay(event); world.tap(pointer, raycaster.ray);
   });
   canvas.addEventListener('pointercancel', drop, { capture: true });

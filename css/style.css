@@ -150,7 +150,7 @@ h1{margin:0 0 12px;font-size:clamp(20px,1.8vw,24px);font-weight:400;line-height:
 /* ---------- plush bears: hidden render frames, and the large viewer ---------- */
 #plush-host{position:fixed;left:0;bottom:0;width:300px;height:300px;opacity:0;pointer-events:none;z-index:-1;overflow:hidden}
 .plush-frame{position:absolute;inset:0;width:300px;height:300px;border:0;background:transparent}
-.plush-viewer{position:fixed;inset:0;z-index:50;display:grid;place-items:center;background:#fafafae6;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);animation:plush-in .25s ease}
+.plush-viewer{position:fixed;inset:0;z-index:50;display:grid;place-items:center;background:#fafafa;animation:plush-in .25s ease}
 .plush-card{position:relative;width:min(92vw,760px);height:min(86vh,760px);display:flex;flex-direction:column;align-items:center}
 .plush-name{margin:0;font-weight:900;font-size:clamp(15px,1.4vw,18px);letter-spacing:2px;text-transform:uppercase;color:var(--ink)}
 .plush-big{flex:1;width:100%;border:0;background:transparent}

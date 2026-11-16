@@ -93,8 +93,11 @@ export function createPoolIsland(scene, island) {
   }
   // a quick tap on a product opens its own viewer large (like the bears)
   const HINT = '드래그해서 돌리고, 휠이나 두 손가락으로 확대해요.';
+  const tapCaster = new THREE.Raycaster();
+  const tapLocal = new THREE.Ray(), tapInv = new THREE.Matrix4(), blockBox = new THREE.Box3(new THREE.Vector3(-WALL_X, DECK_Y, -WALL_Z), new THREE.Vector3(WALL_X, DECK_Y + 3.3, WALL_Z));
   const openProduct = kind => openLargeViewer(
-    kind === 'grip' ? { name: 'Grip Tok', src: 'products/griptok.html?site=big&bg=fafafa', hint: HINT }
+    kind === 'drops' ? { name: 'Water Drop', src: 'products/waterdrop.html?site=big&bg=fafafa', hint: HINT }
+    : kind === 'grip' ? { name: 'Grip Tok', src: 'products/griptok.html?site=big&bg=fafafa', hint: HINT }
     : kind === 'magnet' ? { name: 'Magnet', src: 'products/magnets.html?site=big&bg=fafafa', hint: HINT }
     : world.print === 'photo' ? { name: 'Prussian Blue', src: 'products/keyring.html?site=big&bg=fafafa&print=prussian', hint: HINT }
     : { name: 'Aquable', src: 'products/keyring.html?site=big&bg=fafafa&print=lane', hint: HINT });
@@ -225,13 +228,18 @@ export function createPoolIsland(scene, island) {
     get grabTargets() { return focus === 'pool' || focus === 'drops' ? world.grabTargets_ : focus === 'grip' ? [gripPlay.bearTarget, gripTarget] : focus === 'magnet' ? [magnetPlay.target] : []; },
     // a quick tap that nothing picked up: on the keyring or on the magnet stand → open it large
     tap(ndc, ray) {
-      if (focus === 'pool' && keyring()?.api.hit?.(ndc.x, ndc.y)) openProduct('keyring');
+      if (focus === 'pool') {
+        // the pool block itself (its whole body), or any part of the chain
+        tapLocal.copy(ray).applyMatrix4(tapInv.copy(poolGroup.matrixWorld).invert());
+        if (tapLocal.intersectsBox(blockBox) || keyring()?.api.hit?.(ndc.x, ndc.y)) openProduct('keyring');
+      }
+      else if (focus === 'drops') { tapCaster.ray.copy(ray); if (tapCaster.intersectObject(dropsScene.root, true).length) openProduct('drops'); }
       else if (focus === 'magnet') { const r = toMM(ray); if (magnets()?.onStand?.(r.o, r.d)) openProduct('magnet'); }
     },
     // nothing of ours under the pointer: maybe a part of the keyring's chain
     grabFallback(ndc, ray) {
       if (focus === 'magnet' && ray) { const r = toMM(ray); return magnets()?.pointer.down(r.o, r.d) ? magnetDrag : null; }
-      return focus === 'pool' && keyring()?.api.pick()?.down(ndc.x, ndc.y) ? chain : null;
+      return null;   // (the keyring lies still: its chain is no longer dragged about)
     },
     // the 물놀이 tray: which toys the bear has on, giving / taking one, and where the bear is
     get toys() { return { ...toys.gear }; },

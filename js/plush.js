@@ -162,7 +162,12 @@ export function openLargeViewer(info) {
   viewer.querySelector('.plush-hint').textContent = info.hint ?? '드래그해서 돌리고, 휠이나 두 손가락으로 확대해요. 톡 누르면 폴짝 뛰어요.';
   const frame = viewer.querySelector('iframe'); frame.title = info.name + ' 3D'; frame.src = info.src;
   viewer.hidden = false;
-  frame.addEventListener('load', () => frame.contentDocument?.getElementById('gl')?.focus(), { once: true });
+  frame.addEventListener('load', () => {
+    const doc = frame.contentDocument; if (!doc) return;
+    // no focus ring round the picture (keys still work)
+    const st = doc.createElement('style'); st.textContent = '*:focus,*:focus-visible{outline:none!important}'; doc.head?.appendChild(st);
+    doc.getElementById('gl')?.focus();
+  }, { once: true });
 }
 
 // Pick-up-and-throw for a bear object (its origin `bottom` above its feet).

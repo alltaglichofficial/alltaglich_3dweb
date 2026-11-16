@@ -119,7 +119,7 @@ if(!gl){ document.getElementById('err').style.display='flex'; return; }
 /* ---------- 수치 ---------- */
 const R=21.5;                                   // 레진 반지름(mm) — OBJ 실측
 const L=norm([-0.5,1.0,0.35]);                  // 조명 방향
-const BG=[0.945,0.941,0.925]; const SX=()=>window.SITE==='big'?0:window.SITE?(W>1100?-.16:0):(W>720?.2:0), SY=()=>window.SITE==='big'?0:window.SITE?-.16:0;   // 화면에서 제품을 옮겨 놓는 양(사이트 안에서는 왼쪽 글과 아래 탭을 피해 오른쪽 위로) if(window.SITE_BG){ BG[0]=SITE_BG[0]; BG[1]=SITE_BG[1]; BG[2]=SITE_BG[2]; }
+const BG=[0.945,0.941,0.925]; if(window.SITE==='big'&&window.SITE_BG){ BG[0]=SITE_BG[0]; BG[1]=SITE_BG[1]; BG[2]=SITE_BG[2]; } const SX=()=>window.SITE==='big'?0:window.SITE?(W>1100?-.16:0):(W>720?.2:0), SY=()=>window.SITE==='big'?0:window.SITE?-.16:0;   // 화면에서 제품을 옮겨 놓는 양(사이트 안에서는 왼쪽 글과 아래 탭을 피해 오른쪽 위로) if(window.SITE_BG){ BG[0]=SITE_BG[0]; BG[1]=SITE_BG[1]; BG[2]=SITE_BG[2]; }
 function norm(v){const l=Math.hypot(v[0],v[1],v[2]);return [v[0]/l,v[1]/l,v[2]/l];}
 
 /* ---------- OBJ 윗면 높이맵 ---------- */
