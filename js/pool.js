@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { createSwimBear } from './bear.js';
-import { replaceWithPlush, plushCamera } from './plush.js';
+import { replaceWithPlush, plushCamera, openLargeViewer } from './plush.js';
 import { createPoolGear } from './gear.js';
 import { createDropletIsland } from './drops.js';
 import { createProductViewers } from './viewers.js';
@@ -91,7 +91,14 @@ export function createPoolIsland(scene, island) {
     if (n === 0 && was > 0) gripPlay.launch(was);
     api.setFold(n); world.onGrip?.();
   }
-  const gripTarget = { object: gripPlay.gripProxy, grab() {}, drag() {}, release() {}, tap() { const api = grip(); if (api) gripFold(api.fold ? 0 : 1); } };
+  // a quick tap on a product opens its own viewer large (like the bears)
+  const HINT = '드래그해서 돌리고, 휠이나 두 손가락으로 확대해요.';
+  const openProduct = kind => openLargeViewer(
+    kind === 'grip' ? { name: 'Grip Tok', src: 'products/griptok.html?site=big&bg=fafafa', hint: HINT }
+    : kind === 'magnet' ? { name: 'Magnet', src: 'products/magnets.html?site=big&bg=fafafa', hint: HINT }
+    : world.print === 'photo' ? { name: 'Prussian Blue', src: 'products/keyring.html?site=big&bg=fafafa&print=prussian', hint: HINT }
+    : { name: 'Aquable', src: 'products/keyring.html?site=big&bg=fafafa&print=lane', hint: HINT });
+  const gripTarget = { object: gripPlay.gripProxy, grab() {}, drag() {}, release() {}, tap() { openProduct('grip'); } };
   // Magnet: the stand at the island's centre, MAG_K world units per millimetre (the bear is about 40 mm tall)
   const MAG_K = plush.height / 40;
   const magnets = () => viewers.api('magnets');
@@ -117,7 +124,7 @@ export function createPoolIsland(scene, island) {
   ground.rotation.x = -Math.PI / 2; ground.position.set(0, DECK_Y - .005, -8); ground.receiveShadow = true; root.add(ground);
   const embedded = () => viewers.mode(LAYER[focus]) === 'embed';
   // the chain of the keyring can be picked up: the pointer is handed on to its viewer
-  const chain = { grab() {}, drag(ray, camera, ndc) { keyring()?.api.pick()?.move(ndc.x, ndc.y); }, release() { keyring()?.api.pick()?.up(); } };
+  const chain = { grab() {}, drag(ray, camera, ndc) { keyring()?.api.pick()?.move(ndc.x, ndc.y); }, release() { keyring()?.api.pick()?.up(); }, tap() { openProduct('keyring'); } };
   const camPos = new THREE.Vector3(), camQuat = new THREE.Quaternion(), vp = new THREE.Matrix4(), place = new THREE.Matrix4(), offset = new THREE.Vector3();
   const world = {
     root, island, bear, dropsScene, viewers,
@@ -216,6 +223,11 @@ export function createPoolIsland(scene, island) {
     get view() { return focus === 'drops' ? DROPS_VIEW : focus === 'grip' ? gripView() : focus === 'magnet' ? MAGNET_VIEW : POOL_VIEW; },
     get viewDirection() { return focus === 'drops' ? DROPS_DIR : focus === 'grip' ? GRIP_DIR : focus === 'magnet' ? MAGNET_DIR : undefined; },
     get grabTargets() { return focus === 'pool' || focus === 'drops' ? world.grabTargets_ : focus === 'grip' ? [gripPlay.bearTarget, gripTarget] : focus === 'magnet' ? [magnetPlay.target] : []; },
+    // a quick tap that nothing picked up: on the keyring or on the magnet stand → open it large
+    tap(ndc, ray) {
+      if (focus === 'pool' && keyring()?.api.hit?.(ndc.x, ndc.y)) openProduct('keyring');
+      else if (focus === 'magnet') { const r = toMM(ray); if (magnets()?.onStand?.(r.o, r.d)) openProduct('magnet'); }
+    },
     // nothing of ours under the pointer: maybe a part of the keyring's chain
     grabFallback(ndc, ray) {
       if (focus === 'magnet' && ray) { const r = toMM(ray); return magnets()?.pointer.down(r.o, r.d) ? magnetDrag : null; }

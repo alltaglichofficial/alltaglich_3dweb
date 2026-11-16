@@ -55,6 +55,7 @@
 <style>
 .site header,.site .hint,.site #film,.site #toFilm,.site #art,.site .label,.site .sun,.site .bar,.site #loading{display:none!important}
 .site-drive .panel{display:none!important}
+.site-big .panel{display:none!important}
 .site-embed .panel{bottom:var(--site-bottom,150px);gap:6px}
 .site-embed .panel .group[aria-label="보는 방향"],.site-embed .panel .group[aria-label="가까이 볼 제품"],.site-embed .panel .colors{display:none}
 .site-embed .panel button{font-size:12px;padding:6px 12px;min-height:32px}
@@ -116,7 +117,7 @@ try{
 
 /* ---------- 공통 ---------- */
 const L=norm([-0.5,1.0,0.35]);
-const BG=[0.953,0.949,0.937]; const SX=()=>window.SITE?(W>1100?-.16:0):(W>720?.2:0), SY=()=>window.SITE?-.16:0;   // 화면에서 제품을 옮겨 놓는 양(사이트 안에서는 왼쪽 글과 아래 탭을 피해 오른쪽 위로) if(window.SITE_BG){ BG[0]=SITE_BG[0]; BG[1]=SITE_BG[1]; BG[2]=SITE_BG[2]; }
+const BG=[0.953,0.949,0.937]; const SX=()=>window.SITE==='big'?0:window.SITE?(W>1100?-.16:0):(W>720?.2:0), SY=()=>window.SITE==='big'?0:window.SITE?-.16:0;   // 화면에서 제품을 옮겨 놓는 양(사이트 안에서는 왼쪽 글과 아래 탭을 피해 오른쪽 위로) if(window.SITE_BG){ BG[0]=SITE_BG[0]; BG[1]=SITE_BG[1]; BG[2]=SITE_BG[2]; }
 function norm(v){const l=Math.hypot(v[0],v[1],v[2])||1;return [v[0]/l,v[1]/l,v[2]/l];}
 const rotW=(x,z,a)=>[Math.cos(a)*x+Math.sin(a)*z, -Math.sin(a)*x+Math.cos(a)*z];     // 로컬 → 월드 (y축 회전)
 
@@ -680,7 +681,7 @@ const S={az:0,el:1.3,dist:400,tx:0,ty:2,tz:0};
 const Tg=Object.assign({},S);
 let view='top', dirty=true, W=1, Hpx=1;
 const FOV=26*Math.PI/180;
-function fit(rx,ry){ const tn=Math.tan(FOV/2), a=W/Hpx*(W>720?.74:1); return Math.max((ry||rx)/tn, rx/(tn*a))*(window.SITE?1.5:1.1); }
+function fit(rx,ry){ const tn=Math.tan(FOV/2), a=W/Hpx*(W>720?.74:1); return Math.max((ry||rx)/tn, rx/(tn*a))*(window.SITE==='big'?1.18:window.SITE?1.5:1.1); }
 const mulF=(F,p)=>[F.M[0]*p[0]+F.M[3]*p[1]+F.M[6]*p[2]+F.O[0], F.M[1]*p[0]+F.M[4]*p[1]+F.M[7]*p[2]+F.O[1], F.M[2]*p[0]+F.M[5]*p[1]+F.M[8]*p[2]+F.O[2]];
 function applyView(){
   let v;
@@ -884,6 +885,7 @@ if(window.SITE==='drive'){   // the site draws each frame with its own camera; t
   const SPIN={}, TURN=Math.PI/4;
   function spinStep(dt){ let any=false; for(const k in SPIN){ const q=PL[k], d=SPIN[k]-q.rot; if(Math.abs(d)<.002){ q.rot=SPIN[k]; delete SPIN[k]; } else q.rot+=d*Math.min(1,dt*11); clampItem(k); any=true; } if(any) refreshShadows(); }
   window.__site={ ready:true,
+    onStand(o,d){ const s=onPanel(o,d); return !!s&&Math.abs(s[0])<=PW&&Math.abs(s[1])<=PL2; },   // 이 광선이 스탠드 앞판에 닿는가
     front(){ const M=FR_F.M, c=DRV?DRV.cam:CAM; return !c||(c[0]-FR_F.O[0])*M[3]+(c[1]-FR_F.O[1])*M[4]+(c[2]-FR_F.O[2])*M[5]>0; },   // 카메라가 앞판 앞쪽인가
     setBG(c){ BG[0]=c[0]; BG[1]=c[1]; BG[2]=c[2]; },
     // the stand: front panel frame (columns: across, out of the panel, down the panel) and its size
@@ -911,6 +913,7 @@ if(window.SITE==='drive'){   // the site draws each frame with its own camera; t
       draw(); } };
 } else if(window.SITE){   // inside the site: on the A stand, seen at an angle
   bStand.click(); setView('angle'); applyView(); Object.assign(S,Tg);
+  if(window.SITE==='big'&&window.SITE_BG){ BG[0]=window.SITE_BG[0]; BG[1]=window.SITE_BG[1]; BG[2]=window.SITE_BG[2]; }
   const A0=Tg.az;
   window.__site={ ready:true, onShow(){ writeMemo(); }, setLight(az,el){ const a=A0+az*Math.PI/180, e=el*Math.PI/180; L[0]=Math.sin(a)*Math.cos(e); L[1]=Math.sin(e); L[2]=Math.cos(a)*Math.cos(e); relight(); dirty=true; },  setBG(c){ BG[0]=c[0]; BG[1]=c[1]; BG[2]=c[2]; dirty=true; }, reset(){ wrapAz(); setView('angle'); applyView(); } };
 }

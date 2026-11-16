@@ -62,6 +62,7 @@
 <style>
 .site header,.site .hint,.site #film,.site #toFilm,.site #art,.site .label,.site .sun,.site .bar,.site #loading{display:none!important}
 .site-drive .panel{display:none!important}
+.site-big .panel{display:none!important}
 .site-embed .panel{bottom:var(--site-bottom,150px);gap:6px}
 .site-embed .panel .group[aria-label="보는 방향"],.site-embed .panel .group[aria-label="가까이 볼 제품"],.site-embed .panel .colors{display:none}
 .site-embed .panel button{font-size:12px;padding:6px 12px;min-height:32px}
@@ -118,7 +119,7 @@ if(!gl){ document.getElementById('err').style.display='flex'; return; }
 /* ---------- 수치 ---------- */
 const R=21.5;                                   // 레진 반지름(mm) — OBJ 실측
 const L=norm([-0.5,1.0,0.35]);                  // 조명 방향
-const BG=[0.945,0.941,0.925]; const SX=()=>window.SITE?(W>1100?-.16:0):(W>720?.2:0), SY=()=>window.SITE?-.16:0;   // 화면에서 제품을 옮겨 놓는 양(사이트 안에서는 왼쪽 글과 아래 탭을 피해 오른쪽 위로) if(window.SITE_BG){ BG[0]=SITE_BG[0]; BG[1]=SITE_BG[1]; BG[2]=SITE_BG[2]; }
+const BG=[0.945,0.941,0.925]; const SX=()=>window.SITE==='big'?0:window.SITE?(W>1100?-.16:0):(W>720?.2:0), SY=()=>window.SITE==='big'?0:window.SITE?-.16:0;   // 화면에서 제품을 옮겨 놓는 양(사이트 안에서는 왼쪽 글과 아래 탭을 피해 오른쪽 위로) if(window.SITE_BG){ BG[0]=SITE_BG[0]; BG[1]=SITE_BG[1]; BG[2]=SITE_BG[2]; }
 function norm(v){const l=Math.hypot(v[0],v[1],v[2]);return [v[0]/l,v[1]/l,v[2]/l];}
 
 /* ---------- OBJ 윗면 높이맵 ---------- */
@@ -385,7 +386,7 @@ const S={az:.5,el:.62,dist:170,tx:0,ty:10,tz:0,ext:1};
 const Tg=Object.assign({},S);
 let spin=0, phone=false, view='angle', auto=!matchMedia('(prefers-reduced-motion: reduce)').matches, dirty=true, W=1,Hpx=1;
 const FOV=26*Math.PI/180;
-function fit(rx,ry){ const tn=Math.tan(FOV/2), a=W/Hpx*(W>720?.72:1); return Math.max((ry||rx)/tn, rx/(tn*a))*(window.SITE?1.5:1.12); }
+function fit(rx,ry){ const tn=Math.tan(FOV/2), a=W/Hpx*(W>720?.72:1); return Math.max((ry||rx)/tn, rx/(tn*a))*(window.SITE==='big'?1.18:window.SITE?1.5:1.12); }
 function applyView(){
   const yB=phone?8.6:0, capMid=yB+2.4+(3.4+9.2*Tg.ext)+7;
   if(view==='top'){ Tg.el=1.555; Tg.az=0; }

@@ -145,8 +145,9 @@ setInterval(() => {
 
 // Large viewer: the stand-alone bear page over a soft backdrop.
 let viewer = null;
-export function openPlushViewer(kind) {
-  const info = PLUSH[kind];
+export function openPlushViewer(kind) { openLargeViewer(PLUSH[kind]); }
+// info: { name, src, hint? } — a bear's page, or a product's own viewer
+export function openLargeViewer(info) {
   if (!viewer) {
     viewer = document.createElement('div'); viewer.className = 'plush-viewer'; viewer.hidden = true;
     viewer.setAttribute('role', 'dialog'); viewer.setAttribute('aria-modal', 'true');
@@ -158,6 +159,7 @@ export function openPlushViewer(kind) {
     addEventListener('keydown', e => { if (e.key === 'Escape' && !viewer.hidden) close(); });
   }
   viewer.querySelector('.plush-name').textContent = info.name;
+  viewer.querySelector('.plush-hint').textContent = info.hint ?? '드래그해서 돌리고, 휠이나 두 손가락으로 확대해요. 톡 누르면 폴짝 뛰어요.';
   const frame = viewer.querySelector('iframe'); frame.title = info.name + ' 3D'; frame.src = info.src;
   viewer.hidden = false;
   frame.addEventListener('load', () => frame.contentDocument?.getElementById('gl')?.focus(), { once: true });

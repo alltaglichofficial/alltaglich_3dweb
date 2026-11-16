@@ -393,6 +393,15 @@ async function start() {
     if (tap) t.tap?.();   // a quick tap on a plush bear opens it large
   };
   canvas.addEventListener('pointerup', drop, { capture: true });
+  // a quick tap that no grab target took (those stop the event above): the island may
+  // open what is under it large — the keyring, the magnet stand
+  let tapStart = null;
+  canvas.addEventListener('pointerdown', event => { tapStart = event.button === 0 ? { x: event.clientX, y: event.clientY, t: performance.now() } : null; });
+  canvas.addEventListener('pointerup', event => {
+    const s = tapStart; tapStart = null;
+    if (!s || !world.tap || Math.hypot(event.clientX - s.x, event.clientY - s.y) > 6 || performance.now() - s.t > 350) return;
+    carryRay(event); world.tap(pointer, raycaster.ray);
+  });
   canvas.addEventListener('pointercancel', drop, { capture: true });
   // Keeps things smooth on slower graphics: each island remembers how sharp it can be
   // drawn. If frames stay slow there (the swimming island's refracting water is the
