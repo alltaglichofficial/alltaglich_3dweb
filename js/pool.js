@@ -96,9 +96,9 @@ export function createPoolIsland(scene, island) {
   const tapCaster = new THREE.Raycaster();
   const tapLocal = new THREE.Ray(), tapInv = new THREE.Matrix4(), blockBox = new THREE.Box3(new THREE.Vector3(-WALL_X, DECK_Y, -WALL_Z), new THREE.Vector3(WALL_X, DECK_Y + 3.3, WALL_Z));
   const openProduct = kind => openLargeViewer(
-    kind === 'drops' ? { name: 'Water Drop', src: 'products/waterdrop.html?site=big&bg=fafafa', hint: HINT }
+    kind === 'drops' ? { name: 'Water Drop', reviewProduct: 'drops', src: 'products/waterdrop.html?site=big&bg=fafafa', hint: HINT }
     : kind === 'grip' ? { name: 'Grip Tok', src: 'products/griptok.html?site=big&bg=fafafa', hint: HINT }
-    : kind === 'magnet' ? { name: 'Magnet', src: 'products/magnets.html?site=big&bg=fafafa', hint: HINT }
+    : kind === 'magnet' ? { name: 'Magnet', reviewProduct: 'magnet', src: 'products/magnets.html?site=big&bg=fafafa', hint: HINT }
     : world.print === 'photo' ? { name: 'Prussian Blue', src: 'products/keyring.html?site=big&bg=fafafa&print=prussian', hint: HINT }
     : { name: 'Aquable', src: 'products/keyring.html?site=big&bg=fafafa&print=lane', hint: HINT });
   const gripTarget = { object: gripPlay.gripProxy, grab() {}, drag() {}, release() {}, tap() { openProduct('grip'); } };
