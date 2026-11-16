@@ -135,7 +135,7 @@ export function createPoolIsland(scene, island) {
       // the first time, so it can be put away in one go
       if (!poolParts) {
         poolParts = new THREE.Group(); poolParts.name = 'PoolParts';
-        const keep = new Set([dropsScene.root, plush.sprite, plush.proxy, plush.shadow, bear.object]);
+        const keep = new Set([dropsScene.root, plush.sprite, plush.proxy, plush.shadow, bear.object, magnetPlay.pencil]);
         for (const child of [...poolGroup.children]) if (!keep.has(child)) poolParts.add(child);
         poolGroup.add(poolParts);
       }

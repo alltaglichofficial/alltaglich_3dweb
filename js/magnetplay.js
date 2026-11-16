@@ -29,6 +29,33 @@ export function createMagnetPlay(parent, { plush, groundY, K, site }) {
     const m = site().memo(), lx = (xp / 100 - .5) * m.half * 2, lz = (yp / 100 - .5) * m.half * 2;
     return [m.x + Math.cos(m.rot) * lx + Math.sin(m.rot) * lz, m.z - Math.sin(m.rot) * lx + Math.cos(m.rot) * lz];
   }
+  // the pencil in the right paw while it writes: tip on the memo, the rest running back up
+  // through the paw. Drawn over the bear (the paw holds it), only while writing.
+  const pencil = new THREE.Group(); pencil.name = 'MagnetPencil'; pencil.visible = false; parent.add(pencil);
+  {
+    const L = H * .34, r = H * .026, mat = c => new THREE.MeshStandardMaterial({ color: c, roughness: .6, depthTest: false, transparent: true });   // transparent: sorted with the bear's sprite, and after it
+    const part = (geo, c, y) => { const m = new THREE.Mesh(geo, mat(c)); m.position.y = y; m.renderOrder = 5; pencil.add(m); };
+    const tip = L * .07, wood = L * .13, body = L * .64, band = L * .06, rub = L * .1;   // along the pencil from the point (y = 0) up
+    part(new THREE.ConeGeometry(r * .32, tip, 6), 0x3a3a3c, tip / 2);   // graphite point
+    pencil.children[0].rotation.x = Math.PI;
+    part(new THREE.CylinderGeometry(r, r * .32, wood, 6), 0xe9cfa1, tip + wood / 2);        // sharpened wood
+    part(new THREE.CylinderGeometry(r, r, body, 6), 0xf2c230, tip + wood + body / 2);      // yellow hexagonal body
+    part(new THREE.CylinderGeometry(r * 1.04, r * 1.04, band, 12), 0xb9bcc0, tip + wood + body + band / 2);   // metal band
+    part(new THREE.CylinderGeometry(r * .98, r * .98, rub, 12), 0xe58f9b, tip + wood + body + band + rub / 2); // eraser
+  }
+  const up3 = new THREE.Vector3(0, 1, 0), tipW = new THREE.Vector3(), pawW = new THREE.Vector3();
+  // the right paw's tip in the world, for an arm pose arm(1, elev, fwd); on screen the bear's
+  // right paw is its local −x (it faces the panel, local +z); both points are in the parent's space
+  function pawTip(elev, fwd, target) {
+    return target.set(-(.5 + (elev - .42) * .3) * H, (elev - .42) * .5 * H, (.1 + fwd * .15) * H).applyMatrix4(anchor.matrix);   // measured on the sprite
+  }
+  function holdPencil(xp, yp, elev, fwd) {
+    const [x, z] = memoPoint(xp, yp);
+    onPanel(x, z, .6, tipW); anchor.updateMatrix(); pawTip(elev, fwd, pawW);
+    pencil.position.copy(tipW);
+    pencil.quaternion.setFromUnitVectors(up3, w3.copy(pawW).sub(tipW).normalize());
+    pencil.visible = true;
+  }
   const P = { mode: 'wait', t: 0, phase: 0, written: 0, target: new THREE.Vector2(), px: 0, pz: 0, vy: 0, vz: 0, wait: 1, limbs: null, done: false };
   const stand = () => { anchor.position.y = groundY + HALF; anchor.rotation.x = 0; anchor.rotation.z = 0; };
   const face = (yaw, dt) => { let d = yaw - anchor.rotation.y; d = Math.atan2(Math.sin(d), Math.cos(d)); anchor.rotation.y += d * Math.min(1, dt * 6); };
@@ -56,17 +83,17 @@ export function createMagnetPlay(parent, { plush, groundY, K, site }) {
   const total = () => site().lines.reduce((a, l) => a + l.n, 0);
   const OUT = () => HMM * .3;   // how far the bear's middle is off the panel while it climbs
   // where the bear's middle goes for the pen at memo point (xp, yp): its right paw reaches diagonally up and right to the pen
-  const penSpot = (xp, yp) => { const [x, z] = memoPoint(xp, yp); return [x - HMM * .34, z + HMM * .2]; };   // (the writing paw is up and out to the right)
+  const penSpot = (xp, yp) => { const [x, z] = memoPoint(xp, yp); return [x - HMM * .7, z + HMM * .1]; };   // (the writing paw is out to the right, the pencil point just beyond it)
 
   const play = {
-    anchor,
+    anchor, pencil,
     enter() {
-      P.mode = 'wait'; P.t = 0; P.wait = .8; P.written = 0; P.done = false;
+      P.mode = 'wait'; P.t = 0; P.wait = .8; P.written = 0; P.done = false; pencil.visible = false;
       anchor.visible = true;
       // arrives from the front right, on the table
       anchor.position.set(70 * K, groundY + HALF, 90 * K); anchor.rotation.set(0, -2.4, 0, 'YXZ');
     },
-    leave() { anchor.visible = false; plush.sprite.visible = false; plush.shadow.visible = false; },
+    leave() { pencil.visible = false; anchor.visible = false; plush.sprite.visible = false; plush.shadow.visible = false; },
     // tap the bear: open it large
     target: { object: plush.proxy, grab() {}, drag() {}, release() {}, tap() { plush.open(); } },
     update(time, dt, reducedMotion) {
@@ -114,10 +141,13 @@ export function createMagnetPlay(parent, { plush, groundY, K, site }) {
         const [tx, tz] = penSpot(xp, p.line.y);
         P.px += (tx - P.px) * Math.min(1, dt * 5); P.pz += (tz - P.pz) * Math.min(1, dt * 5);
         onPanel(P.px, P.pz, OUT(), anchor.position);
-        const scrib = Math.sin(time * 22) * .12, wob = Math.sin(time * 9) * .05;
+        const scrib = Math.sin(time * 22) * .08, wob = Math.sin(time * 9) * .05;
         anchor.rotation.set(-api.panel.tilt, Math.PI + wob * .4, wob, 'YXZ');
-        P.limbs = { armL: arm(-1, .55, .15), armR: arm(1, .45 + scrib, .2 + scrib * .3), legL: leg(-1, .3, .5), legR: leg(1, .2, .5) };
-        if (P.written >= total()) { P.mode = 'look'; P.t = 0; }
+        // right paw forward onto the memo with the pencil; the left one holds on lower down
+        const eR = .42 + scrib, fR = .62 + scrib * .4;
+        P.limbs = { armL: arm(-1, .18, .32), armR: arm(1, eR, fR), legL: leg(-1, .3, .5), legR: leg(1, .2, .5) };
+        holdPencil(xp + Math.sin(time * 22) * .5, p.line.y - 1.2 + Math.cos(time * 31) * .5, eR, fR);
+        if (P.written >= total()) { P.mode = 'look'; P.t = 0; pencil.visible = false; }
       } else if (P.mode === 'look') {
         // done: a look round at us over its shoulder, legs swinging
         anchor.rotation.y = Math.PI + Math.sin(Math.min(1, P.t / 1.4) * Math.PI) * .8;

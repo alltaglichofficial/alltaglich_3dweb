@@ -594,31 +594,31 @@ function drawMemoA(x,S2,limit){ const u=S2/100;
   let fs=10*u; x.font=`400 ${fs}px "Helvetica Neue",Helvetica,Arial,sans-serif`;
   fs*=22.5*u/x.measureText('Alltäglich').width; x.font=`400 ${fs}px "Helvetica Neue",Helvetica,Arial,sans-serif`;
   x.fillText('Alltäglich',49.6*u,92.6*u);
-  // 손글씨: 파란 볼펜, 줄마다 살짝 기울고 흔들림
+  // 손글씨: 연필(흑연 회색), 줄마다 살짝 기울고 흔들림
   const HAND='"Nanum Pen Script","Gaegu","Comic Sans MS",cursive';
   let left=limit; x.textAlign='left'; x.textBaseline='alphabetic';
   SWIM_LOG.lines.forEach((ln,i)=>{ if(left<=0) return;
     const base=(18.3+i*9.09-1.3)*u, tilt=((i*37)%7-3)*.004;
     x.save(); x.translate(28*u, base); x.rotate(tilt);
-    x.fillStyle=ln.sign?'#2b4f8f':'#24447e';
+    x.fillStyle=ln.sign?'#4b4d52':'#56585d';
     let size=(ln.big?7.4:ln.sign?7.8:7)*u; x.font=`${size}px ${HAND}`;
     const full=ln.t+(ln.note?'   '+ln.note:''), part=[...full].slice(0,left).join(''); left-=[...full].length;
     { const room=(ln.sign?30:62)*u, w=x.measureText(full).width; if(w>room){ size*=room/w; x.font=`${size}px ${HAND}`; } }   // 줄 끝을 넘지 않게
     if(ln.sign){ x.textAlign='right'; x.fillText(part,52*u,0); }
     else if(ln.note&&part.length>ln.t.length){ x.fillText(ln.t,0,0); const w=x.measureText(ln.t+'   ').width;
-      x.fillStyle='#4a6aa0'; x.font=`${size*.86}px ${HAND}`; x.fillText(part.slice(ln.t.length+3),w,0); }
+      x.fillStyle='#7d7f84'; x.font=`${size*.86}px ${HAND}`; x.fillText(part.slice(ln.t.length+3),w,0); }
     else x.fillText(part,0,0);
-    if(ln.sum&&part.length===ln.t.length){ const w=x.measureText(ln.t).width; x.strokeStyle='#e0806e'; x.lineWidth=u*.55; x.beginPath(); x.moveTo(-.5*u,1.2*u); x.quadraticCurveTo(w*.5,2.2*u,w+u,.9*u); x.stroke(); }   // 밑줄
+    if(ln.sum&&part.length===ln.t.length){ const w=x.measureText(ln.t).width; x.strokeStyle='#8a8c90'; x.lineWidth=u*.55; x.beginPath(); x.moveTo(-.5*u,1.2*u); x.quadraticCurveTo(w*.5,2.2*u,w+u,.9*u); x.stroke(); }   // 밑줄
     x.restore();
     // 여백 칸: 종목 줄마다 체크 표시
-    if(i>=1&&i<=4&&part.length){ x.save(); x.strokeStyle='#24447e'; x.lineWidth=u*.55; x.lineCap='round'; x.lineJoin='round';
+    if(i>=1&&i<=4&&part.length){ x.save(); x.strokeStyle='#56585d'; x.lineWidth=u*.55; x.lineCap='round'; x.lineJoin='round';
       const cx=18*u, cy=base-2.4*u; x.beginPath(); x.moveTo(cx-2*u,cy); x.lineTo(cx-.6*u,cy+1.6*u); x.lineTo(cx+2.4*u,cy-2.2*u); x.stroke(); x.restore(); }
     // 서명 옆 작은 곰 얼굴
-    if(ln.sign&&part.length===full.length){ x.save(); x.strokeStyle='#2b4f8f'; x.lineWidth=u*.45;
+    if(ln.sign&&part.length===full.length){ x.save(); x.strokeStyle='#4b4d52'; x.lineWidth=u*.45;
       const r=2.6*u, bx=28*u+52*u+3.2*u+r, by=base-3.4*u;   // 서명 끝(52u) 오른쪽, 줄 위에 떠 있게
       for(const ex of [-.72,.72]){ x.beginPath(); x.arc(bx+ex*r,by-.78*r,.36*r,Math.PI*.9,Math.PI*2.1); x.stroke(); }   // 귀
       x.beginPath(); x.arc(bx,by,r,0,Math.PI*2); x.stroke();
-      x.fillStyle='#2b4f8f'; for(const ex of [-.36,.36]){ x.beginPath(); x.arc(bx+ex*r,by-.12*r,.11*r,0,Math.PI*2); x.fill(); }
+      x.fillStyle='#4b4d52'; for(const ex of [-.36,.36]){ x.beginPath(); x.arc(bx+ex*r,by-.12*r,.11*r,0,Math.PI*2); x.fill(); }
       x.beginPath(); x.arc(bx,by+.3*r,.16*r,0,Math.PI*2); x.fill(); x.restore(); }
   });
 }
