@@ -24,9 +24,16 @@ function text(tag, value, className) {
 
 function card(review, language) {
   const article = document.createElement('article');
-  const meta = [labels[review.source], review.author, review.date].filter(Boolean);
-  if (Number.isInteger(review.rating)) meta.push(review.rating + '/5');
-  article.append(text('div', meta.join(' · '), 'meta'));
+  const meta = text('div', '', 'meta');
+  if (Number.isInteger(review.rating)) {
+    const n = Math.max(0, Math.min(5, review.rating)), stars = text('span', '★'.repeat(n), 'stars');
+    if (n < 5) stars.append(text('i', '★'.repeat(5 - n)));
+    stars.setAttribute('role', 'img'); stars.setAttribute('aria-label', '5점 만점에 ' + n + '점');
+    meta.append(stars);
+  }
+  if (labels[review.source]) meta.append(text('span', labels[review.source], 'src'));
+  for (const value of [review.author, review.date]) if (value) meta.append(text('span', value));
+  article.append(meta);
   const translated = language !== 'original' && review.translations?.[language];
   const body = text('p', translated || review.text || '본문 없이 등록된 후기');
   if (review.text) body.lang = translated ? language : (review.textLang || 'ko');
@@ -64,7 +71,7 @@ function card(review, language) {
 function render() {
   const visible = source ? reviews.filter(review => review.source === source) : reviews;
   const language = $('language').value;
-  $('status').textContent = visible.length.toLocaleString('ko-KR') + '건';
+  $('status').textContent = '구매 후기 ' + visible.length.toLocaleString('ko-KR') + '건';
   $('reviews').replaceChildren(...visible.slice(0, limit).map(review => card(review, language)));
   $('more').hidden = visible.length <= limit;
   for (const button of $('sources').querySelectorAll('button')) {
@@ -77,8 +84,8 @@ async function init() {
     $('status').textContent = '3D 페이지에서 상품의 구매 후기 버튼으로 열어주세요.';
     return;
   }
-  $('title').textContent = page.name + ' 구매 후기';
-  document.title = $('title').textContent + ' · ALLTÄGLICH';
+  $('title').textContent = page.name;
+  document.title = page.name + ' 구매 후기 · ALLTÄGLICH';
   try {
     const response = await fetch('https://alltaglich-reviews.pages.dev/reviews/' + page.id + '.json');
     if (!response.ok) throw new Error('Unable to load reviews');

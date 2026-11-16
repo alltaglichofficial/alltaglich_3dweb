@@ -101,7 +101,6 @@ export function createPoolIsland(scene, island) {
     : kind === 'magnet' ? { name: 'Magnet', reviewProduct: 'magnet', src: 'products/magnets.html?site=big&bg=fafafa', hint: HINT }
     : world.print === 'photo' ? { name: 'Prussian Blue', src: 'products/keyring.html?site=big&bg=fafafa&print=prussian', hint: HINT }
     : { name: 'Aquable', src: 'products/keyring.html?site=big&bg=fafafa&print=lane', hint: HINT });
-  const gripTarget = { object: gripPlay.gripProxy, grab() {}, drag() {}, release() {}, tap() { openProduct('grip'); } };
   // Magnet: the stand at the island's centre, MAG_K world units per millimetre (the bear is about 40 mm tall)
   const MAG_K = plush.height / 40;
   const magnets = () => viewers.api('magnets');
@@ -225,7 +224,7 @@ export function createPoolIsland(scene, island) {
     gripPhone(on) { const api = grip(); if (!api) return; api.setPhone(on); world.onGrip?.(); },
     get view() { return focus === 'drops' ? DROPS_VIEW : focus === 'grip' ? gripView() : focus === 'magnet' ? MAGNET_VIEW : POOL_VIEW; },
     get viewDirection() { return focus === 'drops' ? DROPS_DIR : focus === 'grip' ? GRIP_DIR : focus === 'magnet' ? MAGNET_DIR : undefined; },
-    get grabTargets() { return focus === 'pool' || focus === 'drops' ? world.grabTargets_ : focus === 'grip' ? [gripPlay.bearTarget, gripTarget] : focus === 'magnet' ? [magnetPlay.target] : []; },
+    get grabTargets() { return focus === 'pool' || focus === 'drops' ? world.grabTargets_ : focus === 'grip' ? [gripPlay.bearTarget] : focus === 'magnet' ? [magnetPlay.target] : []; },
     // a quick tap that nothing picked up: on the keyring or on the magnet stand → open it large
     tap(ndc, ray) {
       if (focus === 'pool') {
@@ -233,6 +232,7 @@ export function createPoolIsland(scene, island) {
         tapLocal.copy(ray).applyMatrix4(tapInv.copy(poolGroup.matrixWorld).invert());
         if (tapLocal.intersectsBox(blockBox) || keyring()?.api.hit?.(ndc.x, ndc.y)) openProduct('keyring');
       }
+      else if (focus === 'grip') { tapCaster.ray.copy(ray); if (tapCaster.intersectObject(gripPlay.gripProxy, false).length) openProduct('grip'); }
       else if (focus === 'drops') { tapCaster.ray.copy(ray); if (tapCaster.intersectObject(dropsScene.root, true).length) openProduct('drops'); }
       else if (focus === 'magnet') { const r = toMM(ray); if (magnets()?.onStand?.(r.o, r.d)) openProduct('magnet'); }
     },

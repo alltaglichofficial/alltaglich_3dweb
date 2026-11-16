@@ -857,7 +857,7 @@ function setupGrab(){
   const setRay = e => { const r = canvas.getBoundingClientRect(); ndc.set((e.clientX - r.left) / r.width * 2 - 1, -(e.clientY - r.top) / r.height * 2 + 1); ray.setFromCamera(ndc, camera); };
   const bodyOf = o => { while (o && !o.userData.body) o = o.parent; return o && o.userData.body; };
   canvas.addEventListener('pointerdown', e => {
-    if (e.button !== 0) return;
+    if (e.button !== 0 || SITE === 'big') return;   // opened large from the site: the keyring lies still, dragging only turns the view
     setRay(e); const hit = ray.intersectObjects(pickables, false)[0]; if (!hit) return;
     const b = bodyOf(hit.object); if (!b) return;
     e.stopImmediatePropagation(); e.preventDefault(); controls.enabled = false; tween = null;
@@ -978,7 +978,8 @@ function siteDrive(){
     if (SITE === 'drive') { document.getElementById('loading').hidden = true; siteDrive(); return; }
     const v = views.angle(); camera.position.set(...v.p); controls.target.set(...v.t); controls.update();
     document.getElementById('loading').hidden = true;
-    if (SITE === 'big') { stageDome.visible = false; scene.background = stageMat.color; const k = new URLSearchParams(location.search).get('print'); if (k) setPrint(k); if (window.SITE_BG) { document.documentElement.style.setProperty('--stage', '#' + new URLSearchParams(location.search).get('bg')); applyTheme(); } }   // opened large from the site
+    if (SITE === 'big') { stageDome.visible = false; scene.background = stageMat.color; setSpin(false);
+      floor.material = new THREE.MeshBasicMaterial({ toneMapped: false }); floor.material.color = stageMat.color; shadowMat.opacity = 0.3; const k = new URLSearchParams(location.search).get('print'); if (k) setPrint(k); if (window.SITE_BG) { document.documentElement.style.setProperty('--stage', '#' + new URLSearchParams(location.search).get('bg')); applyTheme(); } }   // opened large from the site
     if (!SITE) FILM.start(true);
     const clock = new THREE.Clock();
     renderer.setAnimationLoop(() => {

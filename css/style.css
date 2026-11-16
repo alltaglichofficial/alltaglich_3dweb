@@ -50,6 +50,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;outline:none}
 .island-label{margin:0 0 14px;font-size:15px;font-weight:900;line-height:1;letter-spacing:2px;text-transform:uppercase;color:var(--ink)}
 h1{margin:0 0 12px;font-size:clamp(20px,1.8vw,24px);font-weight:400;line-height:1.5;letter-spacing:-.02em;color:var(--ink)}
 .intro-copy{margin:0;font-size:13px;font-weight:300;line-height:1.8;color:var(--muted)}
+.tap-hint{margin:16px 0 0;padding-top:12px;border-top:1px solid var(--rule);font-size:12px;font-weight:400;color:var(--text)}
 
 /* ---------- bottom: the islands as menu words, products as a lighter row ---------- */
 .footer{position:fixed;left:0;right:0;bottom:max(20px,env(safe-area-inset-bottom));display:flex;justify-content:center;padding:0 16px;pointer-events:none;z-index:5}
@@ -172,6 +173,7 @@ h1{margin:0 0 12px;font-size:clamp(20px,1.8vw,24px);font-weight:400;line-height:
   .island-label{font-size:13px;margin-bottom:9px}
   h1{font-size:18px;margin-bottom:0}
   .intro-copy{display:none}
+  .tap-hint{margin-top:8px;padding-top:0;border-top:0;font-size:11px;color:var(--muted)}
   .footer{bottom:max(12px,env(safe-area-inset-bottom));padding:0 8px}
   .lane-btn{min-height:42px;padding:0 12px}
   .lane-btn[aria-pressed=true]::after{left:12px;right:12px;bottom:7px}
