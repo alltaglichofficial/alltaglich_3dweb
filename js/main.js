@@ -185,6 +185,9 @@ async function start() {
     document.querySelectorAll('.pool-sub').forEach(el => { el.hidden = main !== 'pool'; if (el.dataset.sub) el.setAttribute('aria-pressed', String(main === 'pool' && el.dataset.sub === sub)); });
     const toysTab = document.querySelector('#toys-tab');
     // Grip Tok: fold / open buttons
+    // temporary print colours: with the keyring on screen
+    const colorBox = document.querySelector('#print-colors'), colorHere = main === 'pool' && poolWorld?.focus === 'pool';
+    if (colorBox) { colorBox.hidden = !colorHere; if (colorHere) showPrintColors(poolWorld); }
     const gripBox = document.querySelector('#grip-controls'), gripHere = main === 'pool' && poolWorld?.focus === 'grip';
     if (gripBox) { gripBox.hidden = !gripHere; if (gripHere) showGripState(); }
     const tray = document.querySelector('#toy-tray'), toysHere = main === 'pool' && poolWorld?.focus === 'pool';
@@ -392,6 +395,22 @@ async function start() {
     t.release();
     if (tap) t.tap?.();   // a quick tap on a plush bear opens it large
   };
+  // temporary print colours for the pool keyring (tile, grout, Ver.1's lane mark)
+  const PRINT_DEFAULT = { aquable: { tile: '#95c2cc', line: '#324348', lane: '#324348' }, prussian: { tile: '#6297ac', line: '#172735' } };
+  const poolOf = () => worlds.find(w => w.setPrint);
+  const printName = w => w?.print === 'photo' ? 'prussian' : 'aquable';
+  function showPrintColors(w) {
+    const name = printName(w), c = w?.printColors?.[name] || PRINT_DEFAULT[name];
+    document.querySelectorAll('#print-colors input').forEach(input => { input.value = c[input.dataset.part] || c.line; });
+    document.querySelector('#print-colors [data-only=aquable]').hidden = name !== 'aquable';
+  }
+  document.querySelectorAll('#print-colors input').forEach(input => input.addEventListener('input', () => {
+    const w = poolOf(), name = printName(w), c = {};
+    document.querySelectorAll('#print-colors input').forEach(i => { c[i.dataset.part] = i.value; });
+    if (name !== 'aquable') delete c.lane;
+    w?.setPrintColors(name, c);
+  }));
+  document.querySelector('#printColorsReset')?.addEventListener('click', () => { const w = poolOf(); w?.setPrintColors(printName(w), null); showPrintColors(w); });
   // the SHOP menu on narrow screens
   { const shops = document.querySelector('.shops'), toggle = document.querySelector('#shopsToggle');
     const set = open => { shops.classList.toggle('open', open); toggle.setAttribute('aria-expanded', String(open)); };

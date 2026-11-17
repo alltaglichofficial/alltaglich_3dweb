@@ -31,6 +31,7 @@ export function createPoolIsland(scene, island) {
     const b = api.box, scale = WALL_X * 2 / (b.maxX - b.minX);
     ring = { api, cx: (b.minX + b.maxX) / 2, cz: (b.minZ + b.maxZ) / 2, scale, grid: api.grid, top: b.top };
     api.setPrint(world.print === 'photo' ? 'prussian' : 'lane');
+    for (const k in world.printColors) api.setPrintColors?.(k, world.printColors[k]);   // (a viewer loaded again keeps the colours)
     return ring;
   };
   // the resin's wavy top under (x, z): the bear floats on it
@@ -95,12 +96,13 @@ export function createPoolIsland(scene, island) {
   const HINT = '드래그해서 돌리고, 휠이나 두 손가락으로 확대해요.';
   const tapCaster = new THREE.Raycaster();
   const tapLocal = new THREE.Ray(), tapInv = new THREE.Matrix4(), blockBox = new THREE.Box3(new THREE.Vector3(-WALL_X, DECK_Y, -WALL_Z), new THREE.Vector3(WALL_X, DECK_Y + 3.3, WALL_Z));
+  const colorQuery = name => { const c = world.printColors[name]; return c ? '&' + ['tile', 'line', 'lane'].filter(k => c[k]).map(k => k + '=' + c[k].slice(1)).join('&') : ''; };
   const openProduct = kind => openLargeViewer(
     kind === 'drops' ? { name: 'Water Drop Sticker', reviewProduct: 'drops', shop: 'https://alltaglich.com/surl/O/54', src: 'products/waterdrop.html?site=big&bg=fafafa', hint: HINT }
     : kind === 'grip' ? { name: 'Swimming pool Grip Tok Ver.2', shop: 'https://alltaglich.com/surl/O/189', src: 'products/griptok.html?site=big&bg=fafafa', hint: HINT }
     : kind === 'magnet' ? { name: 'Swimming pool Magnet Set', reviewProduct: 'magnet', shop: 'https://alltaglich.com/surl/O/190', src: 'products/magnets.html?site=big&bg=fafafa', hint: HINT }
-    : world.print === 'photo' ? { name: 'Swimming pool keychain Ver.2 Prussian Blue', shop: 'https://alltaglich.com/surl/O/61', src: 'products/keyring.html?site=big&bg=fafafa&print=prussian', hint: HINT }
-    : { name: 'Swimming pool keychain Ver.1 Aquable', shop: 'https://alltaglich.com/surl/O/53', src: 'products/keyring.html?site=big&bg=fafafa&print=lane', hint: HINT });
+    : world.print === 'photo' ? { name: 'Swimming pool keychain Ver.2 Prussian Blue', shop: 'https://alltaglich.com/surl/O/61', src: 'products/keyring.html?site=big&bg=fafafa&print=prussian' + colorQuery('prussian'), hint: HINT }
+    : { name: 'Swimming pool keychain Ver.1 Aquable', shop: 'https://alltaglich.com/surl/O/53', src: 'products/keyring.html?site=big&bg=fafafa&print=lane' + colorQuery('aquable'), hint: HINT });
   // Magnet: the stand at the island's centre, MAG_K world units per millimetre (the bear is about 40 mm tall)
   const MAG_K = plush.height / 40;
   const magnets = () => viewers.api('magnets');
@@ -132,6 +134,9 @@ export function createPoolIsland(scene, island) {
     root, island, bear, dropsScene, viewers,
     // 'lane' (lane-mark tiles) or 'photo' (Prussian blue tiles in a black grid); switched from the bottom tab.
     print: 'lane',
+    // temporary colours for the two prints ({ tile, line, lane } or null for the artwork's own)
+    printColors: { aquable: null, prussian: null },
+    setPrintColors(name, colors) { world.printColors[name] = colors; keyring()?.api.setPrintColors?.(name, colors); },
     setPrint(kind) { world.print = kind === 'photo' ? 'photo' : 'lane'; keyring()?.api.setPrint(world.print === 'photo' ? 'prussian' : 'lane'); },
     // which product is on screen: 'pool' (the keyring), 'drops', 'grip' or 'magnet'
     get focus() { return focus; },

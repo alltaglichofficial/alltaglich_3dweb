@@ -96,6 +96,16 @@ h1{margin:0 0 12px;font-size:clamp(20px,1.8vw,24px);font-weight:400;line-height:
 .grip-controls .grip-open{color:var(--ink);font-weight:700}
 .grip-controls button:disabled{opacity:.4;cursor:default}
 
+/* temporary print colours (Swim island, keyring): above the menu on the left */
+.print-colors{position:absolute;left:0;bottom:calc(100% + 10px);display:flex;align-items:center;gap:2px;padding:4px 4px 4px 8px;border:1px solid var(--rule);background:var(--white);white-space:nowrap}
+.print-colors label{display:flex;align-items:center;gap:6px;min-height:34px;padding:0 8px;font-size:12px;color:var(--text);cursor:pointer}
+.print-colors label[hidden]{display:none}
+.print-colors input{width:24px;height:24px;padding:0;border:1px solid var(--rule);background:none;cursor:pointer}
+.print-colors input::-webkit-color-swatch-wrapper{padding:0}.print-colors input::-webkit-color-swatch{border:0}
+.print-colors button{min-height:30px;margin-left:4px;padding:0 10px;border:1px solid var(--rule);background:transparent;color:var(--muted);font-size:12px}
+.print-colors button:hover{border-color:var(--ink);color:var(--ink)}
+@media(max-width:640px){.print-colors{bottom:calc(100% + 64px);left:50%;transform:translateX(-50%)}.print-colors label{padding:0 5px}}
+
 /* 물놀이 tray: toys are dragged from it onto the bear */
 .toy-tray{position:absolute;right:0;bottom:calc(100% + 10px);display:flex;gap:6px;align-items:flex-start;padding:8px 8px 28px;border:1px solid var(--rule);background:var(--white)}
 .toy-tray .toy{display:flex;flex-direction:column;align-items:center;gap:3px;width:64px;padding:7px 4px 6px;border:1px solid transparent;background:var(--paper);color:var(--muted);font-size:11px;touch-action:none}

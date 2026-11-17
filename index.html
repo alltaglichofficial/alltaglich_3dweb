@@ -94,6 +94,13 @@
       <button type="button" class="pool-sub" data-sub="magnet" aria-pressed="false" hidden title="Swimming pool Magnet Set"><span class="nav-dot magnet"></span><span>Magnet Set</span></button>
       <button type="button" class="pool-sub" id="toys-tab" aria-pressed="false" hidden title="튜브, 오리발, 킥판을 꺼내요. 수영곰에게 끌어다 주면 써요." aria-controls="toy-tray"><span class="nav-dot toys"></span><span>물놀이</span></button>
       </div>
+      <!-- temporary: try other colours on the pool keyring prints -->
+      <div id="print-colors" class="print-colors" role="group" aria-label="키링 색 임시 변경" hidden>
+        <label><input type="color" data-part="tile" value="#95c2cc"><span>타일</span></label>
+        <label><input type="color" data-part="line" value="#324348"><span>줄눈</span></label>
+        <label data-only="aquable"><input type="color" data-part="lane" value="#324348"><span>레인</span></label>
+        <button type="button" id="printColorsReset">원래 색</button>
+      </div>
       <div id="grip-controls" class="grip-controls" role="group" aria-label="그립톡 접기와 펴기" hidden>
         <button type="button" data-grip="1">한 단 접기</button>
         <button type="button" data-grip="2">끝까지 접기</button>
