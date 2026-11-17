@@ -5,15 +5,17 @@ import { createPoolIsland } from './pool.js';
 
 export function createWorld(scene, island) {
   if (island.id === 'pool') return createPoolIsland(scene, island);
-  const root = new THREE.Group(); root.name = `island-${island.id}`;
-  const staticRoot = new THREE.Group(); root.add(staticRoot); scene.add(root);
+  // `outer` is what main.js shows, hides and slides between islands (it resets its position
+  // to the origin); everything is built in `root`, lowered onto the studio floor.
+  const outer = new THREE.Group(); outer.name = `island-${island.id}`;
+  const root = new THREE.Group(); root.position.y = -1.64 - .04; outer.add(root);   // floor height (lighting.js); base pads start .04 up
+  const staticRoot = new THREE.Group(); root.add(staticRoot); scene.add(outer);
   let group = staticRoot;
   const FLOOR = -1.64;   // the studio floor (lighting.js): the court and the wall stand on it
   const cream = 0xf4e8cf, green = island.id === 'pool' ? 0xa4bd91 : 0x98b27c, dark = 0x4d6a48;
   function sportsGroup(x, z) { group = new THREE.Group(); group.position.set(x, 0, z); staticRoot.add(group); }
 
   // Each sport stands on its own on the studio floor (no island, trees or paths around it).
-  root.position.y = FLOOR - .04;   // (the base pads start .04 up)
 
   // Tennis. White doubles, singles and service lines and an open mesh net.
   if (island.id === 'tennis') {
@@ -342,11 +344,11 @@ export function createWorld(scene, island) {
   const PLAY = { tennis: playTennis, wall: playWall, steps: playSteps };
 
   return {
-    root, island,
+    root: outer, island,
     // framing: the court, or the wall with its mats (screen: where it lands unshifted, measured)
     view: island.id === 'tennis'
       ? { screen: [-.0215, .086], center: { x: 0, y: FLOOR + .6, z: 0 }, min: [-4.1, FLOOR, -5.2], max: [4.1, FLOOR + 1.6, 5.2] }
-      : { screen: [.003, -.072], center: { x: 0, y: FLOOR + 2, z: 0 }, min: [-4.1, FLOOR, -2.7], max: [4.1, FLOOR + 4.6, 2.7] },
+      : { screen: [.0015, .035], center: { x: 0, y: FLOOR + 2, z: 0 }, min: [-4.1, FLOOR, -2.7], max: [4.1, FLOOR + 4.6, 2.7] },
     grabTargets: plushBears.map(p => bearTarget(p.bear, p.toss)),
     get tennis() { return { rally, bears: tennisBears }; },
     update(time = 0, reducedMotion = false) {

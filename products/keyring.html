@@ -7,7 +7,9 @@
 .site-embed .panel button{font-size:12px;padding:6px 12px;min-height:32px}
 </style>
 <script>(function(){var q=new URLSearchParams(location.search),m=q.get('site')||'',b=q.get('bg');window.SITE=m;if(m)document.documentElement.classList.add('site','site-'+m);
-window.SITE_BG=b&&/^[0-9a-f]{6}$/i.test(b)?[0,2,4].map(function(i){return parseInt(b.substr(i,2),16)/255}):null;})();</script>
+window.SITE_BG=b&&/^[0-9a-f]{6}$/i.test(b)?[0,2,4].map(function(i){return parseInt(b.substr(i,2),16)/255}):null;
+if(m==='big'&&window.SITE_BG){var st=document.createElement('style');st.textContent=':root{--stage:#'+b+'!important}html,body{background:#'+b+'!important}';document.head.appendChild(st);}   // opened large: the page colour from the first paint, also while the model loads
+})();</script>
 </head><body>
 <title>Alltäglich 레인 키링 3D</title>
 <meta name="claude:viewport-fit-sides" content="cover">
@@ -174,6 +176,10 @@ function applyTheme(){
   stageLin.copy(stageMat.color);
 }
 applyTheme();
+if (SITE === 'big') {   // opened large from the site: plain page colour from the first frame, also while the model loads
+  stageDome.visible = false; scene.background = stageMat.color;
+  floor.material = new THREE.MeshBasicMaterial({ toneMapped: false }); floor.material.color = stageMat.color;
+}
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme);
 new MutationObserver(applyTheme).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
 
@@ -226,7 +232,7 @@ uniform vec4 uDish;      // 인쇄 곡면: z = uDish.x - uDish.y*x*x - uDish.z*y
 uniform vec2 uPrintSize;
 varying vec3 vP; varying vec3 vN;
 const float IOR = 1.5;
-const float PIN_LEN = 5.0; const float PIN_R = 0.72;   // 9핀 나사: 박힌 길이, 나사산 바깥 반지름(끝으로 갈수록 가늘어진다)
+const float PIN_LEN = 4.1; const float PIN_R = 0.56;   // 9핀 나사: 박힌 길이, 나사산 바깥 반지름(끝으로 갈수록 가늘어진다)
 vec3 toL(vec3 w){ return vec3(dot(modelMatrix[0].xyz, w), dot(modelMatrix[1].xyz, w), dot(modelMatrix[2].xyz, w)); }
 vec3 toW(vec3 l){ return modelMatrix[0].xyz * l.x + modelMatrix[1].xyz * l.y + modelMatrix[2].xyz * l.z; }
 vec3 stage(){ return pow(uStage, vec3(1.0 / 2.2)); }

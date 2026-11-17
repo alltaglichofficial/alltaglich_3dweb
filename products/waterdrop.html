@@ -57,7 +57,9 @@
 .site-embed .panel button{font-size:12px;padding:6px 12px;min-height:32px}
 </style>
 <script>(function(){var q=new URLSearchParams(location.search),m=q.get('site')||'',b=q.get('bg');window.SITE=m;if(m)document.documentElement.classList.add('site','site-'+m);
-window.SITE_BG=b&&/^[0-9a-f]{6}$/i.test(b)?[0,2,4].map(function(i){return parseInt(b.substr(i,2),16)/255}):null;})();</script>
+window.SITE_BG=b&&/^[0-9a-f]{6}$/i.test(b)?[0,2,4].map(function(i){return parseInt(b.substr(i,2),16)/255}):null;
+if(m==='big'&&window.SITE_BG){var st=document.createElement('style');st.textContent=':root{--stage:#'+b+'!important}html,body{background:#'+b+'!important}';document.head.appendChild(st);}   // opened large: the page colour from the first paint, also while the model loads
+})();</script>
 </head>
 <body>
 <canvas id="gl" tabindex="0" aria-label="얇은 아크릴판 위의 물방울 3D 모델. 드래그하거나 방향키로 회전할 수 있습니다."></canvas>
