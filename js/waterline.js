@@ -45,6 +45,7 @@ export function createWaterline(parent, plush, { H = plush.height, tint = 0x5fb2
     }
   }
   return {
+    objects: [under, mesh],   // what it adds to the parent
     // match the water to the pool under the bear: tile colour (#rrggbb or THREE.Color)
     setWater(tile) {
       const c = new THREE.Color(tile);
@@ -67,14 +68,15 @@ export function createWaterline(parent, plush, { H = plush.height, tint = 0x5fb2
       last = on ? [x, z] : null;
       // splashes in time with the strokes: a paw at one side, then the other, and the kicking feet behind
       if (on && !reducedMotion) {
-        beat += dt * (speed > .2 ? 3.2 : 1.2);
+        const quick = speed > Math.min(.2, H * .25);   // swimming along (relative to the bear's size)
+        beat += dt * (quick ? 3.2 : 1.2);
         const side = Math.floor(beat) % 2 ? 1 : -1, px = -dir.z, pz = dir.x;
         spawn -= dt;
         if (spawn <= 0) {
-          spawn = speed > .2 ? .07 : .2;
+          spawn = quick ? .07 : .2;
           const fx = x + dir.x * H * .3 + px * side * H * .3, fz = z + dir.z * H * .3 + pz * side * H * .3;   // the paw coming down
-          splash(fx, water, fz, speed > .2 ? 2 : 1, speed > .2 ? 1 : .55);
-          if (speed > .2 && Math.random() < .6) splash(x - dir.x * H * .45, water, z - dir.z * H * .45, 1, .6);   // the feet
+          splash(fx, water, fz, quick ? 2 : 1, quick ? 1 : .55);
+          if (quick && Math.random() < .6) splash(x - dir.x * H * .45, water, z - dir.z * H * .45, 1, .6);   // the feet
         }
       }
       // fly, fall back into the water and vanish

@@ -1,12 +1,13 @@
 import * as THREE from 'three';
 import { createSwimBear } from './bear.js';
-import { replaceWithPlush, plushCamera, openLargeViewer } from './plush.js';
+import { replaceWithPlush, plushCamera, openLargeViewer, runLimbs } from './plush.js';
 import { createPoolGear } from './gear.js';
 import { createDropletIsland } from './drops.js';
 import { createProductViewers } from './viewers.js';
 import { createGripPlay } from './gripplay.js';
 import { createMagnetPlay } from './magnetplay.js';
 import { createWaterline } from './waterline.js';
+import { createWetMarks } from './wetmarks.js';
 
 // Swim island. The products are drawn by their own viewers (see viewers.js), stacked
 // with this scene; what lives here is everything that plays on them:
@@ -132,7 +133,7 @@ export function createPoolIsland(scene, island) {
   const chain = { grab() {}, drag(ray, camera, ndc) { keyring()?.api.pick()?.move(ndc.x, ndc.y); }, release() { keyring()?.api.pick()?.up(); }, tap() { openProduct('keyring'); } };
   const camPos = new THREE.Vector3(), camQuat = new THREE.Quaternion(), vp = new THREE.Matrix4(), place = new THREE.Matrix4(), offset = new THREE.Vector3();
   const world = {
-    root, island, bear, dropsScene, viewers,
+    root, island, bear, dropsScene, viewers, gripPlay,
     // 'lane' (lane-mark tiles) or 'photo' (Prussian blue tiles in a black grid); switched from the bottom tab.
     print: 'lane',
     setPrint(kind) { world.print = kind === 'photo' ? 'photo' : 'lane'; keyring()?.api.setPrint(world.print === 'photo' ? 'prussian' : 'lane'); waterColour(); },
@@ -147,7 +148,8 @@ export function createPoolIsland(scene, island) {
       // the first time, so it can be put away in one go
       if (!poolParts) {
         poolParts = new THREE.Group(); poolParts.name = 'PoolParts';
-        const keep = new Set([dropsScene.root, plush.sprite, plush.proxy, plush.shadow, bear.object, magnetPlay.pencil]);
+        // (the Grip Tok bear's water and wet marks live in poolGroup too, but belong to the grip view)
+        const keep = new Set([dropsScene.root, plush.sprite, plush.proxy, plush.shadow, bear.object, magnetPlay.pencil, ...gripPlay.objects]);
         for (const child of [...poolGroup.children]) if (!keep.has(child)) poolParts.add(child);
         poolGroup.add(poolParts);
       }
@@ -282,13 +284,14 @@ export function createPoolIsland(scene, island) {
       }
       if (focus === 'drops') dropsScene.update(time, reducedMotion);
       { const tdt = Math.min(.05, Math.max(0, time - (toyLast ?? time))); toyLast = time; toys.update(time, tdt, plushCamera(), bear.state === 'swim'); }
-      if (!dropsScene.active) plush.update(plush.anchor, { swim: bear.state === 'swim' && !bear.gear.tube, goggles: bear.state === 'swim', ground: inPool(bear.object.position.x, bear.object.position.z) ? null : DECK_Y });
+      if (!dropsScene.active) plush.update(plush.anchor, { swim: bear.state === 'swim' && !bear.gear.tube, goggles: bear.state === 'swim', ground: inPool(bear.object.position.x, bear.object.position.z) ? null : DECK_Y, limbs: bear.state === 'run' ? runLimbs(bear.runPhase) : null });
       {
         const bp = bear.object.position, st = bear.state, wdt = Math.min(.05, Math.max(0, time - (waterLast ?? time))); waterLast = time;
         // (in the swim ring it sits up on the water: only the lower half of the ring's hole is under)
         const level = (st === 'swim' || st === 'sink') && !dropsScene.active ? bearSurface(bp.x, bp.z) - (bear.gear.tube ? plush.height * .18 : 0) : null;
         poolWater.update(wdt, level, bp.x, bp.z, reducedMotion);
       }
+      if (b.foot) wetMarks.paw(b.foot.x, b.foot.z, b.foot.yaw, .72, wet);   // wet paw prints as it runs back
       if (b.splash >= .8 && !reducedMotion) spray.burst(b.x, surfaceHeight(b.x, b.z), b.z, b.splash);
       const sdt = Math.min(.05, Math.max(0, time - (spray.last ?? time))); spray.last = time;
       spray.update(sdt, surfaceHeight, inPool); wetMarks.update(sdt);
@@ -382,52 +385,6 @@ function createSpray(parent, ripple, onGround = () => {}, groundY = -1.6) {
         m.compose(d.p, q, sc); mesh.setMatrixAt(i, m);
       }
       if (any) mesh.instanceMatrix.needsUpdate = true;
-    },
-  };
-}
-
-// Wet spots on the ground: soft-edged, slightly darker patches that dry out (fade)
-// over half a minute or so. A fixed pool of decals, recycled oldest first.
-function createWetMarks(parent, groundY) {
-  const COUNT = 90, LIFE = 38;
-  const canvas = document.createElement('canvas'); canvas.width = canvas.height = 128;
-  const g = canvas.getContext('2d');
-  // an irregular blob: a few overlapping soft circles
-  for (let i = 0; i < 7; i++) {
-    const a = i / 7 * Math.PI * 2, r = i ? 22 + Math.random() * 10 : 40, x = 64 + (i ? Math.cos(a) * 22 : 0), y = 64 + (i ? Math.sin(a) * 22 : 0);
-    const grad = g.createRadialGradient(x, y, r * .3, x, y, r); grad.addColorStop(0, 'rgba(255,255,255,1)'); grad.addColorStop(.75, 'rgba(255,255,255,1)'); grad.addColorStop(1, 'rgba(255,255,255,0)');
-    g.fillStyle = grad; g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill();
-  }
-  const tex = new THREE.CanvasTexture(canvas);
-  const geo = new THREE.PlaneGeometry(2, 2); geo.rotateX(-Math.PI / 2);
-  const marks = Array.from({ length: COUNT }, (_, i) => {
-    const material = new THREE.MeshBasicMaterial({ color: 0x7a6f5c, alphaMap: tex, transparent: true, opacity: 0, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 });
-    const mesh = new THREE.Mesh(geo, material); mesh.visible = false; mesh.renderOrder = 1; parent.add(mesh);
-    // a faint wet sheen on the bigger puddles
-    return { mesh, age: LIFE, peak: 0, grow: 0, size: 1 };
-  });
-  let next = 0;
-  return {
-    add(x, z, r, big = false) {
-      // merge into an existing fresh spot that it lands on, so puddles grow instead of stacking
-      for (const m of marks) if (m.age < LIFE * .5 && Math.hypot(m.mesh.position.x - x, m.mesh.position.z - z) < m.size * .35 && m.size > r) { m.age = Math.min(m.age, 2); m.peak = Math.min(.42, m.peak + .03); return; }
-      const m = marks[next++ % COUNT];
-      m.mesh.position.set(x, groundY + .005 + (next % 7) * .0006, z); m.mesh.rotation.y = Math.random() * Math.PI * 2;
-      m.size = r; m.grow = big ? .35 : .08; m.age = 0; m.peak = big ? .34 : .24; m.mesh.visible = true;
-    },
-    update(dt) {
-      if (!dt) return;
-      for (const m of marks) {
-        if (!m.mesh.visible) continue;
-        m.age += dt;
-        if (m.age >= LIFE) { m.mesh.visible = false; continue; }
-        const spread = Math.min(1, m.age / m.grow), s = m.size * (.55 + .45 * (1 - Math.pow(1 - spread, 3)));
-        m.mesh.scale.set(s, 1, s * .86);
-        // stays dark while fresh, then dries from the edges in
-        const dry = Math.max(0, (m.age - LIFE * .35) / (LIFE * .65));
-        m.mesh.material.opacity = m.peak * (1 - dry * dry);
-        if (dry > 0) m.mesh.scale.multiplyScalar(1 - dry * .35);
-      }
     },
   };
 }

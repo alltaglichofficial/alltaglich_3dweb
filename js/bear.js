@@ -86,6 +86,8 @@ export function createSwimBear(root, home, pool = null) {
   let lastLift = 0, state = 'swim', last = null, vy = 0, sinkT = 0, heldAt = new THREE.Vector3(), swing = 0;
   const vel = new THREE.Vector3(), track = [], hopFrom = new THREE.Vector3(), hopTo = new THREE.Vector3();
   let groundT = 0, hopT = 0;
+  // running back from far away: to a point just outside the pool, then the hop in
+  const runTo = new THREE.Vector3(); let runPhase = 0;
   const lap = { x: home.x, dir: 1, turn: 0, stroke: 'free', phase: 0, entry: 0 };
   // pool toys it has been given: a swim ring (sits up and drifts) and fins (much faster)
   const gear = { tube: false, fins: false, board: false };
@@ -102,6 +104,7 @@ export function createSwimBear(root, home, pool = null) {
   return {
     object: bear,
     get state() { return state; },
+    get runPhase() { return runPhase; },
     // out of the pool's hands (the bear is on the laptop next door)
     park() { state = 'parked'; rings.forEach(r => { r.visible = false; }); },
     // dropped back in from anywhere, with a velocity
@@ -134,8 +137,28 @@ export function createSwimBear(root, home, pool = null) {
         // sat on the ground for a moment, then hop back into the pool
         groundT += dt; pose(time, false);
         bear.rotation.x *= Math.max(0, 1 - dt * 6); bear.rotation.z *= Math.max(0, 1 - dt * 6);
+        if (groundT > .7) {
+          const [hx, hz] = pool.clampIn(bear.position.x, bear.position.z), dx = hx - bear.position.x, dz = hz - bear.position.z, d = Math.hypot(dx, dz);
+          if (d > 3.4) { state = 'run'; runTo.set(hx - dx / d * 2.9, bear.position.y, hz - dz / d * 2.9); runPhase = 0; bear.rotation.set(0, Math.atan2(dx, dz), 0); return { x: bear.position.x, z: bear.position.z, landed: false, splash: 0 }; }
+        }
         if (groundT > 1.3) { state = 'hop'; hopT = 0; hopFrom.copy(bear.position); const [hx, hz] = pool.clampIn(bear.position.x, bear.position.z); hopTo.set(hx, surfaceHeight(hx, hz), hz); bear.rotation.y = Math.atan2(hx - bear.position.x, hz - bear.position.z); }
         return { x: bear.position.x, z: bear.position.z, landed: false, splash: 0 };
+      }
+      if (state === 'run') {
+        // runs back to the pool, leaving wet paw prints, then hops in
+        const dx = runTo.x - bear.position.x, dz = runTo.z - bear.position.z, d = Math.hypot(dx, dz), step = Math.min(d, 6.5 * dt);
+        const before = Math.floor(runPhase / Math.PI);
+        runPhase += dt * 14;
+        bear.position.x += dx / (d || 1) * step; bear.position.z += dz / (d || 1) * step;
+        bear.position.y = pool.groundY + .62 + Math.abs(Math.sin(runPhase)) * .22;
+        bear.rotation.set(-.12, Math.atan2(dx, dz), Math.sin(runPhase) * .08);
+        let foot = null;
+        if (Math.floor(runPhase / Math.PI) !== before) {   // a foot comes down
+          const side = Math.floor(runPhase / Math.PI) % 2 ? 1 : -1, yaw = Math.atan2(dx, dz), px = Math.cos(yaw), pz = -Math.sin(yaw);
+          foot = { x: bear.position.x + px * side * .17 + dx / (d || 1) * .1, z: bear.position.z + pz * side * .17 + dz / (d || 1) * .1, yaw };
+        }
+        if (d < .05) { state = 'ground'; groundT = 1.3; }   // there: the hop follows
+        return { x: bear.position.x, z: bear.position.z, landed: false, splash: 0, foot };
       }
       if (state === 'hop') {
         hopT += dt / 1.0; const k = Math.min(1, hopT);

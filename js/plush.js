@@ -277,3 +277,10 @@ export function replaceWithPlush(parent, object, kind) {
   plush.anchor = anchor;
   return plush;
 }
+
+// Running: arms pumping opposite the legs, knees well up. phase grows ~14 a second.
+export function runLimbs(phase) {
+  const sw = Math.sin(phase), arm = (side, elev, fwd) => [side * Math.cos(elev) * Math.cos(fwd), Math.sin(elev), Math.cos(elev) * Math.sin(fwd)];
+  const leg = (side, lift = 0, out = .6) => [side * out, -.8 + lift * .45, .06 + lift * .7];
+  return { armL: arm(-1, .3, -sw * .95), armR: arm(1, .3, sw * .95), legL: leg(-1, Math.max(0, sw) * 1.1, .55), legR: leg(1, Math.max(0, -sw) * 1.1, .55) };
+}
