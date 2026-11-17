@@ -321,54 +321,10 @@ function clearResin(tex){
   });
 }
 
-// ---------- pool print texture ----------
-function poolTexture(){
-  const W = 1200, H = Math.round(W * META.ext[1] / META.ext[0]);
-  const COLS = 13, ROWS = 22;
-  const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
-  const ctx = cv.getContext('2d'); const img = ctx.createImageData(W, H); const d = img.data;
-  const hash = (x, y) => { const s = Math.sin(x * 127.1 + y * 311.7) * 43758.5453; return s - Math.floor(s); };
-  const tileJit = []; for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) tileJit.push(hash(c, r) - 0.5);
-  // lane marking as on the product: wide bar near the ring, stem to the bottom edge, short cross line near the bottom
-  const isLane = (c, r) => (c === 6 && r >= 3) || (r === 3 && c >= 4 && c <= 8) || (r === 17 && c >= 5 && c <= 7);
-  const cell = W / 4.2;
-  for (let y = 0; y < H; y++) {
-    const v = y / H * ROWS, ri = Math.floor(v), fv = v - ri;
-    for (let x = 0; x < W; x++) {
-      const u = x / W * COLS, ci = Math.floor(u), fu = u - ci;
-      const lane = isLane(ci, ri);
-      const j = tileJit[ri * COLS + ci] * 10;
-      let R, G, B;
-      if (lane) { R = 30 + j * .4; G = 44 + j * .4; B = 64 + j * .5; }
-      else { R = 136 + j; G = 176 + j; B = 208 + j * .8; }
-      const gd = Math.min(fu, 1 - fu, fv, 1 - fv);
-      if (gd < 0.042) { R = 34; G = 46; B = 60; }
-      const i = (y * W + x) * 4; d[i] = R; d[i + 1] = G; d[i + 2] = B; d[i + 3] = 255;
-    }
-  }
-  ctx.putImageData(img, 0, 0);
-  const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.flipY = false;
-  t.anisotropy = renderer.capabilities.getMaxAnisotropy(); return t;
-}
-
-// The alternative print from the swimming island's "Prussian Blue" tab: solid Prussian blue tiles
-// in a black grid (8 × 12), without the lane mark. Same colours as js/pool.js in the 3D web.
-const PRUSSIAN_BLUE = '#245e8a';
-function prussianTexture(){
-  const W = 1200, H = Math.round(W * META.ext[1] / META.ext[0]);
-  const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
-  const ctx = cv.getContext('2d'), cols = 8, rows = 12, tw = W / cols, th = H / rows, line = Math.max(4, tw * .07);
-  ctx.fillStyle = PRUSSIAN_BLUE; ctx.fillRect(0, 0, W, H);
-  ctx.fillStyle = '#121418';
-  for (let c = 0; c <= cols; c++) ctx.fillRect(c * tw - line / 2, 0, line, H);
-  for (let r = 0; r <= rows; r++) ctx.fillRect(0, r * th - line / 2, W, line);
-  const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.flipY = false;
-  t.anisotropy = renderer.capabilities.getMaxAnisotropy(); return t;
-}
 const prints = { lane: null, prussian: null, block: null, mesh: null };
 function setPrint(kind){
   if (!prints.block) return;
-  if (kind === 'prussian' && !prints.prussian) prints.prussian = prussianTexture();
+  if (kind === 'prussian' && !prints.prussian) prints.prussian = printTexture('prussian');
   const tex = kind === 'prussian' ? prints.prussian : prints.lane;
   prints.block.material.uniforms.uPrint.value = tex;      // what is seen through the resin
   prints.mesh.material.map = tex;                          // the print sheet itself (back side)
@@ -410,10 +366,16 @@ const Z_SHIFT = (TOP_Z + NEW_BOTTOM) / 2;   // re-centre so the eye pin sits mid
 const blockBottomZ = NEW_BOTTOM - Z_SHIFT;
 const FLOOR_Z = blockBottomZ - 0.9;   // underside of the back doming
 
+// The prints are the brand's own artwork (assets/print-*.png: the print area cut out of the
+// supplied images, turned to the block's portrait shape).
+function printTexture(name){
+  const t = new THREE.TextureLoader().load('../assets/print-' + name + '.png');
+  t.colorSpace = THREE.SRGBColorSpace; t.flipY = false; t.anisotropy = renderer.capabilities.getMaxAnisotropy(); return t;
+}
 function buildBlock(geo){
   // body (resin + print) turned 180° so its north and south ends swap; hardware stays put
   const body = new THREE.Group(); body.rotation.z = Math.PI; blockGroup.add(body);
-  const tex = poolTexture();
+  const tex = printTexture('aquable');
   const block = new THREE.Mesh(geo, clearResin(tex)); block.renderOrder = 2; body.add(block);
   // print bowed into a shallow dish: centre stays deep, edges and corners rise toward the front
   const pg = new THREE.PlaneGeometry(META.ext[0] - 0.5, META.ext[1] - 0.5, 60, 92);
