@@ -396,7 +396,7 @@ async function start() {
     if (tap) t.tap?.();   // a quick tap on a plush bear opens it large
   };
   // temporary print colours for the pool keyring (tile, grout, Ver.1's lane mark)
-  const PRINT_DEFAULT = { aquable: { tile: '#7a9dab', line: '#222d38', lane: '#222d38' }, prussian: { tile: '#6297ac', line: '#172735' } };
+  const PRINT_DEFAULT = { aquable: { tile: '#7a9dab', line: '#222d38', lane: '#222d38' }, prussian: { tile: '#417097', line: '#18283e' } };
   const poolOf = () => worlds.find(w => w.setPrint);
   const printName = w => w?.print === 'photo' ? 'prussian' : 'aquable';
   function showPrintColors(w) {
