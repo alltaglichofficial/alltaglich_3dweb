@@ -197,7 +197,7 @@ function placeSun(){
   document.getElementById('sun-dir-out').textContent = clockText(h);
   document.getElementById('sun-el-out').textContent = sunEl.value + '°';
 }
-sunDir.addEventListener('input', placeSun); sunEl.addEventListener('input', placeSun); placeSun();
+sunDir.addEventListener('input', () => { placeSun(); updateCaustics(); }); sunEl.addEventListener('input', () => { placeSun(); updateCaustics(); }); placeSun();
 key.castShadow = true; key.shadow.mapSize.set(2048, 2048); key.shadow.radius = 5; key.shadow.bias = -0.0004;
 Object.assign(key.shadow.camera, { left: -80, right: 80, top: 80, bottom: -80, near: 50, far: 450 });
 scene.add(key, key.target);
@@ -230,6 +230,7 @@ uniform vec3 uSunW; uniform vec3 uStage; uniform float uRefl;
 uniform vec3 uHalf;      // 블록 반폭 x, 반높이 y, 윗면 최고 z
 uniform vec4 uDish;      // 인쇄 곡면: z = uDish.x - uDish.y*x*x - uDish.z*y*y, uDish.w = 블록 바닥 z
 uniform vec2 uPrintSize;
+uniform sampler2D uCaustic;   // 윗면 물결을 지나 인쇄면에 모인 빛 (1 = 고르게, 0.5 단위로 저장)
 varying vec3 vP; varying vec3 vN;
 const float IOR = 1.5;
 const float PIN_LEN = 4.1; const float PIN_R = 0.56;   // 9핀 나사: 박힌 길이, 나사산 바깥 반지름(끝으로 갈수록 가늘어진다)
@@ -246,6 +247,13 @@ vec3 env(vec3 dl){
 vec3 printCol(vec2 xy){
   vec2 uv = clamp(xy / uPrintSize + 0.5, 0.006, 0.994);   // stay off the border grout line at the very edge
   return pow(texture2D(uPrint, uv).rgb, vec3(1.0 / 2.2));
+}
+// 인쇄면의 빛: 물결 윗면이 렌즈처럼 빛을 모아 밝은 그물무늬가 생기고, 그 사이는 조금 어둡다
+vec3 printLit(vec2 xy){
+  vec2 uv = clamp(xy / uPrintSize + 0.5, 0.0, 1.0);
+  float c = texture2D(uCaustic, uv).r * 4.0;
+  vec3 base = printCol(xy);
+  return base * (0.66 + 0.34 * min(c, 2.6)) + mix(base, vec3(1.0), 0.6) * max(c - 1.3, 0.0) * 0.11;
 }
 void main(){
   vec3 camL = toL(cameraPosition - modelMatrix[3].xyz), sunL = normalize(toL(uSunW));
@@ -289,7 +297,7 @@ void main(){
       }
       if (tP <= tE) {                             // 인쇄면에 도달
         vec3 q = p + d * tP;
-        acc += thr * exp(-ABS * tP) * printCol(q.xy) * 1.05; thr = vec3(0.0); break;
+        acc += thr * exp(-ABS * tP) * printLit(q.xy) * 1.05; thr = vec3(0.0); break;
       }
       vec3 q = p + d * tE, nIn;
       if (tE == tz) nIn = normalize(vec3(0.30 * sin(q.x * 0.9 + q.y * 0.45), 0.30 * cos(q.y * 0.8 - q.x * 0.35), -1.0));  // 물결 윗면 안쪽
@@ -316,11 +324,74 @@ function clearResin(tex){
       uHalf: { value: new THREE.Vector3(META.ext[0] / 2, META.ext[1] / 2, TOP_Z - Z_SHIFT) },
       uDish: { value: new THREE.Vector4(blockBottomZ + 0.35 + 1.2, 0.6 / (hw * hw), 0.6 / (hh * hh), blockBottomZ) },
       uPrintSize: { value: new THREE.Vector2(META.ext[0] - 0.5, META.ext[1] - 0.5) },
+      uCaustic: { value: caustic.tex },
     },
     vertexShader: RESIN_VS, fragmentShader: RESIN_FS, toneMapped: false,
   });
 }
 
+// ---------- light through the wavy top onto the print (caustics) ----------
+// The top surface is sampled as a height map; light from the lamp is refracted at each point and
+// followed down to the print, and where it lands is counted. Redone when the lamp moves.
+const caustic = (() => {
+  const GW = 160, GH = 248, MW = 128, MH = 196;
+  const data = new Uint8Array(MW * MH * 4).fill(64);   // 64 / 255 * 4 = 1: even light until computed
+  const tex = new THREE.DataTexture(data, MW, MH, THREE.RGBAFormat); tex.magFilter = tex.minFilter = THREE.LinearFilter; tex.needsUpdate = true;
+  let height = null, sx = 0, sy = 0, planeZ = 0;
+  function sample(geo, hw, hh, zPrint){
+    sx = hw; sy = hh; planeZ = zPrint;
+    height = new Float32Array(GW * GH).fill(NaN);
+    const P = geo.attributes.position.array, I = geo.index.array, cx = i => (P[i * 3] / (2 * hw) + .5) * (GW - 1), cy = i => (P[i * 3 + 1] / (2 * hh) + .5) * (GH - 1);
+    for (let t = 0; t < I.length; t += 3) {
+      const a = I[t], b = I[t + 1], c = I[t + 2];
+      const ax = cx(a), ay = cy(a), bx = cx(b), by = cy(b), qx = cx(c), qy = cy(c);
+      const den = (by - qy) * (ax - qx) + (qx - bx) * (ay - qy); if (Math.abs(den) < 1e-9) continue;
+      const nz = ((bx - ax) * (qy - ay) - (by - ay) * (qx - ax)) / den; if (nz < 0) continue;   // top-facing only
+      const az = P[a * 3 + 2], bz = P[b * 3 + 2], cz = P[c * 3 + 2]; if (Math.min(az, bz, cz) < WAVE_MIN - Z_SHIFT - 1) continue;
+      for (let y = Math.max(0, Math.ceil(Math.min(ay, by, qy))); y <= Math.min(GH - 1, Math.floor(Math.max(ay, by, qy))); y++)
+        for (let x = Math.max(0, Math.ceil(Math.min(ax, bx, qx))); x <= Math.min(GW - 1, Math.floor(Math.max(ax, bx, qx))); x++) {
+          const w1 = ((by - qy) * (x - qx) + (qx - bx) * (y - qy)) / den, w2 = ((qy - ay) * (x - qx) + (ax - qx) * (y - qy)) / den, w3 = 1 - w1 - w2;
+          if (w1 < -1e-4 || w2 < -1e-4 || w3 < -1e-4) continue;
+          const z = w1 * az + w2 * bz + w3 * cz, k = y * GW + x; if (!(height[k] >= z)) height[k] = z;
+        }
+    }
+  }
+  const acc = new Float32Array(MW * MH), tmp = new Float32Array(MW * MH);
+  function compute(sunLocal){
+    if (!height) return;
+    acc.fill(0);
+    const L = sunLocal.clone().normalize(); if (L.z < .08) L.z = .08; L.normalize();
+    const inc = L.clone().negate(), n = new THREE.Vector3(), r = new THREE.Vector3(), dx = 2 * sx / (GW - 1), dy = 2 * sy / (GH - 1);
+    let rays = 0;
+    for (let y = 1; y < GH - 1; y++) for (let x = 1; x < GW - 1; x++) {
+      const k = y * GW + x, h = height[k], hl = height[k - 1], hr = height[k + 1], hd = height[k - GW], hu = height[k + GW];
+      if (!(h === h && hl === hl && hr === hr && hd === hd && hu === hu)) continue;
+      n.set(-(hr - hl) / (2 * dx), -(hu - hd) / (2 * dy), 1).normalize();
+      const ci = -n.dot(inc), eta = 1 / 1.5, kk = 1 - eta * eta * (1 - ci * ci); if (kk < 0) continue;
+      r.copy(inc).multiplyScalar(eta).addScaledVector(n, eta * ci - Math.sqrt(kk));
+      if (r.z > -1e-3) continue;
+      const s = (planeZ - h) / r.z, px = -sx + x * dx + r.x * s, py = -sy + y * dy + r.y * s;
+      const u = (px / (2 * sx) + .5) * (MW - 1), v = (py / (2 * sy) + .5) * (MH - 1), iu = Math.floor(u), iv = Math.floor(v);
+      if (iu < 0 || iv < 0 || iu >= MW - 1 || iv >= MH - 1) continue;
+      const fu = u - iu, fv = v - iv, o = iv * MW + iu;
+      acc[o] += (1 - fu) * (1 - fv); acc[o + 1] += fu * (1 - fv); acc[o + MW] += (1 - fu) * fv; acc[o + MW + 1] += fu * fv; rays++;
+    }
+    // soften one cell, then express as light relative to even light
+    for (let y = 0; y < MH; y++) for (let x = 0; x < MW; x++) { let s = 0, w = 0; for (let j = -1; j <= 1; j++) for (let i = -1; i <= 1; i++) { const X = x + i, Y = y + j; if (X < 0 || Y < 0 || X >= MW || Y >= MH) continue; const f = (i ? .5 : 1) * (j ? .5 : 1); s += acc[Y * MW + X] * f; w += f; } tmp[y * MW + x] = s / w; }
+    const mean = rays / (MW * MH) || 1;
+    for (let i = 0; i < MW * MH; i++) { const v = Math.min(255, Math.round(tmp[i] / mean * 64)); data[i * 4] = data[i * 4 + 1] = data[i * 4 + 2] = v; data[i * 4 + 3] = 255; }
+    tex.needsUpdate = true;
+  }
+  return { tex, sample, compute };
+})();
+const sunLocal = new THREE.Vector3(), causticSun = new THREE.Vector3(9, 9, 9), invBlock = new THREE.Matrix4();
+function updateCaustics(){
+  if (!prints.block) return;
+  prints.block.updateWorldMatrix(true, false);
+  sunLocal.copy(sunW).transformDirection(invBlock.copy(prints.block.matrixWorld).invert());
+  if (sunLocal.distanceTo(causticSun) < .02) return;   // the lamp has not really moved
+  causticSun.copy(sunLocal); caustic.compute(sunLocal);
+}
 const prints = { lane: null, prussian: null, block: null, mesh: null };
 function setPrint(kind){
   if (!prints.block) return;
@@ -433,7 +504,8 @@ function buildBlock(geo){
     new THREE.MeshStandardMaterial({ map: tex, roughness: 0.55, side: THREE.DoubleSide }));
   print.position.set(META.lo[0] + META.ext[0] / 2, META.lo[1] + META.ext[1] / 2, blockBottomZ + 0.35);
   print.castShadow = false; body.add(print);
-  prints.lane = tex; prints.block = block; prints.mesh = print;   // light passes through the clear resin
+  prints.lane = tex; prints.block = block; prints.mesh = print;
+  { const hw = (META.ext[0] - 0.5) / 2, hh = (META.ext[1] - 0.5) / 2; caustic.sample(geo, hw, hh, blockBottomZ + 0.35 + 1.2); updateCaustics(); }   // light passes through the clear resin
   // clear epoxy doming on the back face
   const dw = META.ext[0] - 0.3, dh = META.ext[1] - 0.3;
   const dg = new THREE.PlaneGeometry(dw, dh, 80, 120);
@@ -979,7 +1051,7 @@ function siteDrive(){
       camera.position.fromArray(o.pos); camera.quaternion.fromArray(o.quat); camera.fov = o.fov; camera.aspect = o.aspect; camera.near = o.near; camera.far = o.far;
       if (o.offset) camera.setViewOffset(...o.offset); else camera.clearViewOffset();
       camera.updateProjectionMatrix(); camera.updateMatrixWorld();
-      if (o.sun) { key.position.fromArray(o.sun).multiplyScalar(230); sunW.copy(key.position).normalize(); }   // the site's lamp
+      if (o.sun) { key.position.fromArray(o.sun).multiplyScalar(230); sunW.copy(key.position).normalize(); updateCaustics(); }   // the site's lamp
       stepPhysics(Math.min(o.dt || 0, 0.05)); renderer.render(scene, camera);
     },
   };
@@ -1022,6 +1094,7 @@ function siteDrive(){
       stepPhysics(dt);
       if (FILM.tick(dt)) { renderer.render(scene, camera); FILM.post(); return; }
       controls.autoRotate = spin && !grab && !FILM.st.on;
+      if (spin) updateCaustics();   // the turntable turns the keyring under the lamp
       controls.update(); FILM.offset(); renderer.render(scene, camera); FILM.post();
     });
   } catch (err) {

@@ -17,11 +17,14 @@ export function createWaterline(parent, plush, { H = plush.height, tint = 0x5fb2
   // splashes: little water drops thrown up by the paws and feet as it swims
   const COUNT = 90;
   const dropMat = new THREE.MeshPhysicalMaterial({ color: 0xffffff, transparent: true, depthWrite: false, roughness: .03, ior: 1.33, clearcoat: 1, clearcoatRoughness: .02, specularIntensity: 1 });
+  const dropTint = { value: new THREE.Color(.80, .92, .97) };   // the water colour of the drops (follows the print)
   dropMat.onBeforeCompile = shader => {
+    shader.uniforms.uDropTint = dropTint;
+    shader.fragmentShader = 'uniform vec3 uDropTint;\n' + shader.fragmentShader;
     shader.fragmentShader = shader.fragmentShader.replace('#include <opaque_fragment>', `#include <opaque_fragment>
       float rim = pow(1.0 - saturate(dot(normal, normalize(vViewPosition))), 1.8);
       float glint = saturate((max(max(outgoingLight.r, outgoingLight.g), outgoingLight.b) - 1.0) * 1.2);
-      gl_FragColor.rgb = mix(vec3(.80, .92, .97), vec3(1.), glint) * mix(1.0, .82, rim);
+      gl_FragColor.rgb = mix(uDropTint, vec3(1.), glint) * mix(1.0, .82, rim);
       gl_FragColor.a = saturate(.45 + rim * .55 + glint * .8);`);
   };
   const mesh = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 10, 8), dropMat, COUNT);
@@ -42,6 +45,12 @@ export function createWaterline(parent, plush, { H = plush.height, tint = 0x5fb2
     }
   }
   return {
+    // match the water to the pool under the bear: tile colour (#rrggbb or THREE.Color)
+    setWater(tile) {
+      const c = new THREE.Color(tile);
+      under.material.color.copy(c).lerp(new THREE.Color(1, 1, 1), .25);       // the bear seen through that water
+      dropTint.value.copy(c).lerp(new THREE.Color(1, 1, 1), .55);            // drops: the same water, thin and light
+    },
     // call after plush.update each frame. water: the water level under the bear (parent
     // coordinates) or null when it is out of the water; x, z: where the bear is.
     update(dt, water, x, z, reducedMotion = false) {

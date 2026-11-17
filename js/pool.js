@@ -61,6 +61,9 @@ export function createPoolIsland(scene, island) {
   const plush = replaceWithPlush(poolGroup, bear.object, 'swim');
   // half under the water while it swims, with ripples and a wake
   const poolWater = createWaterline(poolGroup, plush);
+  // the splashes and the bear under the water take the colour of the print's tiles
+  const WATER = { aquable: '#7a9dab', prussian: '#417097' };
+  function waterColour() { const name = world.print === 'photo' ? 'prussian' : 'aquable'; poolWater.setWater(world.printColors[name]?.tile || WATER[name]); }
   bear.parts.rings.forEach(r => r.removeFromParent());   // (the old ring ripples: splashes instead)
   let waterLast = null;
   // Water Drop stands where the pool stands: choosing it puts the keyring away and brings
@@ -136,8 +139,8 @@ export function createPoolIsland(scene, island) {
     print: 'lane',
     // temporary colours for the two prints ({ tile, line, lane } or null for the artwork's own)
     printColors: { aquable: null, prussian: null },
-    setPrintColors(name, colors) { world.printColors[name] = colors; keyring()?.api.setPrintColors?.(name, colors); },
-    setPrint(kind) { world.print = kind === 'photo' ? 'photo' : 'lane'; keyring()?.api.setPrint(world.print === 'photo' ? 'prussian' : 'lane'); },
+    setPrintColors(name, colors) { world.printColors[name] = colors; keyring()?.api.setPrintColors?.(name, colors); waterColour(); },
+    setPrint(kind) { world.print = kind === 'photo' ? 'photo' : 'lane'; keyring()?.api.setPrint(world.print === 'photo' ? 'prussian' : 'lane'); waterColour(); },
     // which product is on screen: 'pool' (the keyring), 'drops', 'grip' or 'magnet'
     get focus() { return focus; },
     get embedded() { return entered && embedded(); },
@@ -319,6 +322,7 @@ export function createPoolIsland(scene, island) {
   };
   // fetch the keyring viewer once the page has settled, so the Swim island opens ready
   setTimeout(() => viewers.load('keyring'), 2500);
+  waterColour();
   return world;
 }
 
