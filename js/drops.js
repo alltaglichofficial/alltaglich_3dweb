@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { RoomEnvironment } from '../vendor/three/RoomEnvironment.js';
 import { createSwimBear } from './bear.js';
-import { replaceWithPlush, plushAnchor, createThrowable, bearTarget } from './plush.js';
+import { replaceWithPlush, plushAnchor, createThrowable, bearTarget, runLimbs } from './plush.js';
+import { createWetMarks } from './wetmarks.js';
 
 // Droplet island: a thin clear acrylic sheet. Water drops fall on it one by one
 // and splat into the puddle shapes of the droplet photo; the swim bear walks
@@ -137,7 +138,13 @@ export function createDropletIsland(scene, island, opts = {}) {
   // it can be picked up and thrown; it always comes down somewhere on the sheet
   const sheetAt = (x, z) => onLid(x, z) ? TOP : GROUND;
   // on its own island it always comes down on the lid; beside the pool it can be thrown off it
-  const toss = createThrowable(body, { bottom: footOffset, groundAt: sheetAt, limit: (x, z) => [THREE.MathUtils.clamp(x, -W / 2 + .7, W / 2 - .7), THREE.MathUtils.clamp(z, -D / 2 + .7, D / 2 - .7)] });
+  // it can be thrown right off the laptop (it runs back and jumps up again)
+  const THROW_R = 24;
+  const toss = createThrowable(body, { bottom: footOffset, groundAt: sheetAt, limit: (x, z) => { const d = Math.hypot(x, z); return d > THROW_R ? [x * THROW_R / d, z * THROW_R / d] : [x, z]; } });
+  // only after it has been inside a drop is it wet: then it leaves a splat where it lands and
+  // wet paw prints as it runs (dry otherwise)
+  const marks = createWetMarks(root, GROUND);
+  let soaked = 0, runPh = 0, home = null;
   let active = !embedded, incoming = false, trap = null, doneAt = null;
   const HOLD = 5, FADE = 2.6;   // the finished picture stays, then dries away slowly, then it rains again
   // the drop that holds a caught bear
@@ -159,11 +166,13 @@ export function createDropletIsland(scene, island, opts = {}) {
   };
 
   const HIDE = 1e-4, hide = m => m.scale.setScalar(HIDE);
-  let start = null, last = null, order = [];
+  let start = null, last = null, order = [], slots = [], nextSlot = 0;
   const reset = time => {
     trap = null; bubble.visible = false; toss.locked = false; fade.value = 1; doneAt = null;
     start = time; order = drops.map((_, i) => i).sort(() => Math.random() - .5);
-    order.forEach((i, k) => { const d = drops[i]; d.t0 = START_DELAY + k * INTERVAL; d.state = 'wait'; hide(d.puddle); hide(d.falling); hide(d.blob); d.mark.visible = false; });
+    // the times stay as before; which drop falls at each time is chosen then (the one nearest the bear)
+    slots = order.map((_, k) => START_DELAY + k * INTERVAL); nextSlot = 0;
+    order.forEach((i, k) => { const d = drops[i]; d.t0 = Infinity; d.state = 'wait'; hide(d.puddle); hide(d.falling); hide(d.blob); d.mark.visible = false; });
     if (!embedded) { walker.x = 0; walker.z = 2; }
     walker.vx = walker.vz = 0; walker.act = null; walker.cool = 0; newTarget();
   };
@@ -217,6 +226,13 @@ export function createDropletIsland(scene, island, opts = {}) {
       if (fx.visible && (start === null || pendingReset)) { pendingReset = false; reset(time); }
       const dt = last === null ? 0 : Math.min(.05, Math.max(0, time - last)); last = time;
       const t = time - start;
+      // the rain follows the bear: at each time the waiting drop nearest to it falls (one of the
+      // nearest three, so it is not too exact), and the picture still fills in completely
+      while (fx.visible && nextSlot < slots.length && t >= slots[nextSlot]) {
+        const bx = body.position.x, bz = body.position.z;
+        const near = drops.filter(d => d.state === 'wait').sort((a, b) => Math.hypot(a.cx - bx, a.cz - bz) - Math.hypot(b.cx - bx, b.cz - bz)).slice(0, 3);
+        const d = near[Math.floor(Math.random() * near.length)]; if (d) d.t0 = slots[nextSlot]; nextSlot++;
+      }
       if (fx.visible) for (const d of drops) {
         if (d.state === 'wait' && t >= d.t0) { d.state = 'falling'; d.mark.visible = true; }
         if (d.state === 'falling') {
@@ -280,13 +296,15 @@ export function createDropletIsland(scene, island, opts = {}) {
         // keep the bear's middle at the drop's middle whichever way it tumbles
         body.position.copy(c).sub(new THREE.Vector3(0, bearMid, 0).applyEuler(body.rotation));
         const f = Math.sin(age * 12);
-        const limbs = { armL: [-.6, .5 + f * .3, .5], armR: [.6, .5 - f * .3, .5], legL: [-.5, -.7, .2 + f * .4], legR: [.5, -.7, .2 - f * .4] };
+        // paddling inside the drop: arms out to the sides and kept below the face, so the paws
+        // never reach the goggles
+        const limbs = { armL: [-.8, .12 + f * .22, .45], armR: [.8, .12 - f * .22, .45], legL: [-.5, -.7, .2 + f * .4], legR: [.5, -.7, .2 - f * .4] };
         if (t >= trap.until || !fx.visible) {
           // pop! the water falls where the drop was headed and the bear drops out
           bubble.visible = false; toss.locked = false;
           splash(c.x, c.z, 1.6);
           trap.d.state = 'splat'; trap.d.splatAt = t;
-          trap = null; toss.launch(new THREE.Vector3(0, 3, 0), 0);
+          trap = null; soaked = 1; toss.launch(new THREE.Vector3(0, 3, 0), 0);
         }
         plush.update(anchor, { ground: sheetAt(body.position.x, body.position.z), limbs });
         return;
@@ -297,15 +315,49 @@ export function createDropletIsland(scene, island, opts = {}) {
           // arriving from the pool: wait until it is over the lid. Otherwise, once it is
           // clear of the laptop it belongs to the pool island again.
           const over = onLid(body.position.x, body.position.z);
-          if (incoming) { if (over) incoming = false; }
-          else if (!over) { active = false; toss.cancel(); opts.onLeave?.(body.getWorldPosition(new THREE.Vector3()), toss.velocity.clone()); return; }
+          if (incoming) { if (over) incoming = false; }   // (thrown off the lid it stays here: it lands beside the laptop and runs back)
         }
-        if (st === 'landed') { walker.x = body.position.x; walker.z = body.position.z; walker.vx = walker.vz = 0; walker.yaw = body.rotation.y; walker.act = null; walker.cool = .6; newTarget(); }
-      } else updateBear(time, dt, t, reducedMotion);
-      plush.update(anchor, { ground: sheetAt(body.position.x, body.position.z) });
+        if (st === 'landed') {
+          const x = body.position.x, z = body.position.z;
+          if (onLid(x, z)) { home = null; walker.x = x; walker.z = z; walker.vx = walker.vz = 0; walker.yaw = body.rotation.y; walker.act = null; walker.cool = .6; newTarget(); }
+          else {
+            home = { x, z };   // beside the laptop: run back to it
+            if (soaked > .04) { marks.add(x, z, (.7 + soaked * .5), true); for (let i = 0; i < 5; i++) { const a = Math.random() * Math.PI * 2, r = .6 + Math.random() * .8; marks.add(x + Math.cos(a) * r, z + Math.sin(a) * r, .12 + Math.random() * .18); } }
+          }
+        }
+      } else if (home) runHome(dt, reducedMotion);
+      else updateBear(time, dt, t, reducedMotion);
+      marks.update(dt); soaked = Math.max(0, soaked - dt / 40);
+      plush.update(anchor, { ground: sheetAt(body.position.x, body.position.z), limbs: home && !toss.busy() ? runLimbs(runPh) : null });
     },
     setMood() {},
   };
+
+  // off the laptop: run to just in front of its nearest edge (wet paw prints if soaked), then jump up
+  function runHome(dt, reducedMotion) {
+    const x = body.position.x, z = body.position.z, hw = LAPTOP_W / 2, hd = LAPTOP_D / 2;
+    const ex = THREE.MathUtils.clamp(x, -hw + 1.2, hw - 1.2), ez = THREE.MathUtils.clamp(z, -hd + 1.2, hd - 1.2);   // nearest point on the lid
+    let ox = x - ex, oz = z - ez; const ol = Math.hypot(ox, oz) || 1; ox /= ol; oz /= ol;
+    const fx = ex + ox * (Math.abs(x) > hw ? hw - Math.abs(ex) + 1.4 : 0) , fz = ez + oz * (Math.abs(z) > hd ? hd - Math.abs(ez) + 1.4 : 0);   // just outside that edge
+    const dx = fx - x, dz = fz - z, d = Math.hypot(dx, dz);
+    if (d > .3) {
+      const step = Math.min(d, (reducedMotion ? 9 : 6) * dt), before = Math.floor(runPh / Math.PI);
+      runPh += dt * 14;
+      body.position.x += dx / d * step; body.position.z += dz / d * step;
+      body.position.y = GROUND + footOffset + Math.abs(Math.sin(runPh)) * .22;
+      body.rotation.set(-.12, Math.atan2(dx, dz), Math.sin(runPh) * .08, 'YXZ');
+      if (Math.floor(runPh / Math.PI) !== before && soaked > .04) {
+        const side = Math.floor(runPh / Math.PI) % 2 ? 1 : -1, yaw = Math.atan2(dx, dz);
+        marks.paw(body.position.x + Math.cos(yaw) * side * .2, body.position.z - Math.sin(yaw) * side * .2, yaw, .72, soaked);
+      }
+      return;
+    }
+    // at the edge: jump up and land a little way in
+    home = null;
+    const to = new THREE.Vector3(ex - ox * 1.6, TOP + footOffset, ez - oz * 1.6), T = .8, from = body.position;
+    body.rotation.set(0, Math.atan2(to.x - from.x, to.z - from.z), 0, 'YXZ');
+    toss.launch(new THREE.Vector3((to.x - from.x) / T, (to.y - from.y + .5 * 30 * T * T) / T, (to.z - from.z) / T), 2.5);
+  }
 
   function updateBear(time, dt, t, reducedMotion) {
     let ax = 0, az = 0, danger = 0, threat = null;
