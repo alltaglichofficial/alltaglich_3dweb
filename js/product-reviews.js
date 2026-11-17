@@ -1,9 +1,9 @@
 const products = {
-  tennis: { id: '12003106005', name: 'Tennis Bear Keyring' },
-  swim: { id: '12759870689', name: 'Swimmy Bear Keyring' },
-  climb: { id: '13195324005', name: 'Climbing Bear Keyring' },
+  tennis: { id: '12003106005', name: 'Tennis Bear' },
+  swim: { id: '12759870689', name: 'Swimmy Bear' },
+  climb: { id: '13195324005', name: 'Climbing Bear' },
   drops: { id: '9527489976', name: 'Water Drop Sticker' },
-  magnet: { id: '13550300486', name: 'Swimming Pool Magnet' },
+  magnet: { id: '13550300486', name: 'Swimming pool Magnet Set' },
 };
 
 const labels = { naver: 'Naver Smart Store', cm: '29CM', etsy: 'Etsy' };

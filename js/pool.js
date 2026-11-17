@@ -96,11 +96,11 @@ export function createPoolIsland(scene, island) {
   const tapCaster = new THREE.Raycaster();
   const tapLocal = new THREE.Ray(), tapInv = new THREE.Matrix4(), blockBox = new THREE.Box3(new THREE.Vector3(-WALL_X, DECK_Y, -WALL_Z), new THREE.Vector3(WALL_X, DECK_Y + 3.3, WALL_Z));
   const openProduct = kind => openLargeViewer(
-    kind === 'drops' ? { name: 'Water Drop', reviewProduct: 'drops', src: 'products/waterdrop.html?site=big&bg=fafafa', hint: HINT }
-    : kind === 'grip' ? { name: 'Grip Tok', src: 'products/griptok.html?site=big&bg=fafafa', hint: HINT }
-    : kind === 'magnet' ? { name: 'Magnet', reviewProduct: 'magnet', src: 'products/magnets.html?site=big&bg=fafafa', hint: HINT }
-    : world.print === 'photo' ? { name: 'Prussian Blue', src: 'products/keyring.html?site=big&bg=fafafa&print=prussian', hint: HINT }
-    : { name: 'Aquable', src: 'products/keyring.html?site=big&bg=fafafa&print=lane', hint: HINT });
+    kind === 'drops' ? { name: 'Water Drop Sticker', reviewProduct: 'drops', shop: 'https://alltaglich.com/surl/O/54', src: 'products/waterdrop.html?site=big&bg=fafafa', hint: HINT }
+    : kind === 'grip' ? { name: 'Swimming pool Grip Tok Ver.2', shop: 'https://alltaglich.com/surl/O/189', src: 'products/griptok.html?site=big&bg=fafafa', hint: HINT }
+    : kind === 'magnet' ? { name: 'Swimming pool Magnet Set', reviewProduct: 'magnet', shop: 'https://alltaglich.com/surl/O/190', src: 'products/magnets.html?site=big&bg=fafafa', hint: HINT }
+    : world.print === 'photo' ? { name: 'Swimming pool keychain Ver.2 Prussian Blue', shop: 'https://alltaglich.com/surl/O/61', src: 'products/keyring.html?site=big&bg=fafafa&print=prussian', hint: HINT }
+    : { name: 'Swimming pool keychain Ver.1 Aquable', shop: 'https://alltaglich.com/surl/O/53', src: 'products/keyring.html?site=big&bg=fafafa&print=lane', hint: HINT });
   // Magnet: the stand at the island's centre, MAG_K world units per millimetre (the bear is about 40 mm tall)
   const MAG_K = plush.height / 40;
   const magnets = () => viewers.api('magnets');

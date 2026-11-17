@@ -392,6 +392,12 @@ async function start() {
     t.release();
     if (tap) t.tap?.();   // a quick tap on a plush bear opens it large
   };
+  // the SHOP menu on narrow screens
+  { const shops = document.querySelector('.shops'), toggle = document.querySelector('#shopsToggle');
+    const set = open => { shops.classList.toggle('open', open); toggle.setAttribute('aria-expanded', String(open)); };
+    toggle.addEventListener('click', () => set(!shops.classList.contains('open')));
+    document.addEventListener('pointerdown', event => { if (!event.target.closest('.shops')) set(false); });
+    document.addEventListener('keydown', event => { if (event.key === 'Escape') set(false); }); }
   canvas.addEventListener('pointerup', drop, { capture: true });
   // a quick tap that no grab target took (those stop the event above): the island may
   // open what is under it large — the keyring, the magnet stand
