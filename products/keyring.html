@@ -230,7 +230,7 @@ uniform vec3 uSunW; uniform vec3 uStage; uniform float uRefl;
 uniform vec3 uHalf;      // 블록 반폭 x, 반높이 y, 윗면 최고 z
 uniform vec4 uDish;      // 인쇄 곡면: z = uDish.x - uDish.y*x*x - uDish.z*y*y, uDish.w = 블록 바닥 z
 uniform vec2 uPrintSize;
-uniform sampler2D uCaustic;   // 윗면 물결을 지나 인쇄면에 모인 빛 (1 = 고르게, 0.5 단위로 저장)
+uniform sampler2D uCaustic; uniform float uCausticK;   // 빛 무늬 세기 0~1   // 윗면 물결을 지나 인쇄면에 모인 빛 (1 = 고르게, 0.5 단위로 저장)
 varying vec3 vP; varying vec3 vN;
 const float IOR = 1.5;
 const float PIN_LEN = 4.1; const float PIN_R = 0.56;   // 9핀 나사: 박힌 길이, 나사산 바깥 반지름(끝으로 갈수록 가늘어진다)
@@ -251,7 +251,7 @@ vec3 printCol(vec2 xy){
 // 인쇄면의 빛: 물결 윗면이 렌즈처럼 빛을 모아 밝은 그물무늬가 생기고, 그 사이는 조금 어둡다
 vec3 printLit(vec2 xy){
   vec2 uv = clamp(xy / uPrintSize + 0.5, 0.0, 1.0);
-  float c = texture2D(uCaustic, uv).r * 4.0;
+  float c = mix(1.0, texture2D(uCaustic, uv).r * 4.0, uCausticK);
   vec3 base = printCol(xy);
   return base * (0.66 + 0.34 * min(c, 2.6)) + mix(base, vec3(1.0), 0.6) * max(c - 1.3, 0.0) * 0.11;
 }
@@ -324,7 +324,7 @@ function clearResin(tex){
       uHalf: { value: new THREE.Vector3(META.ext[0] / 2, META.ext[1] / 2, TOP_Z - Z_SHIFT) },
       uDish: { value: new THREE.Vector4(blockBottomZ + 0.35 + 1.2, 0.6 / (hw * hw), 0.6 / (hh * hh), blockBottomZ) },
       uPrintSize: { value: new THREE.Vector2(META.ext[0] - 0.5, META.ext[1] - 0.5) },
-      uCaustic: { value: caustic.tex },
+      uCaustic: { value: caustic.tex }, uCausticK: causticK,
     },
     vertexShader: RESIN_VS, fragmentShader: RESIN_FS, toneMapped: false,
   });
@@ -384,6 +384,7 @@ const caustic = (() => {
   }
   return { tex, sample, compute };
 })();
+const causticK = { value: 0.5 };   // strength of the light pattern (0–1), set from the site
 const sunLocal = new THREE.Vector3(), causticSun = new THREE.Vector3(9, 9, 9), invBlock = new THREE.Matrix4();
 function updateCaustics(){
   if (!prints.block) return;
@@ -439,11 +440,8 @@ const FLOOR_Z = blockBottomZ - 0.9;   // underside of the back doming
 
 // The prints are the brand's own artwork (assets/print-*.png: the print area cut out of the
 // supplied images, turned to the block's portrait shape).
-// Colours can be changed (a temporary tool on the site): every pixel is placed between the
-// artwork's dark line colour and its tile colour, and painted the same way between the new ones;
-// on Ver.1 the wide lane mark (dark areas, not the thin grout) gets its own colour.
-const PRINT_BASE = { aquable: { tile: [122, 157, 171], line: [34, 45, 56] }, prussian: { tile: [65, 112, 151], line: [24, 40, 62] } };
-const printArt = {}, printColors = { aquable: null, prussian: null };
+// The prints are the brand's artwork (assets/print-*.png), drawn onto a canvas texture.
+const printArt = {};
 function printTexture(name){
   const cv = document.createElement('canvas'); cv.width = 4; cv.height = 4;
   const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.flipY = false; t.anisotropy = renderer.capabilities.getMaxAnisotropy();
@@ -451,44 +449,12 @@ function printTexture(name){
   const img = new Image(); img.onload = () => { printArt[name] = img; paintPrint(t); }; img.src = '../assets/print-' + name + '.png';
   return t;
 }
-const hexRgb = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
 function paintPrint(t){
   const name = t.userData.name, img = printArt[name]; if (!img) return;
   const W = img.naturalWidth, H = img.naturalHeight, cv = document.createElement('canvas'); cv.width = W; cv.height = H;
   const ctx = cv.getContext('2d'); ctx.drawImage(img, 0, 0);
-  const want = printColors[name];
-  if (want) {
-    const im = ctx.getImageData(0, 0, W, H), d = im.data, B = PRINT_BASE[name], T = B.tile, L = B.line;
-    const nT = hexRgb(want.tile), nL = hexRgb(want.line), nLane = hexRgb(want.lane || want.line);
-    const dx = T[0] - L[0], dy = T[1] - L[1], dz = T[2] - L[2], dd = dx * dx + dy * dy + dz * dz;
-    const k = new Float32Array(W * H);
-    for (let i = 0; i < W * H; i++) { const j = i * 4; k[i] = Math.max(-.2, Math.min(1.3, ((d[j] - L[0]) * dx + (d[j + 1] - L[1]) * dy + (d[j + 2] - L[2]) * dz) / dd)); }
-    // the lane mark: dark pixels with mostly dark around them (sum over a box, from an integral image)
-    let lane = null;
-    if (name === 'aquable' && want.lane) {
-      const S = new Float32Array((W + 1) * (H + 1)), R = Math.round(W * .02);
-      for (let y = 0; y < H; y++) { let row = 0; for (let x = 0; x < W; x++) { row += k[y * W + x] < .5 ? 1 : 0; S[(y + 1) * (W + 1) + x + 1] = S[y * (W + 1) + x + 1] + row; } }
-      lane = new Uint8Array(W * H);
-      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
-        const x0 = Math.max(0, x - R), x1 = Math.min(W, x + R + 1), y0 = Math.max(0, y - R), y1 = Math.min(H, y + R + 1);
-        const n = S[y1 * (W + 1) + x1] - S[y0 * (W + 1) + x1] - S[y1 * (W + 1) + x0] + S[y0 * (W + 1) + x0];
-        lane[y * W + x] = n / ((x1 - x0) * (y1 - y0)) > .55 ? 1 : 0;
-      }
-    }
-    for (let i = 0; i < W * H; i++) {
-      const j = i * 4, f = k[i], c = lane && lane[i] ? nLane : nL;
-      for (let ch = 0; ch < 3; ch++) d[j + ch] = c[ch] + (nT[ch] - c[ch]) * f;
-    }
-    ctx.putImageData(im, 0, 0);
-  }
   if (t.image && (t.image.width !== W || t.image.height !== H)) t.dispose();   // a new size needs new GPU storage
   t.image = cv; t.needsUpdate = true;
-}
-// colours: { tile, line, lane } as #rrggbb, or null for the artwork's own colours
-function setPrintColors(name, colors){
-  printColors[name] = colors;
-  const t = name === 'prussian' ? prints.prussian : prints.lane;
-  if (t) paintPrint(t);
 }
 function buildBlock(geo){
   // body (resin + print) turned 180° so its north and south ends swap; hardware stays put
@@ -1039,7 +1005,7 @@ function siteDrive(){
   const tapRay = new THREE.Raycaster(), tapNdc = new THREE.Vector2(), tapBox = new THREE.Box3();
   window.__site = {
     ready: true, box: { minX: box.min.x, maxX: box.max.x, minZ: box.min.z, maxZ: box.max.z, top: box.max.y }, grid: { nx, nz, data: H },
-    setPrint, setPrintColors, pick: () => window.__pick || null,
+    setPrint, setLightPattern(v){ causticK.value = Math.max(0, Math.min(1, v)); }, pick: () => window.__pick || null,
     // is the keyring under this point? (every part's box, a little generous, so the whole of it counts)
     hit(nx, ny){ tapRay.setFromCamera(tapNdc.set(nx, ny), camera); let on = false;
       product.traverse(o => { if (!on && o.isMesh && o.visible) { tapBox.setFromObject(o).expandByScalar(1.2); if (tapRay.ray.intersectsBox(tapBox)) on = true; } });
@@ -1081,7 +1047,7 @@ function siteDrive(){
     const v = views.angle(); camera.position.set(...v.p); controls.target.set(...v.t); controls.update();
     document.getElementById('loading').hidden = true;
     if (SITE === 'big') { stageDome.visible = false; scene.background = stageMat.color; setSpin(false);
-      floor.material = new THREE.MeshBasicMaterial({ toneMapped: false }); floor.material.color = stageMat.color; shadowMat.opacity = 0.3; const q = new URLSearchParams(location.search), k = q.get('print'); if (k) setPrint(k); if (q.get('tile')) setPrintColors(k === 'prussian' ? 'prussian' : 'aquable', { tile: '#' + q.get('tile'), line: '#' + q.get('line'), lane: q.get('lane') ? '#' + q.get('lane') : null }); if (window.SITE_BG) { document.documentElement.style.setProperty('--stage', '#' + new URLSearchParams(location.search).get('bg')); applyTheme(); } }   // opened large from the site
+      floor.material = new THREE.MeshBasicMaterial({ toneMapped: false }); floor.material.color = stageMat.color; shadowMat.opacity = 0.3; const q = new URLSearchParams(location.search), k = q.get('print'); if (k) setPrint(k); if (q.get('light') !== null) causticK.value = Math.max(0, Math.min(1, Number(q.get('light')) / 100 || 0)); if (window.SITE_BG) { document.documentElement.style.setProperty('--stage', '#' + new URLSearchParams(location.search).get('bg')); applyTheme(); } }   // opened large from the site
     if (!SITE) FILM.start(true);
     const clock = new THREE.Clock();
     renderer.setAnimationLoop(() => {
