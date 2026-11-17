@@ -47,6 +47,11 @@ export function createGripPlay(parent, { plush, groundY, K, site, onReady }) {
   // an invisible stand-in for the grip, so it can be tapped
   const gripProxy = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 1, 24), new THREE.MeshBasicMaterial({ visible: false }));
   root.add(gripProxy);
+  // the grip is drawn by its own viewer behind the scene: an invisible cylinder in its place
+  // writes depth (after the bear's underwater picture, before the bear), so from behind the grip
+  // hides the bear. Its top sits a little under the wavy resin top, where the bear swims.
+  const occluder = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 1, 48), new THREE.MeshBasicMaterial({ colorWrite: false, transparent: true, depthWrite: true }));
+  occluder.name = 'GripOccluder'; occluder.renderOrder = 2.5; root.add(occluder);
 
   const play = {
     root, toss,
@@ -80,6 +85,7 @@ export function createGripPlay(parent, { plush, groundY, K, site, onReady }) {
       // the grip's stand-in follows its height
       const R = capR(), topY = surface(0, 0);
       gripProxy.scale.set(R, Math.max(.1, topY - groundY), R); gripProxy.position.set(0, (topY + groundY) / 2, 0);
+      { const top = Math.max(groundY + .05, topY - R * .1); occluder.scale.set(R * .99, top - groundY, R * .99); occluder.position.set(0, (top + groundY) / 2, 0); }
       if (toss.busy()) {
         const s = toss.update(dt);
         if (s === 'landed') {

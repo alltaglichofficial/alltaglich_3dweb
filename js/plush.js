@@ -65,7 +65,8 @@ export function createPlushBear(parent, kind, { height = 1.4 } = {}) {
   parent.add(proxy);
   // soft contact shadow on whatever it stands on (the viewer's own floor shadow is off in the scene)
   const shadow = new THREE.Mesh(new THREE.CircleGeometry(.5, 40), new THREE.MeshBasicMaterial({ color: 0x2c2a22, map: blobTexture(), transparent: true, opacity: .5, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3 }));
-  shadow.rotation.x = -Math.PI / 2; shadow.renderOrder = 2; shadow.visible = false; parent.add(shadow);
+  shadow.rotation.x = -Math.PI / 2; shadow.renderOrder = 2.6;   // (after the products' depth stand-ins: hidden behind them)
+  shadow.visible = false; parent.add(shadow);
 
   const camPos = new THREE.Vector3(), qWorld = new THREE.Quaternion(), qCam = new THREE.Quaternion(), pos = new THREE.Vector3(), q = new THREE.Quaternion();
   const bear = { info, sprite, proxy, shadow, iframe, height, size, lastUsed: 0, ready: false, lastT: -1 };

@@ -44,6 +44,28 @@ export function createPoolIsland(scene, island) {
   };
   // (the block is solid resin: the bear rides a little higher than it would in water, so it sits on the waves)
   const bearSurface = (x, z) => surfaceHeight(x, z) + .5;
+  // The keyring is drawn by its own viewer behind the scene, so on its own the bear would show
+  // through it from behind. An invisible copy of the resin block (its wavy top just under the
+  // water, its four sides down to the table) writes depth only, drawn after the bear's underwater
+  // picture and before the bear: whatever of the bear is behind the block is hidden.
+  const occluderMat = new THREE.MeshBasicMaterial({ colorWrite: false, transparent: true, depthWrite: true });
+  const occluder = new THREE.Mesh(new THREE.BufferGeometry(), occluderMat);
+  occluder.name = 'KeyringOccluder'; occluder.renderOrder = 2.5; occluder.frustumCulled = false; occluder.visible = false; poolGroup.add(occluder);
+  let occluderGrid = null;
+  function buildOccluder() {
+    const k = keyring(); if (!k || k.grid === occluderGrid) return; occluderGrid = k.grid;
+    const NX = 48, NZ = 72, pos = [], idx = [], at = (x, z) => surfaceHeight(x, z) - .03;
+    const v = (x, y, z) => { pos.push(x, y, z); return pos.length / 3 - 1; };
+    for (let j = 0; j <= NZ; j++) for (let i = 0; i <= NX; i++) { const x = -WALL_X + 2 * WALL_X * i / NX, z = -WALL_Z + 2 * WALL_Z * j / NZ; v(x, at(x, z), z); }
+    for (let j = 0; j < NZ; j++) for (let i = 0; i < NX; i++) { const a = j * (NX + 1) + i; idx.push(a, a + NX + 1, a + 1, a + 1, a + NX + 1, a + NX + 2); }
+    // the four sides: the top's edge down to the table
+    const side = ring => { const n = ring.length; const base = pos.length / 3; for (const [x, z] of ring) { v(x, at(x, z), z); v(x, DECK_Y, z); } for (let i = 0; i < n - 1; i++) { const a = base + i * 2; idx.push(a, a + 1, a + 2, a + 2, a + 1, a + 3); } };
+    const edge = (n, f) => Array.from({ length: n + 1 }, (_, i) => f(i / n));
+    side(edge(NX, t => [-WALL_X + 2 * WALL_X * t, -WALL_Z])); side(edge(NX, t => [-WALL_X + 2 * WALL_X * t, WALL_Z]));
+    side(edge(NZ, t => [-WALL_X, -WALL_Z + 2 * WALL_Z * t])); side(edge(NZ, t => [WALL_X, -WALL_Z + 2 * WALL_Z * t]));
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(idx);
+    occluder.geometry.dispose(); occluder.geometry = g; occluderMat.side = THREE.DoubleSide;
+  }
   // Water thrown up when the bear plunges in. A bear fresh out of the water drips: drops
   // fall from it and leave wet spots on the table, and where it lands it leaves a puddle
   // that slowly dries.
@@ -149,7 +171,7 @@ export function createPoolIsland(scene, island) {
       if (!poolParts) {
         poolParts = new THREE.Group(); poolParts.name = 'PoolParts';
         // (the Grip Tok bear's water and wet marks live in poolGroup too, but belong to the grip view)
-        const keep = new Set([dropsScene.root, plush.sprite, plush.proxy, plush.shadow, bear.object, magnetPlay.pencil, ...gripPlay.objects]);
+        const keep = new Set([dropsScene.root, plush.sprite, plush.proxy, plush.shadow, bear.object, magnetPlay.pencil, occluder, ...gripPlay.objects]);
         for (const child of [...poolGroup.children]) if (!keep.has(child)) poolParts.add(child);
         poolGroup.add(poolParts);
       }
@@ -284,6 +306,7 @@ export function createPoolIsland(scene, island) {
       }
       if (focus === 'drops') dropsScene.update(time, reducedMotion);
       { const tdt = Math.min(.05, Math.max(0, time - (toyLast ?? time))); toyLast = time; toys.update(time, tdt, plushCamera(), bear.state === 'swim'); }
+      buildOccluder(); occluder.visible = focus === 'pool' && !!occluderGrid;
       if (!dropsScene.active) plush.update(plush.anchor, { swim: bear.state === 'swim' && !bear.gear.tube, goggles: bear.state === 'swim', ground: inPool(bear.object.position.x, bear.object.position.z) ? null : DECK_Y, limbs: bear.state === 'run' ? runLimbs(bear.runPhase) : null });
       {
         const bp = bear.object.position, st = bear.state, wdt = Math.min(.05, Math.max(0, time - (waterLast ?? time))); waterLast = time;

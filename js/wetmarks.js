@@ -16,7 +16,7 @@ export function createWetMarks(parent, groundY) {
   const geo = new THREE.PlaneGeometry(2, 2); geo.rotateX(-Math.PI / 2);
   const marks = Array.from({ length: COUNT }, (_, i) => {
     const material = new THREE.MeshBasicMaterial({ color: 0x7a6f5c, alphaMap: tex, transparent: true, opacity: 0, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 });
-    const mesh = new THREE.Mesh(geo, material); mesh.visible = false; mesh.renderOrder = 1; parent.add(mesh);
+    const mesh = new THREE.Mesh(geo, material); mesh.visible = false; mesh.renderOrder = 2.6; parent.add(mesh);   // (after the depth stand-ins)
     // a faint wet sheen on the bigger puddles
     return { mesh, age: LIFE, peak: 0, grow: 0, size: 1 };
   });
@@ -28,7 +28,7 @@ export function createWetMarks(parent, groundY) {
   const pawTex = new THREE.CanvasTexture(pc);
   const PAWS = 60, paws = Array.from({ length: PAWS }, () => {
     const material = new THREE.MeshBasicMaterial({ color: 0x6f6553, alphaMap: pawTex, transparent: true, opacity: 0, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 });
-    const mesh = new THREE.Mesh(geo, material); mesh.visible = false; mesh.renderOrder = 1; parent.add(mesh);
+    const mesh = new THREE.Mesh(geo, material); mesh.visible = false; mesh.renderOrder = 2.6; parent.add(mesh);   // (after the depth stand-ins)
     return { mesh, age: LIFE };
   });
   let nextPaw = 0;
