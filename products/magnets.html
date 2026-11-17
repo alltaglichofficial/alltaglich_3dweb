@@ -352,7 +352,7 @@ precision highp float;
 in vec3 vP; out vec4 o;
 uniform vec4 uSegA[16]; uniform vec3 uSegB[16];
 uniform vec4 uRect; uniform vec4 uRectP;     // 중심 xz, 반크기 / 회전, 모서리 반지름, 번짐, 세기
-uniform vec3 uEdge[6]; uniform vec4 uHull;     // 볼록 그림자: 변(바깥 법선 xz, 거리) 6개 / 세기, 가까운 번짐, 먼 번짐, 길이
+uniform vec3 uEdge[6]; uniform vec4 uHull; uniform float uFade;   // 빛이 면을 스치면 그림자를 옅게     // 볼록 그림자: 변(바깥 법선 xz, 거리) 6개 / 세기, 가까운 번짐, 먼 번짐, 길이
 float rr(vec2 p,vec2 h,float r){ vec2 q=abs(p)-h+r; return length(max(q,0.))+min(max(q.x,q.y),0.)-r; }
 void main(){
   vec2 p=vP.xz; float lit=1.;
@@ -366,7 +366,7 @@ void main(){
   if(uHull.x>0.){ float d=-1e4; for(int i=0;i<6;i++) d=max(d,dot(p,uEdge[i].xy)-uEdge[i].z);
     float far=clamp(abs(p.y)/max(uHull.w,1.),0.,1.), bl=mix(uHull.y,uHull.z,far);          // 발치는 또렷하게, 멀수록 번지고 옅게
     lit*=1.-uHull.x*(1.-.45*far)*(1.-smoothstep(-bl,bl,d)); }
-  o=vec4(.20,.21,.27,1.-lit);
+  o=vec4(.20,.21,.27,(1.-lit)*uFade);
 }`;
 // 헤어라인 스테인리스: 가로 결(판의 x 방향)을 따라 길게 늘어진 반사
 const FS_BRUSH=`#version 300 es
@@ -685,8 +685,11 @@ const ground=mesh({pos:[-900,0,-900, 900,0,-900, 900,0,900, -900,0,900],nor:[0,1
 
 /* ---------- 그림자 목록(바닥 또는 스탠드 판 위 좌표) ---------- */
 // 높이 h인 점의 그림자가 판 위에서 밀리는 방향: 조명 방향을 그 면의 좌표로 바꿔 계산(스탠드는 부드러운 빛이라 0.6배)
-const SHV={}; function shv(){ const f=(F,k)=>{ const M=F.M, lx=M[0]*L[0]+M[1]*L[1]+M[2]*L[2], ly=M[3]*L[0]+M[4]*L[1]+M[5]*L[2], lz=M[6]*L[0]+M[7]*L[1]+M[8]*L[2]; return [-lx/ly*k,-lz/ly*k]; };
-  SHV.floor=f(FR_ID,1); SHV.stand=f(FR_F,.6); } shv();
+// 빛이 면을 스치듯(또는 뒤에서) 비추면 ly가 0에 가까워져 그림자가 끝없이 길어지고 뒤집힌다:
+// 길이는 ly를 0.35 아래로 내려가지 않게 막고, 그때는 그림자를 옅게 지운다(면이 그늘에 들어간 것)
+const SHV={fade:{}}; function shv(){ const f=(F,k,key)=>{ const M=F.M, lx=M[0]*L[0]+M[1]*L[1]+M[2]*L[2], ly=M[3]*L[0]+M[4]*L[1]+M[5]*L[2], lz=M[6]*L[0]+M[7]*L[1]+M[8]*L[2];
+    const t=Math.min(Math.max((ly-.04)/.36,0),1); SHV.fade[key]=t*t*(3-2*t); const c=Math.max(ly,.35); return [-lx/c*k,-lz/c*k]; };
+  SHV.floor=f(FR_ID,1,'floor'); SHV.stand=f(FR_F,.6,'stand'); } shv();
 function shadowList(pl,sv){
   const A=new Float32Array(64), B=new Float32Array(48); let n=0;
   const seg=(q,x0,z0,x1,z1,h,r,str)=>{ const a=rotW(x0,z0,q.rot), b=rotW(x1,z1,q.rot), ox=sv[0]*h, oz=sv[1]*h;
@@ -765,6 +768,7 @@ function shadows(F,list,quad,y,rect,hull){
   use(P_SHADOW,F);
   gl.uniform4fv(P_SHADOW.u.uSegA,list.A); gl.uniform3fv(P_SHADOW.u.uSegB,list.B);
   gl.uniform4fv(P_SHADOW.u.uRect,rect?rect.slice(0,4):[0,0,0,0]); gl.uniform4fv(P_SHADOW.u.uRectP,rect?rect.slice(4):[0,0,1,0]);
+  gl.uniform1f(P_SHADOW.u.uFade,F===FR_ID?SHV.fade.floor:SHV.fade.stand);
   gl.uniform3fv(P_SHADOW.u.uEdge,HULL.E); gl.uniform4fv(P_SHADOW.u.uHull,hull?HULL.P:[0,0,1,1]);
   put(P_SHADOW,quad,{off:[0,y,0],rot:0});
   gl.disable(gl.BLEND); gl.depthMask(true);
@@ -972,7 +976,8 @@ if(window.SITE==='drive'){   // the site draws each frame with its own camera; t
   bStand.click(); setView('angle'); applyView(); Object.assign(S,Tg);
   if(window.SITE==='big'&&window.SITE_BG){ BG[0]=window.SITE_BG[0]; BG[1]=window.SITE_BG[1]; BG[2]=window.SITE_BG[2]; }
   const A0=Tg.az;
-  window.__site={ ready:true, onShow(){ writeMemo(); }, setLight(az,el){ const a=A0+az*Math.PI/180, e=el*Math.PI/180; L[0]=Math.sin(a)*Math.cos(e); L[1]=Math.sin(e); L[2]=Math.cos(a)*Math.cos(e); relight(); dirty=true; },  setBG(c){ BG[0]=c[0]; BG[1]=c[1]; BG[2]=c[2]; dirty=true; }, reset(){ wrapAz(); setView('angle'); applyView(); } };
+  window.__site={ ready:true, onShow(){ writeMemo(); }, setLight(az,el){ if(DRV&&DRV.sun) return;   // the site's frames already carry its lamp: one source only, or the two fight frame by frame
+      const a=A0+az*Math.PI/180, e=el*Math.PI/180; L[0]=Math.sin(a)*Math.cos(e); L[1]=Math.sin(e); L[2]=Math.cos(a)*Math.cos(e); relight(); dirty=true; },  setBG(c){ BG[0]=c[0]; BG[1]=c[1]; BG[2]=c[2]; dirty=true; }, reset(){ wrapAz(); setView('angle'); applyView(); } };
 }
 if(window.SITE!=='drive') requestAnimationFrame(frame);
 
