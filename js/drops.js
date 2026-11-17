@@ -166,13 +166,11 @@ export function createDropletIsland(scene, island, opts = {}) {
   };
 
   const HIDE = 1e-4, hide = m => m.scale.setScalar(HIDE);
-  let start = null, last = null, order = [], slots = [], nextSlot = 0;
+  let start = null, last = null, order = [];
   const reset = time => {
     trap = null; bubble.visible = false; toss.locked = false; fade.value = 1; doneAt = null;
     start = time; order = drops.map((_, i) => i).sort(() => Math.random() - .5);
-    // the times stay as before; which drop falls at each time is chosen then (the one nearest the bear)
-    slots = order.map((_, k) => START_DELAY + k * INTERVAL); nextSlot = 0;
-    order.forEach((i, k) => { const d = drops[i]; d.t0 = Infinity; d.state = 'wait'; hide(d.puddle); hide(d.falling); hide(d.blob); d.mark.visible = false; });
+    order.forEach((i, k) => { const d = drops[i]; d.t0 = START_DELAY + k * INTERVAL; d.state = 'wait'; hide(d.puddle); hide(d.falling); hide(d.blob); d.mark.visible = false; });
     if (!embedded) { walker.x = 0; walker.z = 2; }
     walker.vx = walker.vz = 0; walker.act = null; walker.cool = 0; newTarget();
   };
@@ -226,13 +224,6 @@ export function createDropletIsland(scene, island, opts = {}) {
       if (fx.visible && (start === null || pendingReset)) { pendingReset = false; reset(time); }
       const dt = last === null ? 0 : Math.min(.05, Math.max(0, time - last)); last = time;
       const t = time - start;
-      // the rain follows the bear: at each time the waiting drop nearest to it falls (one of the
-      // nearest three, so it is not too exact), and the picture still fills in completely
-      while (fx.visible && nextSlot < slots.length && t >= slots[nextSlot]) {
-        const bx = body.position.x, bz = body.position.z;
-        const near = drops.filter(d => d.state === 'wait').sort((a, b) => Math.hypot(a.cx - bx, a.cz - bz) - Math.hypot(b.cx - bx, b.cz - bz)).slice(0, 3);
-        const d = near[Math.floor(Math.random() * near.length)]; if (d) d.t0 = slots[nextSlot]; nextSlot++;
-      }
       if (fx.visible) for (const d of drops) {
         if (d.state === 'wait' && t >= d.t0) { d.state = 'falling'; d.mark.visible = true; }
         if (d.state === 'falling') {
