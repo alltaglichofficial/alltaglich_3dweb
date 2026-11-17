@@ -120,6 +120,14 @@ export function createPoolIsland(scene, island) {
   // a quick tap on a product opens its own viewer large (like the bears)
   const HINT = '드래그해서 돌리고, 휠이나 두 손가락으로 확대해요.';
   const tapCaster = new THREE.Raycaster();
+  // Grip Tok: drag it round to turn the grip itself (the table and the view stay put); a quick tap opens it large
+  const gripPlane = new THREE.Plane(), gripHit = new THREE.Vector3(), gripCentre = new THREE.Vector3();
+  let gripAngle = null;
+  const gripAngleAt = ray => { gripPlay.gripProxy.getWorldPosition(gripCentre); gripPlane.set(new THREE.Vector3(0, 1, 0), -gripCentre.y); if (!ray.intersectPlane(gripPlane, gripHit)) return null; return Math.atan2(gripHit.z - gripCentre.z, gripHit.x - gripCentre.x); };
+  const gripTarget = { object: gripPlay.gripProxy,
+    grab(point, camera) { gripAngle = null; },
+    drag(ray) { const a = gripAngleAt(ray); if (a === null) return; if (gripAngle !== null) { let da = a - gripAngle; if (da > Math.PI) da -= 2 * Math.PI; else if (da < -Math.PI) da += 2 * Math.PI; grip()?.spinBy?.(-da); } gripAngle = a; },   // (-da: same sense as dragging it in its own viewer)
+    release() { gripAngle = null; }, tap() { openProduct('grip'); } };
   const tapLocal = new THREE.Ray(), tapInv = new THREE.Matrix4(), blockBox = new THREE.Box3(new THREE.Vector3(-WALL_X, DECK_Y, -WALL_Z), new THREE.Vector3(WALL_X, DECK_Y + 3.3, WALL_Z));
   const openProduct = kind => openLargeViewer(
     kind === 'drops' ? { name: 'Water Drop Sticker', reviewProduct: 'drops', shop: 'https://alltaglich.com/surl/O/54', src: 'products/waterdrop.html?site=big&bg=fafafa', hint: HINT }
@@ -251,7 +259,7 @@ export function createPoolIsland(scene, island) {
     gripPhone(on) { const api = grip(); if (!api) return; api.setPhone(on); world.onGrip?.(); },
     get view() { return focus === 'drops' ? DROPS_VIEW : focus === 'grip' ? gripView() : focus === 'magnet' ? MAGNET_VIEW : POOL_VIEW; },
     get viewDirection() { return focus === 'drops' ? DROPS_DIR : focus === 'grip' ? GRIP_DIR : focus === 'magnet' ? MAGNET_DIR : undefined; },
-    get grabTargets() { return focus === 'pool' || focus === 'drops' ? world.grabTargets_ : focus === 'grip' ? [gripPlay.bearTarget] : focus === 'magnet' ? [magnetPlay.target] : []; },
+    get grabTargets() { return focus === 'pool' || focus === 'drops' ? world.grabTargets_ : focus === 'grip' ? [gripPlay.bearTarget, gripTarget] : focus === 'magnet' ? [magnetPlay.target] : []; },
     // a quick tap that nothing picked up: on the keyring or on the magnet stand → open it large
     tap(ndc, ray) {
       if (focus === 'pool') {

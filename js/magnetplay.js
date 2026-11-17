@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { createThrowable } from './plush.js';
+import { createThrowable, runLimbs } from './plush.js';
 
 // The swim bear and the magnet stand. The stand and its magnets are drawn by their viewer
 // (products/magnets.html) behind the scene; this moves the bear over them:
@@ -63,6 +63,15 @@ export function createMagnetPlay(parent, { plush, groundY, K, site }) {
   function walkTo(dt, speed = 1.6) {
     const dx = P.target.x - anchor.position.x, dz = P.target.y - anchor.position.z, d = Math.hypot(dx, dz);
     if (d < .06) return true;
+    if (d > 60 * K) {   // far away (thrown): run, arms pumping
+      const step = Math.min(d, Math.max(speed, 5) * dt); anchor.position.x += dx / d * step; anchor.position.z += dz / d * step;
+      face(Math.atan2(dx, dz), dt * 2);
+      P.phase += dt * 14;
+      anchor.position.y = groundY + HALF + Math.abs(Math.sin(P.phase)) * HALF * .3;
+      anchor.rotation.z = Math.sin(P.phase) * .08; anchor.rotation.x = .2;
+      P.limbs = runLimbs(P.phase);
+      return false;
+    }
     const step = Math.min(d, speed * dt); anchor.position.x += dx / d * step; anchor.position.z += dz / d * step;
     face(Math.atan2(dx, dz), dt * 1.4);
     P.phase += dt * (6 + speed * 2.2);
@@ -89,7 +98,7 @@ export function createMagnetPlay(parent, { plush, groundY, K, site }) {
   // picked up and dropped: lands on the table in front of the stand
   let pick = null;
   const toss = createThrowable(anchor, { bottom: HALF, groundAt: () => groundY, limit: (x, z) => {
-    const front = (site()?.panel ? onPanel(0, site().panel.half[1], 0, v3).z : 0) + HALF * 1.1, R = 170 * K;
+    const front = (site()?.panel ? onPanel(0, site().panel.half[1], 0, v3).z : 0) + HALF * 1.1, R = 480 * K;   // it can be thrown far (it runs back)
     z = Math.max(front, z); const d = Math.hypot(x, z); return d > R ? [x * R / d, z * R / d] : [x, z]; } });
   // seen from the other side of the stand, the stand is in the way (it is drawn behind the scene)
   function behindStand(api) {

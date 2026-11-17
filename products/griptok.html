@@ -699,7 +699,7 @@ function resize(){
 let last=0;
 function frame(t){
   const dt=Math.min((t-last)/1000,.05); last=t;
-  if(auto&&!FILM.st.on){ Tg.az+=dt*.22; S.az+=dt*.22; dirty=true; }
+  if(auto&&!FILM.st.on){ spin+=dt*.22; dirty=true; }   // 자동 회전도 본품만 (바닥은 그대로)
   const k=1-Math.exp(-dt*7);
   { const d=Tg.ext-S.ext; if(d){ S.ext+=Math.sign(d)*Math.min(Math.abs(d),dt*(window.SITE?5.4:1.8)); dirty=true; } }
   for(const key in S){ if(key==='ext') continue; const d=Tg[key]-S[key]; if(Math.abs(d)>1e-4){ S[key]+=d*k; dirty=true; } else S[key]=Tg[key]; }
@@ -727,10 +727,10 @@ function setView(v){ view=v; document.querySelectorAll('[data-view]').forEach(b=
 function free(){ auto=false; setView(''); }
 function wrapAz(){ const d=Math.round((S.az-Tg.az)/(2*Math.PI))*2*Math.PI; S.az-=d; }
 cv.addEventListener('pointerdown',()=>{ if(FILM.st.on) FILM.pause(); });
-cv.addEventListener('pointerdown',e=>{ cv.setPointerCapture(e.pointerId); if(!pts.size) grab=phone&&overTok(e); pts.set(e.pointerId,[e.clientX,e.clientY]); cv.classList.add('drag'); auto=false; });
+cv.addEventListener('pointerdown',e=>{ cv.setPointerCapture(e.pointerId); if(!pts.size) grab=overTok(e); pts.set(e.pointerId,[e.clientX,e.clientY]); cv.classList.add('drag'); auto=false; });   // 그립톡을 잡고 끌면 그립톡만 돌고 바닥은 그대로
 cv.addEventListener('pointermove',e=>{
   const p=pts.get(e.pointerId); if(!p) return;
-  if(pts.size===1&&grab){                       // 폰에 부착한 상태: 본품만 제자리에서 회전
+  if(pts.size===1&&grab){                       // 본품만 제자리에서 회전 (바닥·폰·카메라는 그대로)
     if(S.el>.6){ const r=cv.getBoundingClientRect(), c=toScreen(0,capY()+6,0);
       let da=Math.atan2(e.clientY-r.top-c[1],e.clientX-r.left-c[0])-Math.atan2(p[1]-r.top-c[1],p[0]-r.left-c[0]);
       if(da>Math.PI) da-=2*Math.PI; else if(da<-Math.PI) da+=2*Math.PI; spin-=da; }
@@ -775,7 +775,9 @@ if(window.SITE==='drive'){   // the site draws each frame with its own camera; t
     setFold(n){ setFold(n); },
     setPhone(on){ if(!!on!==phone){ phone=!!on; if(!phone&&fold===2) setFold(0); } },
     // height of the grip's top (mm) at x, z (mm, grip centre at 0, 0), or -1 off the grip
-    top(x,z){ return Math.hypot(x,z)>R? -1 : capY()+Hat(x,z); },
+    top(x,z){ if(Math.hypot(x,z)>R) return -1; const cs=Math.cos(spin), sn=Math.sin(spin); return capY()+Hat(cs*x-sn*z,sn*x+cs*z); },   // (돌린 만큼 높이맵도)
+    // 사이트에서 그립톡을 잡고 돌릴 때: 본품만 da(라디안)만큼
+    spinBy(da){ spin+=da; dirty=true; },
     // phone (x, z, half width, half length, thickness) when it is on
     phoneBox(){ return phone? [PH[0],PH[1],37.6,75.2,8.6] : null; },
     frame(o){ DRV=o; if(o.ratio&&o.ratio!==SITE_DPR){ SITE_DPR=o.ratio; resize(); }
