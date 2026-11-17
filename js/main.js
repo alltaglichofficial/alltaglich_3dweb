@@ -92,15 +92,14 @@ async function start() {
     const r = pad.getBoundingClientRect(), dx = (event.clientX - r.left) / r.width * 2 - 1, dy = (event.clientY - r.top) / r.height * 2 - 1;
     setLamp(THREE.MathUtils.radToDeg(Math.atan2(dx, dy)), 90 - Math.min(1, Math.hypot(dx, dy)) * SPAN);
   };
-  // the lamp circles the island slowly on its own (one turn in 90 s), keeping its height;
-  // it waits while the lamp is being moved by hand, and stays put for reduced motion
-  const LAMP_TURN = 4;   // degrees per second
-  let lampDrift = 0, lampHeld = false;
+  // the lamp circles the island slowly on its own (one turn in 60 s), keeping its height;
+  // it moves a little every frame, waits while the lamp is being moved by hand, and stays put
+  // for reduced motion. (The products redo their light patterns about every 1°.)
+  const LAMP_TURN = 6;   // degrees per second
+  let lampHeld = false;
   function driftLamp(dt) {
-    if (reducedMotion || lampHeld) return;
-    lampDrift += dt * LAMP_TURN;
-    if (lampDrift < 1) return;   // move in 1° steps: the products' light patterns are redone when it moves
-    const lamp = lighting.lamp; setLamp(lamp.az + lampDrift, lamp.el, false); lampDrift = 0;
+    if (reducedMotion || lampHeld || dt <= 0) return;
+    const lamp = lighting.lamp; setLamp(lamp.az + dt * LAMP_TURN, lamp.el, false);
   }
   pad.addEventListener('pointerdown', () => { lampHeld = true; });
   for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) pad.addEventListener(type, () => { lampHeld = false; });
