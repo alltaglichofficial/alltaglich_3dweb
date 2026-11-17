@@ -316,7 +316,9 @@ export function createPoolIsland(scene, island) {
     ready: Promise.resolve(),
   };
   // fetch the keyring viewer once the page has settled, so the Swim island opens ready
-  setTimeout(() => viewers.load('keyring'), 2500);
+  // warm the keyring up once the first island has settled and the browser is idle (Swim opens fast);
+  // visiting Swim before that loads it at once
+  setTimeout(() => (window.requestIdleCallback ?? (f => setTimeout(f, 1)))(() => viewers.load('keyring'), { timeout: 4000 }), 6000);
   waterColour();
   return world;
 }

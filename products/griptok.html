@@ -141,7 +141,7 @@ function Hat(x,z){
    조명 방향으로 들어온 빛을 높이맵의 각 지점에서 굴절시켜 인쇄면까지 따라가, 떨어진 곳을 센다.
    1 = 고르게 비춘 밝기. 조명이나 제품 방향이 바뀔 때만 다시 계산한다. */
 const CAUSTIC_K=0.44;   // 빛 무늬 세기 (0~1, 키링과 같은 값)
-function makeCaustic(Hh,NX,NZ,HX,HZ,printY,inside){
+function makeCaustic(Hh,NX,NZ,HX,HZ,printY,inside,step=1){   // step: use every step-th height sample (fewer rays)
   const MW=128, MH=Math.max(32,Math.round(128*NZ/NX)), acc=new Float32Array(MW*MH), tmp=new Float32Array(MW*MH), px=new Uint8Array(MW*MH*4).fill(64);
   const tex=gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D,tex);
   gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
@@ -151,7 +151,7 @@ function makeCaustic(Hh,NX,NZ,HX,HZ,printY,inside){
   function compute(Lin){
     let L=[Lin[0],Math.max(Lin[1],.08),Lin[2]]; const ll=Math.hypot(L[0],L[1],L[2]); L=[L[0]/ll,L[1]/ll,L[2]/ll];
     const inc=[-L[0],-L[1],-L[2]], eta=1/1.49; acc.fill(0); let rays=0;
-    for(let j=1;j<NZ-1;j++) for(let i=1;i<NX-1;i++){
+    for(let j=1;j<NZ-1;j+=step) for(let i=1;i<NX-1;i+=step){
       const x=-HX+(i+.5)*cx, z=-HZ+(j+.5)*cz; if(inside&&!inside(x,z)) continue;
       const k=j*NX+i, h=Hh[k];
       let nx=-(Hh[k+1]-Hh[k-1])/(2*cx), ny=1, nz=-(Hh[k+NX]-Hh[k-NX])/(2*cz); const nl=Math.hypot(nx,ny,nz); nx/=nl; ny/=nl; nz/=nl;
@@ -172,7 +172,7 @@ function makeCaustic(Hh,NX,NZ,HX,HZ,printY,inside){
   }
   return { tex, update(Lloc){ if(Math.hypot(Lloc[0]-last[0],Lloc[1]-last[1],Lloc[2]-last[2])<.02) return; last[0]=Lloc[0]; last[1]=Lloc[1]; last[2]=Lloc[2]; compute(Lloc); } };
 }
-const cau=makeCaustic(Hh,N,N,R,R,(x,z)=>3.2*(1-(x*x+z*z)/(R*R)),(x,z)=>x*x+z*z<R*R*.97);
+const cau=makeCaustic(Hh,N,N,R,R,(x,z)=>3.2*(1-(x*x+z*z)/(R*R)),(x,z)=>x*x+z*z<R*R*.97,2);   // 384² samples: every second one is plenty
 const hTex=gl.createTexture();
 (function(){
   const d=new Float32Array(N*N*4);

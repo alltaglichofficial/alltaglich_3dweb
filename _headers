@@ -1,0 +1,9 @@
+# Cloudflare Pages: how long browsers may keep files.
+# three.js (vendor) never changes for a given version: keep it a year.
+/vendor/*
+  Cache-Control: public, max-age=31536000, immutable
+# product data and print images: a day, then check again
+/products/*.bin
+  Cache-Control: public, max-age=86400
+/assets/*
+  Cache-Control: public, max-age=86400
