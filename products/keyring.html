@@ -384,7 +384,7 @@ const caustic = (() => {
   }
   return { tex, sample, compute };
 })();
-const causticK = { value: 0.5 };   // strength of the light pattern (0–1), set from the site
+const causticK = { value: 0.44 };   // strength of the light pattern (0–1), set from the site
 const sunLocal = new THREE.Vector3(), causticSun = new THREE.Vector3(9, 9, 9), invBlock = new THREE.Matrix4();
 function updateCaustics(){
   if (!prints.block) return;

@@ -185,9 +185,6 @@ async function start() {
     document.querySelectorAll('.pool-sub').forEach(el => { el.hidden = main !== 'pool'; if (el.dataset.sub) el.setAttribute('aria-pressed', String(main === 'pool' && el.dataset.sub === sub)); });
     const toysTab = document.querySelector('#toys-tab');
     // Grip Tok: fold / open buttons
-    // temporary: light pattern strength, with the keyring on screen
-    const lightBox = document.querySelector('#light-pattern');
-    if (lightBox) lightBox.hidden = !(main === 'pool' && poolWorld?.focus === 'pool');
     const gripBox = document.querySelector('#grip-controls'), gripHere = main === 'pool' && poolWorld?.focus === 'grip';
     if (gripBox) { gripBox.hidden = !gripHere; if (gripHere) showGripState(); }
     const tray = document.querySelector('#toy-tray'), toysHere = main === 'pool' && poolWorld?.focus === 'pool';
@@ -395,9 +392,6 @@ async function start() {
     t.release();
     if (tap) t.tap?.();   // a quick tap on a plush bear opens it large
   };
-  // temporary: how strong the light pattern on the keyring is (0–100)
-  { const input = document.querySelector('#lightPattern'), out = document.querySelector('#lightPatternOut');
-    input?.addEventListener('input', () => { out.textContent = input.value; worlds.find(w => w.setPrint)?.setLightPattern(input.value / 100); }); }
   // the SHOP menu on narrow screens
   { const shops = document.querySelector('.shops'), toggle = document.querySelector('#shopsToggle');
     const set = open => { shops.classList.toggle('open', open); toggle.setAttribute('aria-expanded', String(open)); };

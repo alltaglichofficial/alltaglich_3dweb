@@ -137,6 +137,42 @@ function Hat(x,z){
   const i=u|0,j=v|0,fu=u-i,fv=v-j,p=j*N+i;
   return (Hh[p]*(1-fu)+Hh[p+1]*fu)*(1-fv)+(Hh[p+N]*(1-fu)+Hh[p+N+1]*fu)*fv;
 }
+/* ---------- 윗면 물결을 지나 인쇄면에 모이는 빛 (커스틱) ----------
+   조명 방향으로 들어온 빛을 높이맵의 각 지점에서 굴절시켜 인쇄면까지 따라가, 떨어진 곳을 센다.
+   1 = 고르게 비춘 밝기. 조명이나 제품 방향이 바뀔 때만 다시 계산한다. */
+const CAUSTIC_K=0.44;   // 빛 무늬 세기 (0~1, 키링과 같은 값)
+function makeCaustic(Hh,NX,NZ,HX,HZ,printY,inside){
+  const MW=128, MH=Math.max(32,Math.round(128*NZ/NX)), acc=new Float32Array(MW*MH), tmp=new Float32Array(MW*MH), px=new Uint8Array(MW*MH*4).fill(64);
+  const tex=gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D,tex);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+  gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,MW,MH,0,gl.RGBA,gl.UNSIGNED_BYTE,px);
+  const cx=2*HX/NX, cz=2*HZ/NZ, last=[9,9,9];
+  function compute(Lin){
+    let L=[Lin[0],Math.max(Lin[1],.08),Lin[2]]; const ll=Math.hypot(L[0],L[1],L[2]); L=[L[0]/ll,L[1]/ll,L[2]/ll];
+    const inc=[-L[0],-L[1],-L[2]], eta=1/1.49; acc.fill(0); let rays=0;
+    for(let j=1;j<NZ-1;j++) for(let i=1;i<NX-1;i++){
+      const x=-HX+(i+.5)*cx, z=-HZ+(j+.5)*cz; if(inside&&!inside(x,z)) continue;
+      const k=j*NX+i, h=Hh[k];
+      let nx=-(Hh[k+1]-Hh[k-1])/(2*cx), ny=1, nz=-(Hh[k+NX]-Hh[k-NX])/(2*cz); const nl=Math.hypot(nx,ny,nz); nx/=nl; ny/=nl; nz/=nl;
+      const ci=-(nx*inc[0]+ny*inc[1]+nz*inc[2]), kk=1-eta*eta*(1-ci*ci); if(kk<0) continue;
+      const f=eta*ci-Math.sqrt(kk), rx=eta*inc[0]+f*nx, ry=eta*inc[1]+f*ny, rz=eta*inc[2]+f*nz; if(ry>-1e-3) continue;
+      let s=(printY(x,z)-h)/ry, lx=x+rx*s, lz=z+rz*s; s=(printY(lx,lz)-h)/ry; lx=x+rx*s; lz=z+rz*s;   // 곡면 인쇄면: 한 번 더 맞춘다
+      const u=(lx/(2*HX)+.5)*MW-.5, v=(lz/(2*HZ)+.5)*MH-.5, iu=Math.floor(u), iv=Math.floor(v);
+      if(iu<0||iv<0||iu>=MW-1||iv>=MH-1) continue;
+      const fu=u-iu, fv=v-iv, o=iv*MW+iu;
+      acc[o]+=(1-fu)*(1-fv); acc[o+1]+=fu*(1-fv); acc[o+MW]+=(1-fu)*fv; acc[o+MW+1]+=fu*fv; rays++;
+    }
+    for(let y=0;y<MH;y++) for(let x=0;x<MW;x++){ let s=0,w=0; for(let b=-1;b<=1;b++) for(let a=-1;a<=1;a++){ const X=x+a,Y=y+b; if(X<0||Y<0||X>=MW||Y>=MH) continue; const f=(a?.5:1)*(b?.5:1); s+=acc[Y*MW+X]*f; w+=f; } tmp[y*MW+x]=s/w; }
+    // 평균: 인쇄면 안쪽 칸만 센다
+    let cells=0; for(let y=0;y<MH;y++) for(let x=0;x<MW;x++){ const X=-HX+(x+.5)*2*HX/MW, Z=-HZ+(y+.5)*2*HZ/MH; if(!inside||inside(X,Z)) cells++; }
+    const mean=rays/Math.max(cells,1)||1;
+    for(let i=0;i<MW*MH;i++){ const val=Math.min(255,Math.round(tmp[i]/mean*64)); px[i*4]=px[i*4+1]=px[i*4+2]=val; px[i*4+3]=255; }
+    gl.bindTexture(gl.TEXTURE_2D,tex); gl.texSubImage2D(gl.TEXTURE_2D,0,0,0,MW,MH,gl.RGBA,gl.UNSIGNED_BYTE,px);
+  }
+  return { tex, update(Lloc){ if(Math.hypot(Lloc[0]-last[0],Lloc[1]-last[1],Lloc[2]-last[2])<.02) return; last[0]=Lloc[0]; last[1]=Lloc[1]; last[2]=Lloc[2]; compute(Lloc); } };
+}
+const cau=makeCaustic(Hh,N,N,R,R,(x,z)=>3.2*(1-(x*x+z*z)/(R*R)),(x,z)=>x*x+z*z<R*R*.97);
 const hTex=gl.createTexture();
 (function(){
   const d=new Float32Array(N*N*4);
@@ -230,7 +266,14 @@ in vec3 vP; out vec4 o;
 uniform sampler2D uH; uniform sampler2D uPrint;
 uniform vec3 uCamL; uniform int uPart;
 const float R=21.5; const float IOR=1.49; const float DOME=3.2;   // 인쇄면 중앙이 올라온 높이(mm)
+const float CAU_K=${CAUSTIC_K.toFixed(3)};
 ${ENV}
+uniform sampler2D uCau;
+vec3 lit(vec3 base, vec2 uv){   // 인쇄면에 맺힌 빛: 모인 곳은 밝은 선, 사이는 조금 어둡게
+  float c=mix(1.,texture(uCau,uv).r*4.,CAU_K);
+  return base*(.66+.34*min(c,2.6))+mix(base,vec3(1.),.6)*max(c-1.3,0.)*.11;
+}
+
 vec3 hg(vec2 p){ return texture(uH,p/(2.*R)+.5).xyz; }
 float Ht(vec2 p){ return texture(uH,p/(2.*R)+.5).x; }
 vec3 topN(vec2 p){ vec3 t=hg(p); return normalize(vec3(-t.y,1.,-t.z)); }
@@ -266,7 +309,7 @@ void main(){
     }
     vec3 q, nIn;
     if(tH>0.){ q=p+d*tH; nIn=-topN(q.xz); thr*=exp(-ABS*tH); }
-    else if(tB<=tW){ q=p+d*tB; thr*=exp(-ABS*tB); col+=thr*texture(uPrint,vec2(q.z,-q.x)/(2.*R)+.5).rgb*1.06; thr=vec3(0.); break; }
+    else if(tB<=tW){ q=p+d*tB; thr*=exp(-ABS*tB); col+=thr*lit(texture(uPrint,vec2(q.z,-q.x)/(2.*R)+.5).rgb,q.xz/(2.*R)+.5)*1.06; thr=vec3(0.); break; }
     else { q=p+d*tW; nIn=-normalize(vec3(q.x,0.,q.z)); thr*=exp(-ABS*tW); }
     vec3 od=refract(d,nIn,IOR); float Fr=1.;
     if(dot(od,od)>.5){ float ct=max(dot(od,-nIn),0.); Fr=.04+.96*pow(1.-ct,5.); col+=thr*(1.-Fr)*mix(env(od),vec3(.97,.97,.965),.55); }
@@ -618,7 +661,8 @@ function draw(){
   // 레진: 내부 광선 추적 (윗면 굴절 → 인쇄면)
   gl.useProgram(P_RESIN.p); gl.uniformMatrix4fv(P_RESIN.u.uVP,false,VP);
   const cs=Math.cos(spin), sn=Math.sin(spin), loc=(x,y,z)=>[cs*x-sn*z,y,sn*x+cs*z];   // 본품 회전: 카메라·조명을 레진 기준 좌표로
-  gl.uniform1f(P_RESIN.u.uRot,spin); gl.uniform3fv(P_RESIN.u.uL,loc(L[0],L[1],L[2]));
+  gl.uniform1f(P_RESIN.u.uRot,spin); gl.uniform3fv(P_RESIN.u.uL,loc(L[0],L[1],L[2])); cau.update(loc(L[0],L[1],L[2]));
+  gl.activeTexture(gl.TEXTURE5); gl.bindTexture(gl.TEXTURE_2D,cau.tex); gl.uniform1i(P_RESIN.u.uCau,5);
   gl.uniform3fv(P_RESIN.u.uCamL,loc(CAM[0],CAM[1]-yCap,CAM[2]));
   gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D,hTex); gl.uniform1i(P_RESIN.u.uH,0);
   gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D,pTex); gl.uniform1i(P_RESIN.u.uPrint,1);
