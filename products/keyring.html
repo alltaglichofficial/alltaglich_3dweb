@@ -371,7 +371,7 @@ const FLOOR_Z = blockBottomZ - 0.9;   // underside of the back doming
 // Colours can be changed (a temporary tool on the site): every pixel is placed between the
 // artwork's dark line colour and its tile colour, and painted the same way between the new ones;
 // on Ver.1 the wide lane mark (dark areas, not the thin grout) gets its own colour.
-const PRINT_BASE = { aquable: { tile: [149, 194, 204], line: [50, 67, 72] }, prussian: { tile: [98, 151, 172], line: [23, 39, 53] } };
+const PRINT_BASE = { aquable: { tile: [122, 157, 171], line: [34, 45, 56] }, prussian: { tile: [98, 151, 172], line: [23, 39, 53] } };
 const printArt = {}, printColors = { aquable: null, prussian: null };
 function printTexture(name){
   const cv = document.createElement('canvas'); cv.width = 4; cv.height = 4;
@@ -456,7 +456,7 @@ function buildBlock(geo){
 // Stainless parts, sizes measured from the ruler photos. Order from the body outward:
 // 1 eye pin (9핀) → 2 large jump ring Ø10 → 3 figure-8 swivel (8자) → 4 large jump ring Ø10
 // → 5 engraved tag on 6 small jump ring Ø7.7 → 7 swivel snap hook
-const steel = new THREE.MeshPhysicalMaterial({ color: 0xbec1c5, metalness: 1, roughness: 0.24, envMapIntensity: 0.25 });   // little room reflection; highlights come from the sun
+const steel = new THREE.MeshPhysicalMaterial({ color: 0xa4a8ad, metalness: 1, roughness: 0.14, envMapIntensity: 0.95 });   // polished steel as in the product photo: grey body, dark edges, bright highlights   // little room reflection; highlights come from the sun
 const steelDark = new THREE.MeshPhysicalMaterial({ color: 0x7c8086, metalness: 1, roughness: 0.4 });
 function mesh(g, m = steel){ const o = new THREE.Mesh(g, m); o.castShadow = true; return o; }
 function ring(R, t, seg = 120){ return mesh(new THREE.TorusGeometry(R, t, 24, seg)); }
@@ -567,7 +567,7 @@ function engravedTag(){
   const map = draw('#c4c6c9', '#eceef0'); map.colorSpace = THREE.SRGBColorSpace;
   const rough = draw('#454545', '#e0e0e0');
   // body: plain brushed steel everywhere (edges and back carry no lettering)
-  const body = new THREE.MeshPhysicalMaterial({ color: 0xbcbfc2, metalness: 1, roughness: 0.3, anisotropy: 0.6, anisotropyRotation: Math.PI / 2, envMapIntensity: 0.3 });
+  const body = new THREE.MeshPhysicalMaterial({ color: 0xa3a6aa, metalness: 1, roughness: 0.3, anisotropy: 0.6, anisotropyRotation: Math.PI / 2, envMapIntensity: 0.3 });
   const tag = mesh(geo, [body, steel]);
   // laser marking: a thin decal on the front face only, running vertically along the tag
   const mark = new THREE.Mesh(new THREE.ShapeGeometry(s, 24), new THREE.MeshPhysicalMaterial({
