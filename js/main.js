@@ -92,6 +92,18 @@ async function start() {
     const r = pad.getBoundingClientRect(), dx = (event.clientX - r.left) / r.width * 2 - 1, dy = (event.clientY - r.top) / r.height * 2 - 1;
     setLamp(THREE.MathUtils.radToDeg(Math.atan2(dx, dy)), 90 - Math.min(1, Math.hypot(dx, dy)) * SPAN);
   };
+  // the lamp circles the island slowly on its own (one turn in 90 s), keeping its height;
+  // it waits while the lamp is being moved by hand, and stays put for reduced motion
+  const LAMP_TURN = 4;   // degrees per second
+  let lampDrift = 0, lampHeld = false;
+  function driftLamp(dt) {
+    if (reducedMotion || lampHeld) return;
+    lampDrift += dt * LAMP_TURN;
+    if (lampDrift < 1) return;   // move in 1° steps: the products' light patterns are redone when it moves
+    const lamp = lighting.lamp; setLamp(lamp.az + lampDrift, lamp.el, false); lampDrift = 0;
+  }
+  pad.addEventListener('pointerdown', () => { lampHeld = true; });
+  for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) pad.addEventListener(type, () => { lampHeld = false; });
   pad.addEventListener('pointerdown', event => { pad.setPointerCapture(event.pointerId); padPoint(event); event.preventDefault(); });
   pad.addEventListener('pointermove', event => { if (pad.hasPointerCapture(event.pointerId)) padPoint(event); });
   pad.addEventListener('keydown', event => {
@@ -437,7 +449,7 @@ async function start() {
     const dt = Math.min(rawDt, .05);
     previous = now; elapsed += dt;
     tuneResolution(rawDt);
-    world.update(elapsed, reducedMotion); lighting.update(elapsed, reducedMotion, camera);
+    world.update(elapsed, reducedMotion); driftLamp(dt); lighting.update(elapsed, reducedMotion, camera);
     if (islandTransition) {
       const slide = islandTransition;
       slide.time += dt;
