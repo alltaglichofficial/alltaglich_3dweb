@@ -1,4 +1,5 @@
-import { createPlushBear, createThrowable, bearTarget } from './plush.js';
+import { createPlushBear, createThrowable, bearTarget, openLargeViewer } from './plush.js';
+import { createHoldModel } from './hold.js';
 import * as THREE from 'three';
 import { box, sphere, ico, cylinder, tube, flatPath, roundedPad, mesh, batchStatic } from './geometry.js';
 import { createPoolIsland } from './pool.js';
@@ -73,6 +74,21 @@ export function createWorld(scene, island) {
 
   batchStatic(staticRoot);
 
+  // Climbing island, second product: the Alltäglich climbing hold (a foam volume with three
+  // small holds), shown big on the floor in place of the bouldering wall. HOLD_S world units
+  // per millimetre (60 mm across, so about eight units, the bear about 11 mm tall beside it).
+  const HOLD_S = .13, HX = .3, HZ = .2, HYAW = 2.05;   // turned so we see the slope from the side (its triangular left wall toward us)
+  let holdModel = null, focus = 'wall';
+  if (island.id === 'climb') {
+    holdModel = createHoldModel();
+    holdModel.group.scale.setScalar(HOLD_S); holdModel.group.position.set(HX, 0, HZ); holdModel.group.rotation.y = HYAW;
+    holdModel.group.visible = false; root.add(holdModel.group);
+  }
+  const hc = Math.cos(HYAW), hs = Math.sin(HYAW);
+  const toMM = (x, z) => { const dx = (x - HX) / HOLD_S, dz = (z - HZ) / HOLD_S; return [dx * hc - dz * hs, dx * hs + dz * hc]; };
+  const fromMM = (x, z) => new THREE.Vector2(HX + (x * hc + z * hs) * HOLD_S, HZ + (-x * hs + z * hc) * HOLD_S);
+  const UPHILL = HYAW + Math.PI;   // facing up the slope (toward the hold's back edge)
+
   // The island's Alltäglich plush bears. They play on their own and can be picked up
   // and thrown. Tennis bear: holds a racket and rallies — balls come over the net, it
   // runs to them and swings (forehand or backhand), and sometimes misses. Climbing
@@ -90,7 +106,7 @@ export function createWorld(scene, island) {
     const anchor = new THREE.Object3D(); anchor.rotation.order = 'YXZ'; anchor.position.set(x, groundAt(x, z) + HALF, z); root.add(anchor);
     const bear = createPlushBear(root, kind, { height: BEAR_H });
     const toss = createThrowable(anchor, { bottom: HALF, groundAt, limit });
-    return { bear, anchor, toss, play, i, mode: 'idle', t: 0, wait: 1 + i * 1.3, target: new THREE.Vector2(x, z), phase: 0, last: 0, limbs: null };
+    return { bear, anchor, toss, play, home: play, kind, i, mode: 'idle', t: 0, wait: 1 + i * 1.3, target: new THREE.Vector2(x, z), phase: 0, last: 0, limbs: null };
   });
   function walkTo(p, dt, speed = 1.7) {
     const a = p.anchor, dx = p.target.x - a.position.x, dz = p.target.y - a.position.z, d = Math.hypot(dx, dz);
@@ -341,14 +357,136 @@ export function createWorld(scene, island) {
       if (a.position.y <= floor && p.vy < 0) { a.position.y = floor; p.mode = 'idle'; p.t = 0; p.wait = 1 + Math.random() * 1.5; }
     }
   }
-  const PLAY = { tennis: playTennis, wall: playWall, steps: playSteps };
+  // ---- the climbing hold: the brown bear walks up to the low front point, climbs the sloping
+  // face between the white and the green holds (paws reaching for them by turns), cheers at
+  // the top, then sits down and slides back down. The orange bear watches and claps.
+  const HOLD_PATH = [[-1.2, 24.5], [-2.2, 17.5], [-4.6, -9.5]].map(([x, z]) => fromMM(x, z));   // floor, foot of the face, the top
+  const lerp2 = (a, b, k) => new THREE.Vector2(a.x + (b.x - a.x) * k, a.y + (b.y - a.y) * k);
+  const pathAt = k => k < .2 ? lerp2(HOLD_PATH[0], HOLD_PATH[1], k / .2) : lerp2(HOLD_PATH[1], HOLD_PATH[2], (k - .2) / .8);
+  const FAN_HOME = fromMM(-30, 30);
+  function playHold(p, dt) {
+    const a = p.anchor; p.t += dt;
+    if (p.mode === 'idle') {
+      stand(p); face(p, UPHILL, dt);
+      // shakes out its paws, looking up at the hold
+      const s = Math.sin(p.t * 7) * .1;
+      p.limbs = { armL: arm(-1, .15 + s, .1), armR: arm(1, .15 - s, .1), legL: leg(-1), legR: leg(1) };
+      if (p.t > p.wait) { p.mode = 'go'; p.target.copy(HOLD_PATH[0]); }
+    } else if (p.mode === 'go') { if (walkTo(p, dt)) { p.mode = 'climb'; p.t = 0; } }
+    else if (p.mode === 'climb') {
+      // move by move: reach up with one paw (the other foot steps up), then pull up to it
+      const MOVE = .62, N = 8, m = Math.floor(p.t / MOVE), f = (p.t % MOVE) / MOVE, side = m % 2 ? 1 : -1;
+      const pull = Math.max(0, (f - .4) / .6), ease = pull * pull * (3 - 2 * pull), reach = Math.min(1, f / .4);
+      const k = Math.min(1, (Math.min(m, N) + (m < N ? ease : 0)) / N), at = pathAt(k);
+      a.position.x = at.x; a.position.z = at.y;
+      a.position.y = groundAt(at.x, at.y) + HALF * .92 + Math.sin(f * Math.PI) * .03;
+      face(p, UPHILL, dt * 4);
+      const lean = Math.min(1, k / .2);   // flat on the floor, then leaning into the slope
+      a.rotation.x = .1 + .38 * lean; a.rotation.z = side * .08 * Math.sin(f * Math.PI);
+      const up = side < 0 ? 'armL' : 'armR', down = side < 0 ? 'armR' : 'armL';
+      p.limbs = {};
+      p.limbs[up] = arm(side, .25 + .45 * reach - .25 * ease, .75);
+      p.limbs[down] = arm(-side, .7 - .45 * ease, .75);
+      p.limbs[side < 0 ? 'legR' : 'legL'] = leg(-side, .8 * Math.sin(Math.min(1, f * 1.3) * Math.PI), .5);
+      p.limbs[side < 0 ? 'legL' : 'legR'] = leg(side, .15, .5);
+      if (m >= N) { p.mode = 'top'; p.t = 0; }
+    } else if (p.mode === 'top') {
+      // made it: turns round to us and throws its paws up, bouncing on its toes
+      const top = HOLD_PATH[2], b = Math.abs(Math.sin(p.t * 6)) * .1;
+      a.position.set(top.x, groundAt(top.x, top.y) + HALF + b, top.y);
+      face(p, .45, dt * 3); a.rotation.x = 0; a.rotation.z = Math.sin(p.t * 6) * .06;
+      const up = .62 + Math.sin(p.t * 6) * .12;
+      p.limbs = { armL: arm(-1, up, .15), armR: arm(1, up, .15), legL: leg(-1), legR: leg(1) };
+      if (p.t > 1.8) { p.mode = 'sit'; p.t = 0; }
+    } else if (p.mode === 'sit') {
+      // sits down facing down the slope...
+      const top = HOLD_PATH[2], k = Math.min(1, p.t / .45);
+      face(p, HYAW, dt * 6); a.rotation.x = -.3 * k; a.rotation.z = 0;
+      a.position.set(top.x, groundAt(top.x, top.y) + HALF * (1 - .22 * k), top.y);
+      p.limbs = { armL: arm(-1, .3, .2), armR: arm(1, .3, .2), legL: leg(-1, k, .5), legR: leg(1, k, .5) };
+      if (p.t > .6) { p.mode = 'slide'; p.t = 0; }
+    } else if (p.mode === 'slide') {
+      // ...and slides down on its bottom, faster and faster, paws up
+      const T = 1.15, k = Math.min(1, p.t / T), at = pathAt(1 - k * k);
+      a.position.x = at.x; a.position.z = at.y;
+      a.position.y = groundAt(at.x, at.y) + HALF * .78;
+      a.rotation.y = HYAW; a.rotation.x = -.3 - .1 * k; a.rotation.z = Math.sin(p.t * 14) * .04;
+      p.limbs = { armL: arm(-1, .55 + .2 * k, .3), armR: arm(1, .55 + .2 * k, .3), legL: leg(-1, 1, .5), legR: leg(1, 1, .5) };
+      if (k >= 1) { p.mode = 'land'; p.t = 0; }
+    } else if (p.mode === 'land') {
+      // pops up onto its feet with a little hop
+      const k = Math.min(1, p.t / .35), at = HOLD_PATH[0];
+      a.position.set(at.x, groundAt(at.x, at.y) + HALF * (.78 + .22 * k) + Math.sin(k * Math.PI) * .3, at.y);
+      a.rotation.x = -.4 * (1 - k); a.rotation.z = 0;
+      p.limbs = { armL: arm(-1, .5, .2), armR: arm(1, .5, .2), legL: leg(-1, 1 - k, .5), legR: leg(1, 1 - k, .5) };
+      if (k >= 1) { p.mode = 'cheer'; p.t = 0; }
+    } else if (p.mode === 'cheer') {
+      const clap = Math.abs(Math.sin(p.t * 9)) * .25;
+      stand(p); face(p, .4, dt * 3);
+      p.limbs = { armL: arm(-1, .45 + clap, .15), armR: arm(1, .45 + clap, .15), legL: leg(-1), legR: leg(1) };
+      if (p.t > 1) { p.mode = 'idle'; p.t = 0; p.wait = 1.2 + Math.random() * 1.5; }
+    } else { p.mode = 'idle'; p.t = 0; }
+  }
+  function playFan(p, dt) {
+    const a = p.anchor; p.t += dt;
+    if (p.mode !== 'watch') { p.target.copy(FAN_HOME); if (walkTo(p, dt)) { p.mode = 'watch'; p.t = 0; } return; }
+    stand(p);
+    const climber = plushBears.find(o => o.play === 'hold'), c = climber?.anchor.position;
+    if (c) face(p, Math.atan2(c.x - a.position.x, c.z - a.position.z), dt * 3);
+    if (climber && !climber.toss.busy() && (climber.mode === 'top' || climber.mode === 'slide')) {
+      // the climber is up there: jump and clap
+      const j = Math.abs(Math.sin(p.t * 7)); a.position.y += j * .22;
+      const clap = Math.abs(Math.sin(p.t * 14)) * .3;
+      p.limbs = { armL: arm(-1, .55 + clap, .35 - clap), armR: arm(1, .55 + clap, .35 - clap), legL: leg(-1, j * .4), legR: leg(1, j * .4) };
+    } else {
+      // cheering it on: paws by the mouth, rocking
+      const s = Math.sin(p.t * 3);
+      a.rotation.z = s * .06;
+      p.limbs = { armL: arm(-1, .4 + s * .06, .6), armR: arm(1, .4 - s * .06, .6), legL: leg(-1), legR: leg(1) };
+    }
+  }
+  function setFocus(f) {
+    if (!holdModel || f === focus) return;
+    focus = f;
+    staticRoot.visible = f === 'wall'; holdModel.group.visible = f === 'hold';
+    for (const p of plushBears) {
+      p.play = f === 'hold' ? (p.kind === 'climbBrown' ? 'hold' : 'fan') : p.home;
+      p.mode = 'idle'; p.t = 0; p.wait = .8; p.restArms = false;
+      const [x, z] = f === 'hold' ? (p.play === 'hold' ? [HOLD_PATH[0].x - .9, HOLD_PATH[0].y + .6] : [FAN_HOME.x, FAN_HOME.y]) : PLUSH_SPOTS[p.i].slice(1, 3);
+      p.anchor.position.set(x, 0, z); p.anchor.rotation.set(0, 0, 0, 'YXZ'); stand(p);
+    }
+  }
+  // framing: the hold's footprint and the two bears beside it
+  let holdView = null; const HOLD_DIR = new THREE.Vector3(.8, .5, .62).normalize();
+  if (holdModel) {
+    const pts = [[-29.7, -12], [29.2, -15.8], [30.3, -2.8], [1.4, 21.4], [-22.8, 12.2], [-1.2, 27], [-30, 30]].map(([x, z]) => fromMM(x, z));
+    const xs = pts.map(v => v.x), zs = pts.map(v => v.y);
+    const min = [Math.min(...xs) - .5, FLOOR, Math.min(...zs) - .5], max = [Math.max(...xs) + .5, FLOOR + 3.3, Math.max(...zs) + .5];
+    holdView = { screen: [.0015, .035], center: { x: (min[0] + max[0]) / 2, y: FLOOR + 1.2, z: (min[2] + max[2]) / 2 }, min, max };
+  }
+  const PLAY = { tennis: playTennis, wall: playWall, steps: playSteps, hold: playHold, fan: playFan };
 
   return {
     root: outer, island,
     // framing: the court, or the wall with its mats (screen: where it lands unshifted, measured)
-    view: island.id === 'tennis'
-      ? { screen: [-.0215, .086], center: { x: 0, y: FLOOR + .6, z: 0 }, min: [-4.1, FLOOR, -5.2], max: [4.1, FLOOR + 1.6, 5.2] }
-      : { screen: [.0015, .035], center: { x: 0, y: FLOOR + 2, z: 0 }, min: [-4.1, FLOOR, -2.7], max: [4.1, FLOOR + 4.6, 2.7] },
+    get view() {
+      return island.id === 'tennis'
+        ? { screen: [-.0215, .086], center: { x: 0, y: FLOOR + .6, z: 0 }, min: [-4.1, FLOOR, -5.2], max: [4.1, FLOOR + 1.6, 5.2] }
+        : focus === 'hold'
+          ? holdView
+          : { screen: [.0015, .035], center: { x: 0, y: FLOOR + 2, z: 0 }, min: [-4.1, FLOOR, -2.7], max: [4.1, FLOOR + 4.6, 2.7] };
+    },
+    // the hold is seen lower, from beside its sloping face, so its wedge shape reads
+    get viewDirection() { return focus === 'hold' ? HOLD_DIR : undefined; },
+    get focus() { return focus; },
+    get bears() { return plushBears; },
+    setFocus: holdModel ? setFocus : undefined,
+    // a tap on the climbing hold opens it large
+    tap: holdModel ? (ndc, ray) => {
+      if (focus !== 'hold') return;
+      const hit = new THREE.Raycaster(ray.origin, ray.direction).intersectObject(holdModel.group, true)[0];
+      if (hit) openLargeViewer({ name: 'Climbing Hold', src: 'products/hold.html?site=big&bg=fafafa', hint: '드래그해서 돌리고, 휠이나 두 손가락으로 확대해요.' });
+    } : undefined,
     grabTargets: plushBears.map(p => bearTarget(p.bear, p.toss)),
     get tennis() { return { rally, bears: tennisBears }; },
     update(time = 0, reducedMotion = false) {
@@ -369,6 +507,7 @@ export function createWorld(scene, island) {
     heightAt: worldHeight,
   };
   function worldHeight(x, z) {
+      if (focus === 'hold') { const [mx, mz] = toMM(x, z), h = holdModel.surface(mx, mz); return h == null ? 0 : h * HOLD_S; }
       if (island.id === 'tennis' && Math.abs(x) < 3.95 && Math.abs(z) < 5.05) return .16;
       if (island.id === 'pool' && Math.abs(x) < 4.05 && Math.abs(z) < 3.25) return .14;
       if (island.id === 'climb' && Math.abs(x) < 3.95 && Math.abs(z) < 2.575) return z > -.9 && z < 1.9 && Math.abs(x) < 3.7 ? .25 : .12;

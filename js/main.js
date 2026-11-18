@@ -194,6 +194,8 @@ async function start() {
     const poolWorld = worlds.find(w => w.setPrint);
     const sub = poolWorld && poolWorld.focus !== 'pool' ? poolWorld.focus : poolWorld?.print === 'photo' ? 'prussian' : 'aquable';
     document.querySelectorAll('.pool-sub').forEach(el => { el.hidden = main !== 'pool'; if (el.dataset.sub) el.setAttribute('aria-pressed', String(main === 'pool' && el.dataset.sub === sub)); });
+    const climbWorld = worlds.find(w => w.island?.id === 'climb'), climbSub = climbWorld?.focus ?? 'wall';
+    document.querySelectorAll('.climb-sub').forEach(el => { el.hidden = main !== 'climb'; if (el.dataset.climb) el.setAttribute('aria-pressed', String(main === 'climb' && el.dataset.climb === climbSub)); });
     const toysTab = document.querySelector('#toys-tab');
     // Grip Tok: fold / open buttons
     const gripBox = document.querySelector('#grip-controls'), gripHere = main === 'pool' && poolWorld?.focus === 'grip';
@@ -354,6 +356,17 @@ async function start() {
     document.querySelector('#status').textContent = print === 'photo' ? '수영장 바닥을 Prussian Blue 타일로 바꿨어요.' : 'Aquable 레인 수영장이에요.';
   }
 
+  // Climbing island products: the bouldering wall, or the climbing hold
+  document.querySelectorAll('[data-climb]').forEach(button => button.addEventListener('click', () => {
+    const climb = worlds.find(w => w.island?.id === 'climb'), f = button.dataset.climb;
+    if (!climb?.setFocus) return;
+    const show = () => {
+      if (ISLANDS[islandIndex].id !== 'climb') selectIsland('climb', true);
+      climb.setFocus(f); resetCamera(true); updateIslandUI();
+      document.querySelector('#status').textContent = f === 'hold' ? '클라이밍곰이 홀드를 올라가요. 홀드를 누르면 상세 설명이 나와요.' : '클라이밍곰들이 볼더링 벽을 올라요.';
+    };
+    if (ISLANDS[islandIndex].id !== 'climb' || climb.focus !== f) travel(button.textContent.trim(), show); else show();
+  }));
   document.querySelectorAll('[data-island]').forEach(button => button.addEventListener('click', () => goIsland(button.dataset.island)));
   document.querySelector('#prevIsland').addEventListener('click', () => nextIsland(-1));
   document.querySelector('#nextIsland').addEventListener('click', () => nextIsland(1));

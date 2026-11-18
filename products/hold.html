@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Climbing Hold · ALLTÄGLICH</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#fafafa}
+  canvas{display:block;width:100%;height:100%;touch-action:none;outline:none}
+</style>
+<script type="importmap">{"imports":{"three":"../vendor/three/three.module.js","three/addons/controls/OrbitControls.js":"../vendor/three/OrbitControls.js"}}</script>
+</head>
+<body>
+<script type="module">
+// The climbing hold on its own: drag to turn it, wheel or two fingers to zoom.
+// ?bg=rrggbb sets the page colour (the site opens it large with ?site=big).
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from '../vendor/three/RoomEnvironment.js';
+import { createHoldModel } from '../js/hold.js';
+
+const q = new URLSearchParams(location.search), bg = /^[0-9a-f]{6}$/i.test(q.get('bg') || '') ? '#' + q.get('bg') : '#fafafa';
+document.body.style.background = bg;
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(2, devicePixelRatio)); renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
+document.body.appendChild(renderer.domElement); renderer.domElement.tabIndex = 0;
+const scene = new THREE.Scene(); scene.background = new THREE.Color(bg);
+const pmrem = new THREE.PMREMGenerator(renderer); scene.environment = pmrem.fromScene(new RoomEnvironment(), .04).texture;
+const camera = new THREE.PerspectiveCamera(32, 1, 1, 2000);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.enablePan = false; controls.minDistance = 55; controls.maxDistance = 360; controls.maxPolarAngle = Math.PI * .49;
+controls.target.set(0, 9, 3); camera.position.set(70, 78, 120);
+
+const key = new THREE.DirectionalLight(0xffffff, 2.2); key.position.set(-60, 120, 70); key.castShadow = true;
+key.shadow.mapSize.set(2048, 2048); Object.assign(key.shadow.camera, { left: -60, right: 60, top: 60, bottom: -60, near: 10, far: 400 }); key.shadow.bias = -.0004; key.shadow.radius = 6;
+scene.add(key, new THREE.HemisphereLight(0xffffff, 0xdddddd, .5));
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(800, 800), new THREE.ShadowMaterial({ opacity: .16 })); floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; scene.add(floor);
+
+const hold = createHoldModel(); scene.add(hold.group);
+window.__hold = { hold, camera, controls, stop() { spin = false; } };
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+let spin = !reduce;
+renderer.domElement.addEventListener('pointerdown', () => { spin = false; });
+
+function resize() { const w = innerWidth, h = innerHeight; renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); }
+addEventListener('resize', resize); resize();
+renderer.setAnimationLoop(() => {
+  if (spin) hold.group.rotation.y += .003;
+  controls.update(); renderer.render(scene, camera);
+});
+</script>
+</body>
+</html>

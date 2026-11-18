@@ -84,6 +84,8 @@ h1{margin:0 0 12px;font-size:clamp(20px,1.8vw,24px);font-weight:400;line-height:
 .nav-dot.drops{background:#c6ccd2}
 .nav-dot.grip{background:linear-gradient(135deg,#5fb9e6 50%,#1d2b3f 50%)}
 .nav-dot.magnet{background:#b9bec3}
+.nav-dot.wall{background:#e0b48f}
+.nav-dot.hold{background:linear-gradient(135deg,#7bc13a 45%,#1b1b1c 45%)}
 .nav-dot.toys{background:var(--badge);border-radius:50%}
 .products #toys-tab{margin-left:8px;padding-left:16px;box-shadow:inset 1px 0 0 var(--rule)}
 
